@@ -2829,6 +2829,65 @@
   text-align: left;
 }
 
+/* ── Traceability Table Header Sorting (Modern UI) ── */
+.sa-trace-table th.sa-sortable {
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  white-space: nowrap;
+}
+
+.sa-trace-table th.sa-sortable:hover {
+  color: #0891b2 !important;
+  background-color: rgba(6, 182, 212, 0.08) !important;
+}
+
+.sa-trace-table th.sa-sortable.sa-sorted {
+  color: #0891b2 !important;
+  background-color: rgba(6, 182, 212, 0.06) !important;
+  box-shadow: inset 0 -2.5px 0 #0891b2;
+}
+
+.sa-trace-th-content {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  width: 100%;
+}
+
+.sa-trace-sort-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  line-height: 1;
+  font-weight: 700;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  vertical-align: middle;
+  user-select: none;
+}
+
+.sa-trace-sort-icon.active {
+  color: #0891b2;
+  opacity: 1;
+  transform: translateY(-0.5px);
+}
+
+.sa-trace-sort-icon.idle {
+  color: #94a3b8;
+  opacity: 0;
+  font-size: 0.62rem;
+  letter-spacing: -1.5px;
+  transform: scale(0.9);
+}
+
+.sa-trace-table th.sa-sortable:hover .sa-trace-sort-icon.idle {
+  opacity: 0.55;
+  color: #0891b2;
+}
+
 /* ── Empty State ── */
 .sa-trace-empty {
   padding: 48px 24px !important;
@@ -4898,7 +4957,8 @@
   height: 100%;
   box-sizing: border-box;
   position: relative;
-  overflow: hidden;
+  overflow: visible !important;
+  z-index: 25;
   transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -4909,6 +4969,7 @@
   left: 0;
   right: 0;
   height: 3px;
+  border-radius: 14px 14px 0 0;
   background: linear-gradient(90deg, #2d6de8, #06b6d4, #10b981);
   z-index: 2;
 }
@@ -4929,6 +4990,8 @@
   border-radius: 8px;
   background: #ffffff;
   margin-top: 0.4rem;
+  position: relative !important;
+  z-index: 1 !important;
 }
 
 .sa-despatch-table-wrap::-webkit-scrollbar {
@@ -4947,128 +5010,313 @@
 }
 
 /* ── High-End Glassmorphism Loading Status Bar ── */
-.sa-status-bar-container {
+/* ═════════════════════════════════════════════════════════════════════════════
+   NEAT MODERN UI: Status Loading Glassmorphism Card
+   ═════════════════════════════════════════════════════════════════════════════ */
+
+.sa-status-card-container {
   width: 100%;
-  margin-bottom: 12px;
-  animation: sa-fade-up 0.28s ease both;
-  transition: opacity 0.35s cubic-bezier(0.16, 1, 0.3, 1), transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), max-height 0.35s ease, margin-bottom 0.35s ease;
+  margin-bottom: 16px;
   position: relative;
   z-index: 20;
-  max-height: 80px;
+  max-height: 140px;
   overflow: visible;
+  transition: opacity 0.45s cubic-bezier(0.2, 0.8, 0.2, 1),
+              transform 0.45s cubic-bezier(0.2, 0.8, 0.2, 1),
+              max-height 0.55s cubic-bezier(0.2, 0.8, 0.2, 1),
+              margin-bottom 0.45s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-.sa-status-bar--hidden {
+.sa-status-card-container.sa-status-card--hidden,
+.sa-status-bar-container.sa-status-bar--hidden {
   opacity: 0;
   pointer-events: none;
-  transform: translateY(-4px);
-  margin-bottom: 0;
+  transform: translateY(-10px) scale(0.98);
   max-height: 0;
+  margin-bottom: 0;
+  padding: 0;
   overflow: hidden;
+  visibility: hidden;
+  transition: opacity 0.4s cubic-bezier(0.2, 0.8, 0.2, 1),
+              transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1),
+              max-height 0.45s cubic-bezier(0.2, 0.8, 0.2, 1),
+              margin-bottom 0.4s cubic-bezier(0.2, 0.8, 0.2, 1),
+              visibility 0s linear 0.45s;
 }
 
-.sa-status-bar--active {
+.sa-status-card-container.sa-status-card--active,
+.sa-status-bar-container.sa-status-bar--active {
   opacity: 1;
-  transform: translateY(0);
+  visibility: visible;
+  transform: translateY(0) scale(1);
+  max-height: 140px;
+  transition: opacity 0.4s cubic-bezier(0.2, 0.8, 0.2, 1),
+              transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1),
+              max-height 0.45s cubic-bezier(0.2, 0.8, 0.2, 1),
+              margin-bottom 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-.sa-status-bar__header {
+.sa-status-card {
+  position: relative;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(18px) saturate(180%);
+  -webkit-backdrop-filter: blur(18px) saturate(180%);
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 16px;
+  padding: 13px 20px 15px 20px;
+  box-shadow: 0 10px 30px -5px rgba(37, 99, 235, 0.07),
+              0 2px 8px -1px rgba(15, 23, 42, 0.03),
+              inset 0 1px 0 rgba(255, 255, 255, 1);
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Subtle ambient gradient lighting behind the card */
+.sa-status-card__glow-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 100%;
+  background: radial-gradient(circle at 8% 20%, rgba(37, 99, 235, 0.06) 0%, transparent 55%),
+              radial-gradient(circle at 92% 80%, rgba(6, 182, 212, 0.06) 0%, transparent 55%);
+  pointer-events: none;
+  border-radius: 16px;
+}
+
+.sa-status-card__body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 7px;
-  padding: 0 4px;
+  gap: 16px;
+  position: relative;
+  z-index: 2;
 }
 
-.sa-status-bar__title-wrap {
+/* Left section with icon badge and title/subtitle hierarchy */
+.sa-status-card__left {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  min-width: 0;
+}
+
+.sa-status-card__icon-box {
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.08) 0%, rgba(6, 182, 212, 0.12) 100%);
+  border: 1px solid rgba(37, 99, 235, 0.2);
+  color: #2563eb;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.1);
+  transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.sa-status-card__icon-box--done {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(5, 150, 105, 0.16) 100%);
+  border-color: rgba(16, 185, 129, 0.35);
+  color: #059669;
+  box-shadow: 0 2px 10px rgba(16, 185, 129, 0.16);
+}
+
+.sa-status-card__icon-spin {
+  animation: sa-spin 0.95s linear infinite;
+  color: #2563eb;
+}
+
+@keyframes sa-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.sa-status-card__icon-check {
+  animation: sa-pop-in 0.32s cubic-bezier(0.16, 1, 0.3, 1) both;
+  color: #059669;
+}
+
+@keyframes sa-pop-in {
+  0% { transform: scale(0.5); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.sa-status-card__text-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.sa-status-card__title-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+}
+
+.sa-status-card__title {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: -0.01em;
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  line-height: 1.25;
+}
+
+/* Status Badge inside title row */
+.sa-status-card__badge {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: rgba(37, 99, 235, 0.08);
+  color: #2563eb;
+  border: 1px solid rgba(37, 99, 235, 0.2);
+  line-height: 1.2;
 }
 
-.sa-status-bar__dot {
-  width: 7px;
-  height: 7px;
+.sa-status-card__badge--done {
+  background: rgba(16, 185, 129, 0.1);
+  color: #059669;
+  border-color: rgba(16, 185, 129, 0.25);
+}
+
+.sa-status-card__badge-dot {
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background: #2563eb;
-  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.25);
-  animation: sa-dot-blink 1.4s ease-in-out infinite;
+  animation: sa-dot-pulse 1.4s ease-in-out infinite;
   flex-shrink: 0;
 }
 
-.sa-status-bar__title {
-  font-size: 0.76rem;
-  font-weight: 600;
-  color: #3b82f6;
-  letter-spacing: 0.02em;
-  font-family: inherit;
-}
-
-/* Option A High-End Glassmorphism Pill (Right End) */
-.sa-status-glass-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 14px;
-  background: rgba(255, 255, 255, 0.92);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  border: 1px solid rgba(37, 99, 235, 0.22);
-  border-radius: 99px;
-  box-shadow: 0 4px 16px rgba(37, 99, 235, 0.12), 0 1px 3px rgba(0, 0, 0, 0.05);
-  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-  position: relative;
-  overflow: hidden;
-}
-
-.sa-status-glass-pill__spin {
-  color: #2563eb;
-  animation: sa-apply-spin 0.9s linear infinite;
-  flex-shrink: 0;
-}
-
-.sa-status-glass-pill__spin--done {
+.sa-status-card__badge--done .sa-status-card__badge-dot {
+  background: #10b981;
   animation: none;
-  color: #10b981;
 }
 
-.sa-status-glass-pill__text {
-  font-size: 0.78rem;
-  font-weight: 700;
-  color: #1e40af;
-  letter-spacing: 0.02em;
-  font-variant-numeric: tabular-nums;
-  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif !important;
+@keyframes sa-dot-pulse {
+  0%, 100% {
+    transform: scale(0.9);
+    opacity: 0.6;
+    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.4);
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 1;
+    box-shadow: 0 0 0 4px rgba(37, 99, 235, 0);
+  }
+}
+
+.sa-status-card__subtitle {
+  font-size: 0.74rem;
+  font-weight: 500;
+  color: #64748b;
+  line-height: 1.3;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 600px;
 }
 
-.sa-status-glass-pill__glow {
+/* Right Section: High-End Glass Pill */
+.sa-status-card__right {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.sa-status-pill {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 5px 13px;
+  background: #ffffff;
+  border: 1px solid rgba(37, 99, 235, 0.18);
+  border-radius: 9999px;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.08), 0 1px 2px rgba(0, 0, 0, 0.03);
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.sa-status-pill--done {
+  border-color: rgba(16, 185, 129, 0.25);
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.08);
+}
+
+.sa-status-pill__percent {
+  font-size: 0.88rem;
+  font-weight: 800;
+  color: #1e40af;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+}
+
+.sa-status-pill--done .sa-status-pill__percent {
+  color: #059669;
+}
+
+.sa-status-pill__label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.sa-status-pill--done .sa-status-pill__label {
+  color: #059669;
+}
+
+/* Integrated Progress Track */
+.sa-status-card__track {
+  width: 100%;
+  height: 6px;
+  background: rgba(226, 232, 240, 0.8);
+  border-radius: 9999px;
+  overflow: hidden;
+  position: relative;
+  margin-top: 12px;
+}
+
+.sa-status-card__fill {
+  height: 100%;
+  background: linear-gradient(90deg, #2563eb 0%, #06b6d4 50%, #10b981 100%);
+  border-radius: 9999px;
+  position: relative;
+  transition: width 0.08s linear, background 0.4s ease, box-shadow 0.4s ease;
+  box-shadow: 0 0 10px rgba(6, 182, 212, 0.45);
+  will-change: width;
+}
+
+.sa-status-card__fill--done {
+  background: linear-gradient(90deg, #059669 0%, #10b981 100%);
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.45);
+}
+
+/* Light beam sweep passing continuously through the fill */
+.sa-status-card__fill-shimmer {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  border-radius: 99px;
-  background: linear-gradient(135deg, rgba(37, 99, 235, 0.08) 0%, rgba(6, 182, 212, 0.08) 100%);
-  pointer-events: none;
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.65) 50%, transparent 100%);
+  animation: sa-shimmer-pass 1.6s infinite ease-in-out;
+  border-radius: 9999px;
 }
 
-/* Gradient Loading Track & Fill */
-.sa-status-bar__track {
-  width: 100%;
-  height: 4px;
-  background: rgba(37, 99, 235, 0.09);
-  border-radius: 99px;
-  overflow: hidden;
-  position: relative;
-}
-
-.sa-status-bar__fill {
-  height: 100%;
-  background: linear-gradient(90deg, #2d6de8 0%, #06b6d4 50%, #10b981 100%);
-  border-radius: 99px;
-  box-shadow: 0 0 10px rgba(6, 182, 212, 0.55), 0 0 4px rgba(45, 109, 232, 0.35);
-  transition: width 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+@keyframes sa-shimmer-pass {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
 }
 
 /* Custom premium styles for Despatch Planning Status Table */
@@ -5716,17 +5964,68 @@
 
 /* Column widths for End-to-End Order Traceability Ledger are maintained in .sa-trace-table above */
 
-/* Width overrides for despatch plan filters */
+/* Width overrides for despatch plan filters (Fixed Single-Line Alignment & In-Front Dropdowns) */
+.sa-despatch-head {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  flex-wrap: nowrap !important;
+  gap: 8px !important;
+  overflow: visible !important;
+  position: relative !important;
+  z-index: 50 !important;
+}
+
+.sa-despatch-filters {
+  display: flex !important;
+  align-items: center !important;
+  flex-wrap: nowrap !important;
+  gap: 8px !important;
+  flex-shrink: 0;
+  overflow: visible !important;
+  position: relative !important;
+  z-index: 60 !important;
+}
+
+.sa-custom-select--despatch-cust,
+.sa-custom-select--despatch-part,
+.sa-custom-select--despatch-status {
+  position: relative !important;
+}
+
+.sa-custom-select--despatch-cust.sa-active,
+.sa-custom-select--despatch-part.sa-active,
+.sa-custom-select--despatch-status.sa-active {
+  z-index: 500 !important;
+}
+
+.sa-despatch-filters .sa-custom-select-dropdown-container {
+  z-index: 9999 !important;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.2), 0 4px 14px rgba(45, 109, 232, 0.12) !important;
+}
+
 .sa-custom-select--despatch-cust {
-  width: 220px;
+  width: 175px !important;
+  flex-shrink: 0;
 }
 
 .sa-custom-select--despatch-part {
-  width: 180px;
+  width: 155px !important;
+  flex-shrink: 0;
 }
 
 .sa-custom-select--despatch-status {
-  width: 160px;
+  width: 135px !important;
+  flex-shrink: 0;
+}
+
+.sa-custom-select--despatch-cust .sa-custom-select-trigger,
+.sa-custom-select--despatch-part .sa-custom-select-trigger,
+.sa-custom-select--despatch-status .sa-custom-select-trigger {
+  width: 100% !important;
+  height: 32px !important;
+  box-sizing: border-box !important;
+  padding: 0 8px 0 10px !important;
 }
 
 .sa-custom-select--despatch-cust .sa-custom-select-trigger span,
@@ -5735,12 +6034,13 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 170px;
+  max-width: 125px;
   display: block;
 }
 
 .sa-despatch-kpi-badge {
-  margin-left: 16px;
+  margin-left: 10px;
+  flex-shrink: 0;
 }
 
 @media (max-width: 600px) {

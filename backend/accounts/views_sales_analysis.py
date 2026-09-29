@@ -2741,11 +2741,14 @@ def sales_analysis_po_ledger(request):
         ),
         BILL_SUMMARY AS (
             SELECT Apono, partno, poslno,
+                STRING_AGG(CAST(bm_invno AS NVARCHAR(MAX)), ', ') WITHIN GROUP (ORDER BY invdt, invno) AS InvNo,
+                STRING_AGG(CAST(ISNULL(CONVERT(VARCHAR(10), CAST(invdt AS DATE), 23), '') AS NVARCHAR(MAX)), ', ') WITHIN GROUP (ORDER BY invdt, invno) AS InvDate,
                 STRING_AGG(CAST(InvDetail AS NVARCHAR(MAX)), ', ') WITHIN GROUP (ORDER BY invdt, invno) AS InvDetails
             FROM (
                 SELECT DISTINCT 
                     d.Apono, d.partno, d.poslno,
                     bm.invno, bm.invdt,
+                    bm.invno AS bm_invno,
                     CAST(bm.invno AS NVARCHAR(MAX)) + 
                     CASE WHEN bm.invdt IS NOT NULL THEN ' (' + CONVERT(VARCHAR(10), CAST(bm.invdt AS DATE), 103) + ')' ELSE '' END AS InvDetail
                 FROM (
@@ -2774,6 +2777,8 @@ def sales_analysis_po_ledger(request):
             ISNULL(D.dcQty, 0) AS DcQty,
             D.dcNo,
             D.dcDate AS DcDate,
+            B.InvNo,
+            B.InvDate,
             B.InvDetails AS InvNoDt,
             ISNULL(PD.ShotClsReason, '') AS ShotCloseReason,
             ISNULL(PD.amt, 0) AS Amt,
@@ -2807,10 +2812,12 @@ def sales_analysis_po_ledger(request):
             dc_qty = float(row[11] or 0)
             dc_no = str(row[12]) if row[12] else ""
             dc_date = str(row[13]) if row[13] else ""
-            inv_no_dt = str(row[14]) if row[14] else ""
-            shot_close_reason = str(row[15]) if len(row) > 15 and row[15] else ""
-            amt = float(row[16] or 0) if len(row) > 16 else 0
-            curr_rate = float(row[17] or 1) if len(row) > 17 and row[17] is not None else 1
+            inv_no = str(row[14]) if row[14] else ""
+            inv_date = str(row[15]) if row[15] else ""
+            inv_no_dt = str(row[16]) if row[16] else ""
+            shot_close_reason = str(row[17]) if len(row) > 17 and row[17] else ""
+            amt = float(row[18] or 0) if len(row) > 18 else 0
+            curr_rate = float(row[19] or 1) if len(row) > 19 and row[19] is not None else 1
             if curr_rate == 0:
                 curr_rate = 1
 
@@ -2831,6 +2838,8 @@ def sales_analysis_po_ledger(request):
                 "dcNo": dc_no,
                 "dcDate": dc_date,
                 "dcQty": dc_qty,
+                "invNo": inv_no,
+                "invDate": inv_date,
                 "invNoDt": inv_no_dt
             })
 

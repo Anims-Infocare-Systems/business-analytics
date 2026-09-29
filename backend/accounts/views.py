@@ -1197,60 +1197,126 @@ def mac_rejection_ppm(request):
     fy_label = get_fy_label(start_date, end_date)
     buckets, labels = generate_month_buckets(start_date, end_date)
     
-    ppm_sql = """
-    SELECT
-        YEAR(InspDate) AS YrNum,
-        MONTH(InspDate) AS MonthNum,
-        SUM(InspQty)    AS TotalInspQty,
-        SUM(MacRejQty)  AS TotalMacRejQty
-    FROM (
-        SELECT
-            m.inspdate AS InspDate,
-            CAST(ISNULL(d.jobqty, 0) AS INT) AS InspQty,
-            CAST(ISNULL(d.macrej, 0) AS INT) AS MacRejQty
-        FROM InJob_Mas m
-        INNER JOIN InJob_Det d ON m.inspno = d.inspno
-        WHERE ISNULL(m.deleted, 0) = 0 AND ISNULL(d.deleted, 0) = 0
-          AND CAST(m.inspdate AS DATE) BETWEEN ? AND ?
-
-        UNION ALL
-
-        SELECT
-            inter_inspdate AS InspDate,
-            CAST(ISNULL(inspqty, 0) AS INT) AS InspQty,
-            CAST(ISNULL(rejqty, 0) AS INT) AS MacRejQty
-        FROM InterInspectionEntry
-        WHERE ISNULL(deleted, 0) = 0
-          AND CAST(inter_inspdate AS DATE) BETWEEN ? AND ?
-
-        UNION ALL
-
-        SELECT
-            finspdate AS InspDate,
-            CAST(ISNULL(totqty, 0) AS INT) AS InspQty,
-            CAST(ISNULL(rejqty, 0) AS INT) AS MacRejQty
-        FROM FinalInspectionEntry
-        WHERE ISNULL(deleted, 0) = 0
-          AND CAST(finspdate AS DATE) BETWEEN ? AND ?
-    ) AS CombinedPPM
-    GROUP BY YEAR(InspDate), MONTH(InspDate)
-    """
-    
     insp_map = {b: 0.0 for b in buckets}
     rej_map = {b: 0.0 for b in buckets}
     
     cursor = None
     try:
         cursor = conn.cursor()
-        cursor.execute(ppm_sql, [start_date, end_date, start_date, end_date, start_date, end_date])
-        for row in cursor.fetchall() or []:
-            yr, month_num = int(row[0] or 0), int(row[1] or 0)
-            total_insp = float(row[2] or 0)
-            total_rej = float(row[3] or 0)
-            k = (yr, month_num)
-            if k in insp_map:
-                insp_map[k] += total_insp
-                rej_map[k] += total_rej
+        
+        has_injob = table_exists(cursor, "InJob_Mas") and table_exists(cursor, "InJob_Det")
+        has_inter = table_exists(cursor, "InterInspectionEntry")
+        has_final = table_exists(cursor, "FinalInspectionEntry")
+        has_inter_rej = table_exists(cursor, "Insp_RejectionEntry") and table_exists(cursor, "Rejection")
+        has_final_rej = table_exists(cursor, "FinalInspRejectionEntryOrg") and table_exists(cursor, "Rejection")
+        
+        qty_col_ij = find_first_column(cursor, "InJob_Det", ["recqty", "RecQty", "RECQTY", "rec_qty", "Rec_Qty", "jobqty", "JobQty", "qty", "Qty", "totqty", "TotQty", "okqty"]) or "recqty"
+        macrej_col_ij = find_first_column(cursor, "InJob_Det", ["macrej", "MacRej", "mac_rej"]) or "macrej"
+
+        qty_col_it = find_first_column(cursor, "InterInspectionEntry", ["inspqty", "InspQty", "totqty", "qty", "Qty", "okqty"]) or "inspqty"
+        rej_col_it = find_first_column(cursor, "InterInspectionEntry", ["rejqty", "RejQty"]) or "rejqty"
+
+        okqty_col_f = find_first_column(cursor, "FinalInspectionEntry", ["okqty", "OKQty", "OkQty"]) or "okqty"
+        rej_col_f = find_first_column(cursor, "FinalInspectionEntry", ["rejqty", "RejQty"]) or "rejqty"
+        matrej_col_f = find_first_column(cursor, "FinalInspectionEntry", ["matrejqty", "MatRejQty"]) or "matrejqty"
+        qty_expr_f = f"CAST(ISNULL(f.[{okqty_col_f}], 0) + ISNULL(f.[{rej_col_f}], 0) + ISNULL(f.[{matrej_col_f}], 0) AS INT)"
+
+        subqueries = []
+        params = []
+
+        if has_injob:
+            subqueries.append(f"""
+                SELECT
+                    m.inspdate AS InspDate,
+                    CAST(ISNULL(d.[{qty_col_ij}], 0) AS INT) AS InspQty,
+                    CAST(ISNULL(d.[{macrej_col_ij}], 0) AS INT) AS MacRejQty
+                FROM InJob_Mas m
+                INNER JOIN InJob_Det d ON m.inspno = d.inspno
+                WHERE ISNULL(m.deleted, 0) = 0 AND ISNULL(d.deleted, 0) = 0
+                  AND ISNULL(m.dtype, '') != 'Without Process'
+                  AND CAST(m.inspdate AS DATE) BETWEEN ? AND ?
+            """)
+            params.extend([start_date, end_date])
+
+        if has_inter:
+            if has_inter_rej:
+                inter_mac_rej = f"""
+                    CAST(CASE 
+                        WHEN EXISTS (SELECT 1 FROM Insp_RejectionEntry WHERE inter_inspno = i.inter_inspno AND ISNULL(deleted, 0) = 0)
+                        THEN ISNULL((
+                            SELECT SUM(ISNULL(r.qty, 0))
+                            FROM Insp_RejectionEntry r
+                            LEFT JOIN Rejection rej ON r.rejection = rej.rejection
+                            WHERE r.inter_inspno = i.inter_inspno
+                              AND ISNULL(r.deleted, 0) = 0
+                              AND ISNULL(rej.matrej, 0) = 0
+                        ), 0)
+                        ELSE ISNULL(i.[{rej_col_it}], 0)
+                    END AS INT)
+                """
+            else:
+                inter_mac_rej = f"CAST(ISNULL(i.[{rej_col_it}], 0) AS INT)"
+
+            subqueries.append(f"""
+                SELECT
+                    i.inter_inspdate AS InspDate,
+                    CAST(ISNULL(i.[{qty_col_it}], 0) AS INT) AS InspQty,
+                    {inter_mac_rej} AS MacRejQty
+                FROM InterInspectionEntry i
+                WHERE ISNULL(i.deleted, 0) = 0
+                  AND CAST(i.inter_inspdate AS DATE) BETWEEN ? AND ?
+            """)
+            params.extend([start_date, end_date])
+
+        if has_final:
+            if has_final_rej:
+                final_mac_rej = f"""
+                    CAST(ISNULL((
+                        SELECT SUM(ISNULL(fr.qty, 0))
+                        FROM FinalInspRejectionEntryOrg fr
+                        LEFT JOIN Rejection rej ON fr.rejection = rej.rejection
+                        WHERE fr.finspno = f.finspno
+                          AND ISNULL(fr.deleted, 0) = 0
+                          AND ISNULL(rej.matrej, 0) = 0
+                    ), 0) AS INT)
+                """
+            else:
+                final_mac_rej = f"CAST(ISNULL(f.[{rej_col_f}], 0) AS INT)"
+
+            subqueries.append(f"""
+                SELECT
+                    f.finspdate AS InspDate,
+                    {qty_expr_f} AS InspQty,
+                    {final_mac_rej} AS MacRejQty
+                FROM FinalInspectionEntry f
+                WHERE ISNULL(f.deleted, 0) = 0
+                  AND CAST(f.finspdate AS DATE) BETWEEN ? AND ?
+            """)
+            params.extend([start_date, end_date])
+
+        if subqueries:
+            union_sql = " UNION ALL ".join(subqueries)
+            ppm_sql = f"""
+            SELECT
+                YEAR(InspDate) AS YrNum,
+                MONTH(InspDate) AS MonthNum,
+                SUM(InspQty)    AS TotalInspQty,
+                SUM(MacRejQty)  AS TotalMacRejQty
+            FROM (
+                {union_sql}
+            ) AS CombinedPPM
+            GROUP BY YEAR(InspDate), MONTH(InspDate)
+            """
+            cursor.execute(ppm_sql, params)
+            for row in cursor.fetchall() or []:
+                yr, month_num = int(row[0] or 0), int(row[1] or 0)
+                total_insp = float(row[2] or 0)
+                total_rej = float(row[3] or 0)
+                k = (yr, month_num)
+                if k in insp_map:
+                    insp_map[k] += total_insp
+                    rej_map[k] += total_rej
+
         cursor.close()
         conn.close()
     except Exception as e:
@@ -1520,80 +1586,131 @@ def supplier_rating_monthwise(request):
 # ─────────────────────────────────────────────────────────────
 @api_view(['GET'])
 def vendor_rejection_monthwise(request):
-    try: conn, tenant = get_tenant_connection(request)
-    except ValueError as e: return Response({"error": str(e)}, status=401)
+    try:
+        conn, tenant = get_tenant_connection(request)
+    except ValueError as e:
+        return Response({"error": str(e)}, status=401)
+    
     start_date, end_date = parse_date_range(request)
     fy_label = get_fy_label(start_date, end_date)
     buckets, labels = generate_month_buckets(start_date, end_date)
     cursor = None
+    rows = []
+    
     try:
         cursor = conn.cursor()
-        sch_gm, nm_gm, q_gm = resolve_erp_table(cursor, ["grn_mas", "GRN_MAS", "Grn_Mas", "GrnMas", "GRNMast", "grnmast"])
-        sch_im, nm_im, q_im = resolve_erp_table(cursor, ["inspmas", "InspMas", "INSPMAS", "Insp_Mas", "InspMas"])
-        sch_id, nm_id, q_id = resolve_erp_table(cursor, ["inspdet", "InspDet", "INSPDET", "Insp_Det", "InspDet"])
-        sch_cm, nm_cm, q_cm = resolve_erp_table(cursor, ["CustMast", "custmast", "CUSTMAST"])
-        if not q_gm or not q_im or not q_id:
-            cursor.close(); conn.close()
-            return Response({"error": "grn_mas, inspmas, or inspdet table not found."}, status=404)
-        gm_grn = find_column_ci(cursor, sch_gm, nm_gm, ["grnno", "GRNNo", "GRNNO", "GrnNo"])
-        gm_date = find_column_ci(cursor, sch_gm, nm_gm, ["grndate", "GRNDate", "GRNDATE", "Grn_Date"])
-        gm_del = find_column_ci(cursor, sch_gm, nm_gm, ["deleted", "Deleted", "IsDeleted"])
-        gm_cid = find_column_ci(cursor, sch_gm, nm_gm, ["cid", "CId", "CID", "CustId", "custid"])
-        im_grn = find_column_ci(cursor, sch_im, nm_im, ["grnno", "GRNNo", "GRNNO", "GrnNo"])
-        im_irno = find_column_ci(cursor, sch_im, nm_im, ["irno", "IRNo", "IRNO", "IrNo", "InspNo"])
-        im_irdate = find_column_ci(cursor, sch_im, nm_im, ["irdate", "IRDate", "IRDATE", "Ir_Date", "InspDate", "inspdate"])
-        im_del = find_column_ci(cursor, sch_im, nm_im, ["deleted", "Deleted", "IsDeleted"])
-        d_irno = find_column_ci(cursor, sch_id, nm_id, ["irno", "IRNo", "IRNO", "IrNo"])
-        d_del = find_column_ci(cursor, sch_id, nm_id, ["deleted", "Deleted", "IsDeleted"])
-        d_matrej = find_column_ci(cursor, sch_id, nm_id, ["matrej", "MatRej", "MATREJ", "Mat_Rej", "mat_rej"])
-        d_macrej = find_column_ci(cursor, sch_id, nm_id, ["macrej", "MacRej", "MACREJ", "Mac_Rej", "mac_rej"])
-        if not gm_grn or not gm_date or not im_grn or not im_irno or not im_irdate or not d_irno or not d_matrej or not d_macrej:
-            cursor.close(); conn.close()
-            return Response({"error": "Required columns not found for vendor rejections."}, status=500)
-        mat_e = f"ISNULL(CAST(D.[{d_matrej}] AS FLOAT), 0)" if d_matrej else "CAST(0 AS FLOAT)"
-        mac_e = f"ISNULL(CAST(D.[{d_macrej}] AS FLOAT), 0)" if d_macrej else "CAST(0 AS FLOAT)"
-        rej_sum = f"({mat_e} + {mac_e})"
-        rej_filter = f"({mat_e} > 0 OR {mac_e} > 0)"
-        gm_del_sql = f"ISNULL(GM.[{gm_del}], 0) = 0" if gm_del else "1=1"
-        im_del_sql = f"ISNULL(IM.[{im_del}], 0) = 0" if im_del else "1=1"
-        join_d_del = f" AND ISNULL(D.[{d_del}], 0) = 0" if d_del else ""
-        cm_join = ""
-        vendor_sql = "CAST(NULL AS NVARCHAR(512))"
-        if q_cm and gm_cid:
-            cm_id = find_column_ci(cursor, sch_cm, nm_cm, ["Id", "id", "ID", "CustId", "custid"])
-            cm_name = find_column_ci(cursor, sch_cm, nm_cm, ["CName", "cname", "CNAME", "CustName", "Name"])
-            cm_del = find_column_ci(cursor, sch_cm, nm_cm, ["deleted", "Deleted", "IsDeleted"])
-            if cm_id and cm_name:
-                cm_del_x = f" AND ISNULL(CM.[{cm_del}], 0) = 0" if cm_del else ""
-                cm_join = f"LEFT JOIN {q_cm} CM ON GM.[{gm_cid}] = CM.[{cm_id}]{cm_del_x}"
-                vendor_sql = f"CAST(CM.[{cm_name}] AS NVARCHAR(512))"
-        vendor_expr = "N'Unknown'" if vendor_sql.strip().upper().startswith("CAST(NULL") else f"LTRIM(RTRIM(ISNULL({vendor_sql}, N'Unknown')))"
-        base_from = f"""FROM {q_gm} GM INNER JOIN {q_im} IM ON GM.[{gm_grn}] = IM.[{im_grn}] AND {im_del_sql} INNER JOIN {q_id} D ON IM.[{im_irno}] = D.[{d_irno}]{join_d_del} {cm_join}"""
-        date_where = f"""CAST(IM.[{im_irdate}] AS DATE) BETWEEN ? AND ? AND {gm_del_sql} AND {rej_filter}"""
-        agg_sql = f"""
+
+        # 1. Job Order Subcontract Vendor Rejections (matching Reports — Quality Analysis Rejection & Rework Summary table logic)
+        injob_sql = """
         SELECT
-            YEAR(IM.[{im_irdate}]) AS YrNum,
-            MONTH(IM.[{im_irdate}]) AS MonthNum,
-            {vendor_expr} AS VendorName,
-            SUM(CAST({rej_sum} AS FLOAT)) AS TotalRej
-            {base_from}
-            WHERE {date_where}
-            GROUP BY YEAR(IM.[{im_irdate}]), MONTH(IM.[{im_irdate}]), {vendor_expr}
-            ORDER BY 3, 1, 2
+            YEAR(m.inspdate) AS YrNum,
+            MONTH(m.inspdate) AS MonthNum,
+            COALESCE(
+                NULLIF(LTRIM(RTRIM(
+                    COALESCE(
+                        (SELECT TOP 1 CM.CName FROM CustMast CM WHERE LTRIM(RTRIM(CONVERT(NVARCHAR(128), CM.Id))) = LTRIM(RTRIM(CONVERT(NVARCHAR(128), m.cid))) AND ISNULL(CM.deleted, 0) = 0),
+                        (SELECT TOP 1 CAM.CorpName FROM CustAliasMast CAM WHERE LTRIM(RTRIM(CONVERT(NVARCHAR(128), CAM.Id))) = LTRIM(RTRIM(CONVERT(NVARCHAR(128), m.cid))) AND ISNULL(CAM.deleted, 0) = 0),
+                        (SELECT TOP 1 CM_WM.CName FROM WithMatMas WM_P INNER JOIN CustMast CM_WM ON WM_P.Cid = CM_WM.Id WHERE WM_P.PartNo = d.partno AND ISNULL(WM_P.Deleted, 0) = 0 AND ISNULL(CM_WM.deleted, 0) = 0),
+                        (SELECT TOP 1 CAM_WM.CorpName FROM WithMatMas WM_P INNER JOIN CustAliasMast CAM_WM ON WM_P.Cid = CAM_WM.Id WHERE WM_P.PartNo = d.partno AND ISNULL(WM_P.Deleted, 0) = 0 AND ISNULL(CAM_WM.deleted, 0) = 0),
+                        (SELECT TOP 1 CM_CJ.CName FROM CustJobRawMat CJ_P INNER JOIN CustMast CM_CJ ON CJ_P.cid = CM_CJ.Id WHERE CJ_P.partno = d.partno AND ISNULL(CJ_P.deleted, 0) = 0 AND ISNULL(CM_CJ.deleted, 0) = 0),
+                        (SELECT TOP 1 CAM_CJ.CorpName FROM CustJobRawMat CJ_P INNER JOIN CustAliasMast CAM_CJ ON CJ_P.cid = CAM_CJ.Id WHERE CJ_P.partno = d.partno AND ISNULL(CJ_P.deleted, 0) = 0 AND ISNULL(CAM_CJ.deleted, 0) = 0),
+                        (SELECT TOP 1 CM_PM.CName FROM ProductMast PM_P INNER JOIN CustMast CM_PM ON PM_P.Cid = CM_PM.Id WHERE PM_P.PartNo = d.partno AND ISNULL(PM_P.Deleted, 0) = 0 AND ISNULL(CM_PM.deleted, 0) = 0),
+                        (SELECT TOP 1 CAM_PM.CorpName FROM ProductMast PM_P INNER JOIN CustAliasMast CAM_PM ON PM_P.Cid = CAM_PM.Id WHERE PM_P.PartNo = d.partno AND ISNULL(PM_P.Deleted, 0) = 0 AND ISNULL(CAM_PM.deleted, 0) = 0),
+                        (SELECT TOP 1 CM_PRM.CName FROM ProdMast PRM_P INNER JOIN CustMast CM_PRM ON PRM_P.CId = CM_PRM.Id WHERE PRM_P.Partno = d.partno AND ISNULL(PRM_P.Deleted, 0) = 0 AND ISNULL(CM_PRM.deleted, 0) = 0),
+                        (SELECT TOP 1 CAM_PRM.CorpName FROM ProdMast PRM_P INNER JOIN CustAliasMast CAM_PRM ON PRM_P.CId = CAM_PRM.Id WHERE PRM_P.Partno = d.partno AND ISNULL(PRM_P.Deleted, 0) = 0 AND ISNULL(CAM_PRM.deleted, 0) = 0)
+                    )
+                )), N''),
+                N'Unknown'
+            ) AS VendorName,
+            SUM(CAST(ISNULL(d.matrej, 0) AS FLOAT) + CAST(ISNULL(d.macrej, 0) AS FLOAT)) AS TotalRej
+        FROM InJob_Mas m
+        INNER JOIN InJob_Det d ON m.inspno = d.inspno
+        WHERE ISNULL(m.deleted, 0) = 0
+          AND ISNULL(d.deleted, 0) = 0
+          AND ISNULL(m.dtype, '') != 'Without Process'
+          AND CAST(m.inspdate AS DATE) BETWEEN ? AND ?
+          AND (ISNULL(d.matrej, 0) > 0 OR ISNULL(d.macrej, 0) > 0)
+        GROUP BY
+            YEAR(m.inspdate),
+            MONTH(m.inspdate),
+            COALESCE(
+                NULLIF(LTRIM(RTRIM(
+                    COALESCE(
+                        (SELECT TOP 1 CM.CName FROM CustMast CM WHERE LTRIM(RTRIM(CONVERT(NVARCHAR(128), CM.Id))) = LTRIM(RTRIM(CONVERT(NVARCHAR(128), m.cid))) AND ISNULL(CM.deleted, 0) = 0),
+                        (SELECT TOP 1 CAM.CorpName FROM CustAliasMast CAM WHERE LTRIM(RTRIM(CONVERT(NVARCHAR(128), CAM.Id))) = LTRIM(RTRIM(CONVERT(NVARCHAR(128), m.cid))) AND ISNULL(CAM.deleted, 0) = 0),
+                        (SELECT TOP 1 CM_WM.CName FROM WithMatMas WM_P INNER JOIN CustMast CM_WM ON WM_P.Cid = CM_WM.Id WHERE WM_P.PartNo = d.partno AND ISNULL(WM_P.Deleted, 0) = 0 AND ISNULL(CM_WM.deleted, 0) = 0),
+                        (SELECT TOP 1 CAM_WM.CorpName FROM WithMatMas WM_P INNER JOIN CustAliasMast CAM_WM ON WM_P.Cid = CAM_WM.Id WHERE WM_P.PartNo = d.partno AND ISNULL(WM_P.Deleted, 0) = 0 AND ISNULL(CAM_WM.deleted, 0) = 0),
+                        (SELECT TOP 1 CM_CJ.CName FROM CustJobRawMat CJ_P INNER JOIN CustMast CM_CJ ON CJ_P.cid = CM_CJ.Id WHERE CJ_P.partno = d.partno AND ISNULL(CJ_P.deleted, 0) = 0 AND ISNULL(CM_CJ.deleted, 0) = 0),
+                        (SELECT TOP 1 CAM_CJ.CorpName FROM CustJobRawMat CJ_P INNER JOIN CustAliasMast CAM_CJ ON CJ_P.cid = CAM_CJ.Id WHERE CJ_P.partno = d.partno AND ISNULL(CJ_P.deleted, 0) = 0 AND ISNULL(CAM_CJ.deleted, 0) = 0),
+                        (SELECT TOP 1 CM_PM.CName FROM ProductMast PM_P INNER JOIN CustMast CM_PM ON PM_P.Cid = CM_PM.Id WHERE PM_P.PartNo = d.partno AND ISNULL(PM_P.Deleted, 0) = 0 AND ISNULL(CM_PM.deleted, 0) = 0),
+                        (SELECT TOP 1 CAM_PM.CorpName FROM ProductMast PM_P INNER JOIN CustAliasMast CAM_PM ON PM_P.Cid = CAM_PM.Id WHERE PM_P.PartNo = d.partno AND ISNULL(PM_P.Deleted, 0) = 0 AND ISNULL(CAM_PM.deleted, 0) = 0),
+                        (SELECT TOP 1 CM_PRM.CName FROM ProdMast PRM_P INNER JOIN CustMast CM_PRM ON PRM_P.CId = CM_PRM.Id WHERE PRM_P.Partno = d.partno AND ISNULL(PRM_P.Deleted, 0) = 0 AND ISNULL(CM_PRM.deleted, 0) = 0),
+                        (SELECT TOP 1 CAM_PRM.CorpName FROM ProdMast PRM_P INNER JOIN CustAliasMast CAM_PRM ON PRM_P.CId = CAM_PRM.Id WHERE PRM_P.Partno = d.partno AND ISNULL(PRM_P.Deleted, 0) = 0 AND ISNULL(CAM_PRM.deleted, 0) = 0)
+                    )
+                )), N''),
+                N'Unknown'
+            )
+        HAVING SUM(CAST(ISNULL(d.matrej, 0) AS FLOAT) + CAST(ISNULL(d.macrej, 0) AS FLOAT)) > 0
         """
-        params = [start_date, end_date]
-        cursor.execute(agg_sql, params)
-        rows = cursor.fetchall()
-        if not rows:
-            injob_sql_both = """
-            SELECT YEAR(M.inspdate) AS YrNum, MONTH(M.inspdate) AS MonthNum, LTRIM(RTRIM(ISNULL(C.CName, N'Unknown'))) AS VendorName, SUM(CAST(ISNULL(D.macrej, 0) AS FLOAT) + CAST(ISNULL(D.matrej, 0) AS FLOAT)) AS TotalRej FROM InJob_Det D INNER JOIN InJob_Mas M ON D.inspno = M.inspno LEFT JOIN CustMast C ON M.cid = C.Id WHERE ISNULL(D.deleted, 0) = 0 AND CAST(M.inspdate AS DATE) BETWEEN ? AND ? AND (CAST(ISNULL(D.macrej, 0) AS FLOAT) > 0 OR CAST(ISNULL(D.matrej, 0) AS FLOAT) > 0) GROUP BY YEAR(M.inspdate), MONTH(M.inspdate), LTRIM(RTRIM(ISNULL(C.CName, N'Unknown'))) ORDER BY 3, 1, 2
-            """
+
+        try:
+            cursor.execute(injob_sql, [start_date, end_date])
+            ij_rows = cursor.fetchall()
+            if ij_rows:
+                rows.extend(ij_rows)
+        except Exception as e_ij:
             try:
-                cursor.execute(injob_sql_both, [start_date, end_date])
-                rows = cursor.fetchall()
+                fallback_ij = """
+                SELECT
+                    YEAR(m.inspdate) AS YrNum,
+                    MONTH(m.inspdate) AS MonthNum,
+                    COALESCE(NULLIF(LTRIM(RTRIM(ISNULL(C.CName, N''))), N''), N'Unknown') AS VendorName,
+                    SUM(CAST(ISNULL(d.matrej, 0) AS FLOAT) + CAST(ISNULL(d.macrej, 0) AS FLOAT)) AS TotalRej
+                FROM InJob_Mas m
+                INNER JOIN InJob_Det d ON m.inspno = d.inspno
+                LEFT JOIN CustMast C ON LTRIM(RTRIM(CONVERT(NVARCHAR(128), m.cid))) = LTRIM(RTRIM(CONVERT(NVARCHAR(128), C.Id))) AND ISNULL(C.deleted, 0) = 0
+                WHERE ISNULL(m.deleted, 0) = 0
+                  AND ISNULL(d.deleted, 0) = 0
+                  AND ISNULL(m.dtype, '') != 'Without Process'
+                  AND CAST(m.inspdate AS DATE) BETWEEN ? AND ?
+                  AND (ISNULL(d.matrej, 0) > 0 OR ISNULL(d.macrej, 0) > 0)
+                GROUP BY YEAR(m.inspdate), MONTH(m.inspdate), COALESCE(NULLIF(LTRIM(RTRIM(ISNULL(C.CName, N''))), N''), N'Unknown')
+                HAVING SUM(CAST(ISNULL(d.matrej, 0) AS FLOAT) + CAST(ISNULL(d.macrej, 0) AS FLOAT)) > 0
+                """
+                cursor.execute(fallback_ij, [start_date, end_date])
+                ij_rows = cursor.fetchall()
+                if ij_rows:
+                    rows.extend(ij_rows)
             except Exception:
-                rows = []
-        cursor.close(); conn.close()
+                pass
+
+        # 2. Raw Material Inward GRN Rejections
+        try:
+            grn_sql = """
+            SELECT
+                YEAR(IM.irdate) AS YrNum,
+                MONTH(IM.irdate) AS MonthNum,
+                COALESCE(NULLIF(LTRIM(RTRIM(ISNULL(CM.CName, N''))), N''), N'Unknown') AS VendorName,
+                SUM(CAST(ISNULL(D.matrej, 0) AS FLOAT) + CAST(ISNULL(D.macrej, 0) AS FLOAT)) AS TotalRej
+            FROM grn_mas GM
+            INNER JOIN inspmas IM ON GM.grnno = IM.grnno AND ISNULL(IM.deleted, 0) = 0
+            INNER JOIN inspdet D ON IM.irno = D.irno AND ISNULL(D.deleted, 0) = 0
+            LEFT JOIN CustMast CM ON LTRIM(RTRIM(CONVERT(NVARCHAR(128), GM.cid))) = LTRIM(RTRIM(CONVERT(NVARCHAR(128), CM.Id))) AND ISNULL(CM.deleted, 0) = 0
+            WHERE ISNULL(GM.deleted, 0) = 0
+              AND CAST(IM.irdate AS DATE) BETWEEN ? AND ?
+              AND (ISNULL(D.matrej, 0) > 0 OR ISNULL(D.macrej, 0) > 0)
+            GROUP BY YEAR(IM.irdate), MONTH(IM.irdate), COALESCE(NULLIF(LTRIM(RTRIM(ISNULL(CM.CName, N''))), N''), N'Unknown')
+            HAVING SUM(CAST(ISNULL(D.matrej, 0) AS FLOAT) + CAST(ISNULL(D.macrej, 0) AS FLOAT)) > 0
+            """
+            cursor.execute(grn_sql, [start_date, end_date])
+            grn_rows = cursor.fetchall()
+            if grn_rows:
+                rows.extend(grn_rows)
+        except Exception:
+            pass
+
+        cursor.close()
+        conn.close()
     except Exception as e:
         if cursor:
             try: cursor.close()
@@ -1602,19 +1719,61 @@ def vendor_rejection_monthwise(request):
             try: conn.close()
             except Exception: pass
         return Response({"error": f"Database error: {str(e)}"}, status=500)
+
     vendor_data = {}
     for yr, month_num, vendor_name, total_rej in rows:
         vkey = str(vendor_name).strip() if vendor_name is not None else "Unknown"
-        if not vkey: vkey = "Unknown"
-        if vkey not in vendor_data: vendor_data[vkey] = {b: 0.0 for b in buckets}
+        if not vkey or vkey in ("—", "-"):
+            vkey = "Unknown"
+        if vkey not in vendor_data:
+            vendor_data[vkey] = {b: 0.0 for b in buckets}
         k = (int(yr or 0), int(month_num or 0))
-        if k in vendor_data[vkey]: vendor_data[vkey][k] += float(total_rej or 0)
-    palette = [{"border": "#3b82f6", "bg": "rgba(59,130,246,0.06)"}, {"border": "#f97316", "bg": "rgba(249,115,22,0.06)"}, {"border": "#10b981", "bg": "rgba(16,185,129,0.06)"}, {"border": "#8b5cf6", "bg": "rgba(139,92,246,0.06)"}, {"border": "#ec4899", "bg": "rgba(236,72,153,0.06)"}, {"border": "#06b6d4", "bg": "rgba(6,182,212,0.06)"}, {"border": "#f43f5e", "bg": "rgba(244,63,94,0.06)"}]
+        if k in vendor_data[vkey]:
+            vendor_data[vkey][k] += float(total_rej or 0)
+
+    # Filter out vendors that have 0 rejections across all buckets
+    active_vendors = [
+        (vname, vdata) for vname, vdata in vendor_data.items()
+        if sum(vdata.values()) > 0
+    ]
+    # Sort descending by total rejection count
+    active_vendors.sort(key=lambda x: sum(x[1].values()), reverse=True)
+
+    palette = [
+        {"border": "#3b82f6", "bg": "rgba(59,130,246,0.06)"},
+        {"border": "#f97316", "bg": "rgba(249,115,22,0.06)"},
+        {"border": "#10b981", "bg": "rgba(16,185,129,0.06)"},
+        {"border": "#8b5cf6", "bg": "rgba(139,92,246,0.06)"},
+        {"border": "#ec4899", "bg": "rgba(236,72,153,0.06)"},
+        {"border": "#06b6d4", "bg": "rgba(6,182,212,0.06)"},
+        {"border": "#f43f5e", "bg": "rgba(244,63,94,0.06)"},
+        {"border": "#eab308", "bg": "rgba(234,179,8,0.06)"},
+        {"border": "#6366f1", "bg": "rgba(99,102,241,0.06)"},
+        {"border": "#14b8a6", "bg": "rgba(20,184,166,0.06)"}
+    ]
     formatted_datasets = []
-    for i, (vname, vdata) in enumerate(vendor_data.items()):
+    for i, (vname, vdata) in enumerate(active_vendors):
         c = palette[i % len(palette)]
-        formatted_datasets.append({"label": vname, "data": [round(vdata.get(b, 0), 2) for b in buckets], "borderColor": c["border"], "backgroundColor": c["bg"], "tension": 0.4, "fill": False, "pointRadius": 2, "pointHoverRadius": 4, "borderWidth": 1.5})
-    return Response({"company": tenant.get("company_name", ""), "fy": fy_label, "from": str(start_date), "to": str(end_date), "labels": labels, "datasets": formatted_datasets})
+        formatted_datasets.append({
+            "label": vname,
+            "data": [round(vdata.get(b, 0), 2) for b in buckets],
+            "borderColor": c["border"],
+            "backgroundColor": c["bg"],
+            "tension": 0.4,
+            "fill": False,
+            "pointRadius": 3,
+            "pointHoverRadius": 5,
+            "borderWidth": 2
+        })
+
+    return Response({
+        "company": tenant.get("company_name", ""),
+        "fy": fy_label,
+        "from": str(start_date),
+        "to": str(end_date),
+        "labels": labels,
+        "datasets": formatted_datasets
+    })
 
 # ─────────────────────────────────────────────────────────────
 #  OPERATIONS - OVERALL EFFICIENCY

@@ -463,7 +463,8 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
     if (!card) return null;
 
     const fin = legacyFinancialFromCard(card);
-    const fmt = n => Number(n).toLocaleString("en-IN", { minimumFractionDigits: n % 1 !== 0 ? 2 : 0 });
+    const fmt = n => Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const fmtRate = n => Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const items = card.items || [];
     const summaryRows = formatSummaryRows(fin, fmt);
     const docNo = card.poNo;
@@ -486,7 +487,9 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                         </div>
                         <div>
                             <div className="tap-prev__hd-title">T-Approval Detail Preview</div>
-                            <div className="tap-prev__hd-sub">{labels.docTitle} — {docNo}</div>
+                            <div className="tap-prev__hd-sub">
+                                {labels.docTitle} — <span className="tap-prev__hd-docno">{docNo}</span>
+                            </div>
                         </div>
                     </div>
                     <div className="tap-prev__hd-right">
@@ -578,7 +581,7 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                                             {!isJobOrder && (
                                                 <td className="tap-prev__td--num">{Number(row.qtyOthers || 0).toLocaleString("en-IN")}</td>
                                             )}
-                                            <td className="tap-prev__td--num">{Number(row.rate || 0).toLocaleString("en-IN")}</td>
+                                            <td className="tap-prev__td--num">{fmtRate(row.rate)}</td>
                                             <td className="tap-prev__td--num tap-prev__td--amt">{fmt(row.amount)}</td>
                                         </tr>
                                     );
@@ -732,7 +735,7 @@ function TypeGroup({ type, cards, collapsed, onToggle, onPreview, onApprove, onM
                                 <div className="tap-card__count">
                                     <div className="tap-count-row">
                                         <span className="tap-count-label">Amount:</span>
-                                        <span className="tap-count-val">₹ {Number(card.countVal).toLocaleString("en-IN")}</span>
+                                        <span className="tap-count-val">₹ {Number(card.countVal || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                     </div>
                                 </div>
                                 <div className="tap-card__actions">

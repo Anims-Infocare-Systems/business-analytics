@@ -1537,22 +1537,26 @@ def purchase_analysis_po_table(request):
         )
 
         # Qty with UOM
+        # Qty with UOM
         if det_qty and det_uom:
             if det_qtykgs:
                 effective_qty_sql = (
                     f"CASE WHEN UPPER(LTRIM(RTRIM(ISNULL(CAST(D.[{det_uom}] AS NVARCHAR(32)), N'')))) NOT IN (N'NOS', N'NOS.') "
-                    f"THEN ISNULL(D.[{det_qtykgs}], 0) ELSE ISNULL(D.[{det_qty}], 0) END"
+                    f"THEN (CASE WHEN ISNULL(D.[{det_qtykgs}], 0) > 0 THEN D.[{det_qtykgs}] ELSE ISNULL(D.[{det_qty}], 0) END) "
+                    f"ELSE ISNULL(D.[{det_qty}], 0) END"
                 )
             else:
                 effective_qty_sql = f"ISNULL(D.[{det_qty}], 0)"
 
             po_qty_sql = (
-                f"CAST(ROUND({effective_qty_sql}, 2) AS NVARCHAR(50))"
+                f"CAST(ROUND({effective_qty_sql}, 4) AS NVARCHAR(50))"
                 f" + N' ' + ISNULL(CAST(D.[{det_uom}] AS NVARCHAR(32)), N'')"
             )
         elif det_qty:
-            po_qty_sql = f"CAST(ROUND(ISNULL(D.[{det_qty}], 0), 2) AS NVARCHAR(50))"
+            effective_qty_sql = f"ISNULL(D.[{det_qty}], 0)"
+            po_qty_sql = f"CAST(ROUND(ISNULL(D.[{det_qty}], 0), 4) AS NVARCHAR(50))"
         else:
+            effective_qty_sql = "0"
             po_qty_sql = "N''"
 
         # Vendor name join
@@ -1723,7 +1727,8 @@ def purchase_analysis_po_table(request):
                 {dept_sel}                              AS Department,
                 {pi_no_sel}                             AS PI_No,
                 {pi_dt_sel}                             AS PI_Date,
-                {reqby_sel}                             AS Requested_By
+                {reqby_sel}                             AS Requested_By,
+                ROUND(CAST({effective_qty_sql} AS FLOAT), 4) AS Numeric_Qty
             FROM {q_po} M
             INNER JOIN {q_det} D
                 ON M.[{po_pono}] = D.[{det_pono}] AND {del_det_sql}
@@ -1766,6 +1771,7 @@ def purchase_analysis_po_table(request):
                 "pi_no":         str(row[13] or "").strip(),
                 "pi_date":       _iso(pi_dt),
                 "requested_by":  str(row[15] or "").strip(),
+                "qty":           float(row[16] or 0),
             })
 
         # ── Also query Pending PIs (Purchase Indents awaiting PO generation) ──
@@ -1820,7 +1826,8 @@ def purchase_analysis_po_table(request):
                     PIM.[pino] AS PI_No,
                     PIM.[pidate] AS PI_Date,
                     {pi_reqby_sub} AS Requested_By,
-                    1 AS is_pi_pending
+                    1 AS is_pi_pending,
+                    ROUND(ISNULL(PID.[qty], 0), 2) AS Numeric_Qty
                 FROM {q_pim} PIM
                 INNER JOIN {q_pid} PID 
                     ON PIM.[pino] = PID.[pino] 
@@ -1858,6 +1865,7 @@ def purchase_analysis_po_table(request):
                         "pi_date":       _iso(pi_dt),
                         "requested_by":  str(row[15] or "–").strip(),
                         "is_pi_pending": True,
+                        "qty":           float(row[17] or 0),
                     })
             except Exception as e:
                 logger.warning(f"Error fetching pending PIs: {e}")
@@ -2198,6 +2206,7 @@ def purchase_analysis_short_close_table(request):
         det_mt   = find_column_ci(cursor, sch_det, nm_det, ["mattype", "MatType", "MATTYPE"])
         det_uom  = find_column_ci(cursor, sch_det, nm_det, ["uom", "UOM", "Uom", "Unit"])
         det_qty  = find_column_ci(cursor, sch_det, nm_det, ["qty", "Qty", "QTY", "Quantity"])
+        det_shotclose_qty = find_column_ci(cursor, sch_det, nm_det, ["PoShotCloseQty", "poshotcloseqty", "PoShortCloseQty", "poshortcloseqty", "ShotCloseQty", "ShotClsQty"])
         det_clsreason = find_column_ci(cursor, sch_det, nm_det, ["ShotClsReason", "shotclsreason", "ShotCls_Reason", "shortclose_reason", "ShortCloseReason"])
         det_clsuser = find_column_ci(cursor, sch_det, nm_det, ["ShotClsUser", "shotclsuser", "ShotCls_User", "shortclose_user", "ShortCloseUser"])
 
@@ -2248,18 +2257,21 @@ def purchase_analysis_short_close_table(request):
         """
 
         uom_col = f"ISNULL(D.[{det_uom}], N'')" if det_uom else "N''"
-        qty_col = f"ISNULL(D.[{det_qty}], 0)" if det_qty else "0"
+        qty_col = f"ISNULL(D.[{det_shotclose_qty}], 0)" if det_shotclose_qty else (f"ISNULL(D.[{det_qty}], 0)" if det_qty else "0")
         reason_col = f"ISNULL(D.[{det_clsreason}], N'')" if det_clsreason else "N''"
         user_col = f"ISNULL(D.[{det_clsuser}], N'')" if det_clsuser else "N''"
 
-        # Show only when ShotClsReason OR ShotClsUser has data
-        where_condition = f"""
-            (
-                ISNULL(LTRIM(RTRIM({reason_col})), '') <> ''
-                OR
-                ISNULL(LTRIM(RTRIM({user_col})), '') <> ''
-            )
-        """
+        # Show when PoShotCloseQty > 0 (or ShotClsReason / ShotClsUser if column not present)
+        if det_shotclose_qty:
+            where_condition = f"ISNULL(D.[{det_shotclose_qty}], 0) > 0"
+        else:
+            where_condition = f"""
+                (
+                    ISNULL(LTRIM(RTRIM({reason_col})), '') <> ''
+                    OR
+                    ISNULL(LTRIM(RTRIM({user_col})), '') <> ''
+                )
+            """
 
         detail_sql = f"""
             SELECT TOP 3000
@@ -2746,6 +2758,7 @@ def purchase_analysis_traceability_table(request):
         # 7. Resolve columns for grninsubdet
         gx_pono = find_column_ci(cursor, sch_gx, nm_gx, ["pono", "Pono"])
         gx_grnno = find_column_ci(cursor, sch_gx, nm_gx, ["grnno", "Grnno"])
+        gx_rmname = find_column_ci(cursor, sch_gx, nm_gx, ["rmname", "rPartNo", "partno", "RmName"])
         gx_del = find_column_ci(cursor, sch_gx, nm_gx, ["deleted", "Deleted"])
         
         # 8. Resolve columns for grn_mas
@@ -2785,6 +2798,12 @@ def purchase_analysis_traceability_table(request):
         del_grd_sql = f"AND ISNULL(GRD.[{grd_del}], 0) = 0" if grd_del else ""
         del_am_sql = f"AND ISNULL(AM.[{am_del}], 0) = 0" if am_del else ""
         
+        join_gx_rmname = f"AND LTRIM(RTRIM(D.[{det_rmname}])) = G.rmname_g" if (gx_rmname and det_rmname) else ""
+        sel_gx_rmname = f"LTRIM(RTRIM(GX.[{gx_rmname}])) AS rmname_g," if gx_rmname else ""
+        where_gx_rmname = f"AND ISNULL(LTRIM(RTRIM(GX.[{gx_rmname}])), '') <> ''" if gx_rmname else ""
+        order_grn = f", D.[{det_rmname}], GM.[{gm_date}], G.grnno_g" if (det_rmname and gm_date) else ""
+        grn_match_cond = f"GD.[{gd_partno}] IS NOT NULL" if gd_partno else "G.grnno_g IS NOT NULL"
+
         # Approve expression
         app_expr = f"CASE WHEN ISNULL(M.[{po_approved}], 0) = 1 THEN 'Y' ELSE 'N' END" if po_approved else "'N'"
         
@@ -2829,8 +2848,8 @@ def purchase_analysis_traceability_table(request):
                 ISNULL(D.[{det_rate}], 0) AS Rate,
                 ISNULL(D.[{det_amount}], 0) AS Value,
                 {app_expr} AS Approved,
-                CAST(G.grnno_g AS NVARCHAR(64)) AS GRN_No,
-                GM.[{gm_date}] AS GRN_Date,
+                CASE WHEN {grn_match_cond} THEN CAST(G.grnno_g AS NVARCHAR(64)) ELSE NULL END AS GRN_No,
+                CASE WHEN {grn_match_cond} THEN GM.[{gm_date}] ELSE NULL END AS GRN_Date,
                 CAST(
                     ISNULL(CAST(GD.[{gd_partno}] AS NVARCHAR(256)), N'')
                     + CASE
@@ -2871,13 +2890,17 @@ def purchase_analysis_traceability_table(request):
             ) IND ON LTRIM(RTRIM(M.[{po_pono}])) = IND.pono
             LEFT JOIN {q_pim} PIM ON LTRIM(RTRIM(IND.pino)) = LTRIM(RTRIM(PIM.[{pim_pino}])) {del_pim_sql}
             LEFT JOIN (
-                SELECT
+                SELECT DISTINCT
                     LTRIM(RTRIM(GX.[{gx_pono}])) AS pono_g,
-                    MAX(GX.[{gx_grnno}]) AS grnno_g
+                    {sel_gx_rmname}
+                    LTRIM(RTRIM(GX.[{gx_grnno}])) AS grnno_g
                 FROM {q_gx} GX
                 WHERE {del_gx_sql}
-                GROUP BY LTRIM(RTRIM(GX.[{gx_pono}]))
+                  AND ISNULL(LTRIM(RTRIM(GX.[{gx_pono}])), '') <> ''
+                  AND ISNULL(LTRIM(RTRIM(GX.[{gx_grnno}])), '') <> ''
+                  {where_gx_rmname}
             ) G ON LTRIM(RTRIM(M.[{po_pono}])) = G.pono_g
+               {join_gx_rmname}
             LEFT JOIN {q_gm} GM ON LTRIM(RTRIM(G.grnno_g)) = LTRIM(RTRIM(GM.[{gm_grnno}])) {del_gm_sql}
             LEFT JOIN {q_gd} GD ON LTRIM(RTRIM(G.grnno_g)) = LTRIM(RTRIM(GD.[{gd_grnno}]))
                                AND LTRIM(RTRIM(D.[{det_rmname}])) = LTRIM(RTRIM(GD.[{gd_partno}]))
@@ -2891,7 +2914,7 @@ def purchase_analysis_traceability_table(request):
               {where_flt}
               {srch_sql}
               AND CAST(M.[{po_podate}] AS DATE) BETWEEN ? AND ?
-            ORDER BY M.[{po_podate}], M.[{po_pono}]
+            ORDER BY M.[{po_podate}], M.[{po_pono}]{order_grn}
         """
 
         cursor.execute(query, tuple(dtype_params + params_flt + srch_params + [start_date, end_date]))
@@ -3295,7 +3318,7 @@ def purchase_analysis_fulfillment_schedule(request):
                 C.pono AS [PO NO],
                 C.podate AS [PO DATE],
                 {cm_name_sel} AS [SUPPLIER],
-                C.rmname AS [PARTNO - DESC],
+                C.rmname AS [PART NO],
                 C.POQty AS [PO QTY],
 
                 /* SCHEDULE DETAILS */
@@ -3477,7 +3500,6 @@ def purchase_analysis_fulfillment_schedule(request):
 
 
 @api_view(["GET"])
-@cache_analytics_response(timeout=300, key_prefix="pa")
 def purchase_analysis_average_purchase_value(request):
     """
     Returns Average Purchase Value (APV) and line-item material classification data
@@ -3613,13 +3635,15 @@ def purchase_analysis_average_purchase_value(request):
             SELECT
                 G.pono,
                 LTRIM(RTRIM(G.rmname)) AS rmname,
-                MAX(G.grnno) AS grnno,
+                G.grnno,
                 MAX(GM.grndate) AS grndate,
-                SUM(ISNULL(G.qty, 0)) AS grnqty
+                SUM(ISNULL(G.qty, 0)) AS grn_qty_nos,
+                SUM(ISNULL(G.QtyKgs, 0)) AS grn_qty_kgs,
+                SUM(ISNULL(G.QtyForMtrsKgs, 0)) AS grn_qty_mtrs
             FROM {tbl_gx} G
             LEFT JOIN {tbl_gm} GM ON G.grnno = GM.grnno AND ISNULL(GM.deleted, 0) = 0
             WHERE ISNULL(G.deleted, 0) = 0
-            GROUP BY G.pono, LTRIM(RTRIM(G.rmname))
+            GROUP BY G.pono, LTRIM(RTRIM(G.rmname)), G.grnno
         )
 
         SELECT
@@ -3628,7 +3652,9 @@ def purchase_analysis_average_purchase_value(request):
                 ORDER BY
                     P.podate,
                     P.pono,
-                    P.rmname
+                    P.rmname,
+                    GB.grndate,
+                    GB.grnno
             ) AS [SL NO],
 
             P.pono AS [PONO],
@@ -3643,7 +3669,18 @@ def purchase_analysis_average_purchase_value(request):
                 P.rmname
             ) AS [DESCRIPTION],
 
-            P.qty AS [PO QTY],
+            CASE
+                WHEN UPPER(LTRIM(RTRIM(ISNULL(P.uom, '')))) NOT IN ('NOS', 'NOS.', 'PCS', 'SET') 
+                     AND ISNULL(P.QtyKgs, 0) > 0 
+                    THEN P.QtyKgs
+                WHEN ISNULL(P.qty, 0) > 0 
+                    THEN P.qty
+                WHEN ISNULL(P.QtyKgs, 0) > 0 
+                    THEN P.QtyKgs
+                WHEN ISNULL(P.QtyMtrsKgs, 0) > 0 
+                    THEN P.QtyMtrsKgs
+                ELSE ISNULL(P.qty, 0)
+            END AS [PO QTY],
             P.uom AS [UOM],
 
             CASE
@@ -3735,7 +3772,19 @@ def purchase_analysis_average_purchase_value(request):
 
             GB.grnno AS [GRN NO],
             GB.grndate AS [GRN DATE],
-            GB.grnqty AS [GRN QTY],
+            CASE
+                WHEN GB.grnno IS NULL THEN NULL
+                WHEN UPPER(LTRIM(RTRIM(ISNULL(P.uom, '')))) NOT IN ('NOS', 'NOS.', 'PCS', 'SET') 
+                     AND ISNULL(GB.grn_qty_kgs, 0) > 0 
+                    THEN GB.grn_qty_kgs
+                WHEN ISNULL(GB.grn_qty_nos, 0) > 0 
+                    THEN GB.grn_qty_nos
+                WHEN ISNULL(GB.grn_qty_kgs, 0) > 0 
+                    THEN GB.grn_qty_kgs
+                WHEN ISNULL(GB.grn_qty_mtrs, 0) > 0 
+                    THEN GB.grn_qty_mtrs
+                ELSE ISNULL(GB.grn_qty_nos, 0)
+            END AS [GRN QTY],
 
             P.dtype AS [PO DTYPE]
 
@@ -3759,7 +3808,9 @@ def purchase_analysis_average_purchase_value(request):
         ORDER BY
             P.podate,
             P.pono,
-            P.rmname;
+            P.rmname,
+            GB.grndate,
+            GB.grnno;
         """
 
         params = []
@@ -3779,7 +3830,7 @@ def purchase_analysis_average_purchase_value(request):
             podate = str(r[2])[:10] if r[2] else ""
             partno = (r[3] or "").strip()
             desc = (r[4] or "").strip()
-            po_qty = float(r[5] or 0)
+            po_qty = round(float(r[5] or 0), 4)
             uom = (r[6] or "").strip()
             category = (r[7] or "Other").strip()
             po_rate = float(r[8] or 0)
@@ -3789,12 +3840,12 @@ def purchase_analysis_average_purchase_value(request):
             mat_type = (r[12] or "RAW MATERIAL").strip()
             grn_no = (r[13] or "–").strip() if r[13] else "–"
             grn_date = str(r[14])[:10] if r[14] else "–"
-            grn_qty = float(r[15]) if r[15] is not None else None
+            grn_qty = round(float(r[15]), 4) if r[15] is not None else None
             po_dtype = (r[16] or ("Stores Material" if "STORE" in mat_type else "Raw Material")).strip()
 
             rows_out.append({
                 "sl_no": sl_no,
-                "id": f"{pono}_{partno}_{idx + 1}",
+                "id": f"{pono}_{partno}_{grn_no}_{idx + 1}",
                 "po_number": pono,
                 "pono": pono,
                 "po_date": podate,
@@ -3894,6 +3945,7 @@ def purchase_analysis_advanced_purchase_analytics(request):
         _, _, q_rpm = resolve_erp_table(cursor, ["RawProdMast", "rawprodmast", "RAWPRODMAST", "RawProd_Mast"])
         _, _, q_cm = resolve_erp_table(cursor, ["CustMast", "custmast", "CUSTMAST", "CustMast"])
         _, _, q_commer = resolve_erp_table(cursor, ["Commer_BaseRateDet", "commer_baseratedet", "COMMER_BASERATEDET", "CommerBaseRateDet"])
+        _, _, q_commas = resolve_erp_table(cursor, ["Commer_Mas", "commer_mas", "COMMER_MAS", "CommerMas"])
 
         tbl_pomas = q_m or "[dbo].[POMas]"
         tbl_podet = q_d or "[dbo].[PODet]"
@@ -3902,6 +3954,7 @@ def purchase_analysis_advanced_purchase_analytics(request):
         tbl_rawprod = q_rpm or "[dbo].[RawProdMast]"
         tbl_custmast = q_cm or "[dbo].[CustMast]"
         tbl_commer = q_commer or "[dbo].[Commer_BaseRateDet]"
+        tbl_commas = q_commas or "[dbo].[Commer_Mas]"
 
         # 1. Query PO line items joined with Master Data (WithMatMas, RawMast, RawProdMast, CustMast)
         query_po = f"""
@@ -4081,21 +4134,25 @@ def purchase_analysis_advanced_purchase_analytics(request):
         cursor.execute(query_po, params_po)
         po_rows = cursor.fetchall()
 
-        # 2. Query Commer_BaseRateDet for commercial rate changes
+        # 2. Query Commer_BaseRateDet for commercial rate changes (excluding Customer Product)
         query_commer = f"""
         SELECT
-            LTRIM(RTRIM(cmno)) AS cmno,
-            LTRIM(RTRIM(PartNo)) AS PartNo,
-            ISNULL(BaseRate, 0) AS BaseRate,
-            CONVERT(VARCHAR(10), BReffdt, 120) AS BReffdt,
-            ISNULL(deleted, 0) AS deleted,
-            ISNULL(SaleRate, 0) AS SaleRate,
-            LTRIM(RTRIM(ISNULL(CurrPref, ''))) AS CurrPref,
-            ISNULL(BRCurrRate, 0) AS BRCurrRate,
-            ISNULL(NetRate, 0) AS NetRate
-        FROM {tbl_commer}
-        WHERE ISNULL(deleted, 0) = 0
-        ORDER BY BReffdt ASC;
+            LTRIM(RTRIM(CBD.cmno)) AS cmno,
+            LTRIM(RTRIM(CBD.PartNo)) AS PartNo,
+            ISNULL(CBD.BaseRate, 0) AS BaseRate,
+            CONVERT(VARCHAR(10), CBD.BReffdt, 120) AS BReffdt,
+            ISNULL(CBD.deleted, 0) AS deleted,
+            ISNULL(CBD.SaleRate, 0) AS SaleRate,
+            LTRIM(RTRIM(ISNULL(CBD.CurrPref, ''))) AS CurrPref,
+            ISNULL(CBD.BRCurrRate, 0) AS BRCurrRate,
+            ISNULL(CBD.NetRate, 0) AS NetRate
+        FROM {tbl_commer} CBD
+        INNER JOIN {tbl_commas} CM
+            ON LTRIM(RTRIM(CBD.cmno)) = LTRIM(RTRIM(CM.cmno))
+           AND ISNULL(CM.deleted, 0) = 0
+           AND UPPER(LTRIM(RTRIM(ISNULL(CM.btype, '')))) <> 'CUSTOMER PRODUCT'
+        WHERE ISNULL(CBD.deleted, 0) = 0
+        ORDER BY CBD.BReffdt ASC;
         """
         cursor.execute(query_commer)
         commer_rows = cursor.fetchall()

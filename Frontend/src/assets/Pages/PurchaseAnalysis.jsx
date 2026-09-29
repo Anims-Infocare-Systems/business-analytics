@@ -634,8 +634,8 @@ function AdvancedPurchaseAnalyticsSection({
             const initialComm = validCommRates[0] || sortedComm[0];
             const latestComm = validCommRates[validCommRates.length - 1] || sortedComm[sortedComm.length - 1];
 
-            const baseRate = initialComm && Number(initialComm.base_rate) > 0 
-                ? Number(initialComm.base_rate) 
+            const baseRate = initialComm && Number(initialComm.base_rate) > 0
+                ? Number(initialComm.base_rate)
                 : (earliestTx.rate || 0);
 
             const activeRate = latestTx.rate || (latestComm && Number(latestComm.base_rate) > 0 ? Number(latestComm.base_rate) : baseRate);
@@ -4749,15 +4749,17 @@ export default function PurchaseAnalysis() {
             if (monthKey === "Other") return;
 
             if (!groups[monthKey]) {
-                groups[monthKey] = { month: monthKey, poValue: 0, rawMaterial: 0, storeMaterial: 0 };
+                groups[monthKey] = { month: monthKey, poValue: 0, rawMaterial: 0, storeMaterial: 0, serviceMaterial: 0 };
             }
 
             const valLakhs = Number(r.value || 0) / 100000;
             groups[monthKey].poValue += valLakhs;
 
-            const matType = r.po_type?.toLowerCase() || "";
+            const matType = (r.po_type || "").toLowerCase().trim();
             if (matType.includes("raw") || matType.includes("rm")) {
                 groups[monthKey].rawMaterial += valLakhs;
+            } else if (matType.includes("service") || matType.includes("srv") || matType.startsWith("ser")) {
+                groups[monthKey].serviceMaterial += valLakhs;
             } else {
                 groups[monthKey].storeMaterial += valLakhs;
             }
@@ -4822,7 +4824,7 @@ export default function PurchaseAnalysis() {
 
                 return {
                     ...item,
-                    serviceMaterial: srvSum,
+                    serviceMaterial: item.serviceMaterial !== undefined ? item.serviceMaterial : srvSum,
                     grnValue: grnSum || item.poValue * 0.82
                 };
             });
@@ -4852,7 +4854,20 @@ export default function PurchaseAnalysis() {
                 targetMap[name] = { name, code, totalValue: 0, qty: 0 };
             }
             targetMap[name].totalValue += val;
-            targetMap[name].qty += Number(r.qty || 0);
+
+            let itemQty = 0;
+            if (typeof r.qty === "number" && !isNaN(r.qty)) {
+                itemQty = r.qty;
+            } else if (r.qty !== undefined && r.qty !== null && String(r.qty).trim() !== "") {
+                const m = String(r.qty).replace(/,/g, "").match(/[\d.]+/);
+                itemQty = m ? (parseFloat(m[0]) || 0) : 0;
+            } else if (r.po_qty_num !== undefined && r.po_qty_num !== null) {
+                itemQty = Number(r.po_qty_num) || 0;
+            } else if (r.po_qty) {
+                const m = String(r.po_qty).replace(/,/g, "").match(/[\d.]+/);
+                itemQty = m ? (parseFloat(m[0]) || 0) : 0;
+            }
+            targetMap[name].qty += itemQty;
         });
 
         const getSortedTop5 = (map) => {
@@ -4910,6 +4925,7 @@ export default function PurchaseAnalysis() {
         const totalVals = finalMonthlyData.map(x => x.poValue);
         const rawVals = finalMonthlyData.map(x => x.rawMaterial);
         const storeVals = finalMonthlyData.map(x => x.storeMaterial);
+        const serviceVals = finalMonthlyData.map(x => x.serviceMaterial || 0);
 
         let datasets = [];
 
@@ -4928,7 +4944,7 @@ export default function PurchaseAnalysis() {
                         display: true,
                         anchor: "center",
                         align: "center",
-                        formatter: (v) => (v > 5 ? `₹${v.toFixed(0)}L` : ""),
+                        formatter: (v) => (v > 5 ? `₹${v.toFixed(0)}L` : (v > 2 ? `₹${v.toFixed(1)}L` : "")),
                         font: { size: 9, weight: "700", family: "Poppins" },
                         color: "#ffffff"
                     }
@@ -4946,7 +4962,25 @@ export default function PurchaseAnalysis() {
                         display: true,
                         anchor: "center",
                         align: "center",
-                        formatter: (v) => (v > 5 ? `₹${v.toFixed(0)}L` : ""),
+                        formatter: (v) => (v > 5 ? `₹${v.toFixed(0)}L` : (v > 2 ? `₹${v.toFixed(1)}L` : "")),
+                        font: { size: 9, weight: "700", family: "Poppins" },
+                        color: "#ffffff"
+                    }
+                },
+                {
+                    label: "Service (L)",
+                    data: serviceVals,
+                    backgroundColor: "rgba(139, 92, 246, 0.78)",
+                    borderColor: "#8b5cf6",
+                    borderWidth: 1.5,
+                    borderRadius: 4,
+                    type: "bar",
+                    stack: "mat",
+                    datalabels: {
+                        display: true,
+                        anchor: "center",
+                        align: "center",
+                        formatter: (v) => (v > 5 ? `₹${v.toFixed(0)}L` : (v > 2 ? `₹${v.toFixed(1)}L` : "")),
                         font: { size: 9, weight: "700", family: "Poppins" },
                         color: "#ffffff"
                     }
@@ -5042,6 +5076,24 @@ export default function PurchaseAnalysis() {
                         font: { size: 9.5, weight: "750", family: "Poppins" },
                         color: "#f5a623"
                     }
+                },
+                {
+                    label: "Service (L)",
+                    data: serviceVals,
+                    backgroundColor: "rgba(139, 92, 246, 0.78)",
+                    borderColor: "#8b5cf6",
+                    borderWidth: 1.5,
+                    borderRadius: 5,
+                    type: "bar",
+                    datalabels: {
+                        display: true,
+                        anchor: "end",
+                        align: "top",
+                        offset: 2,
+                        formatter: (v) => (v > 0 ? `₹${v.toFixed(1)}L` : ""),
+                        font: { size: 9.5, weight: "750", family: "Poppins" },
+                        color: "#8b5cf6"
+                    }
                 }
             ];
         }
@@ -5077,7 +5129,10 @@ export default function PurchaseAnalysis() {
                         padding: 12,
                         cornerRadius: 8,
                         titleFont: { size: 11, weight: "700", family: "Poppins" },
-                        bodyFont: { size: 11, family: "Poppins" }
+                        bodyFont: { size: 11, family: "Poppins" },
+                        callbacks: {
+                            label: ctx => ` ${ctx.dataset.label}: ₹${Number(ctx.raw || 0).toFixed(2)}L`
+                        }
                     },
                     datalabels: { display: false }
                 },
@@ -5992,21 +6047,35 @@ export default function PurchaseAnalysis() {
 
             const rawQtyStr = String(r.po_qty ?? r.qty ?? "0").trim();
             const qtyMatch = rawQtyStr.match(/^[+-]?[\d,]+(\.\d+)?/);
-            const poQtyNum = qtyMatch ? parseFloat(qtyMatch[0].replace(/,/g, "")) : (Number(r.qty ?? r.po_qty) || 0);
+            let poQtyNum = qtyMatch ? parseFloat(qtyMatch[0].replace(/,/g, "")) : (Number(r.qty ?? r.po_qty) || 0);
 
             const amt = Number(r.amt ?? r.value ?? 0);
             const poRate = Number(r.po_rate ?? r.rate ?? (poQtyNum > 0 ? amt / poQtyNum : 0));
+            if (poQtyNum === 0 && amt > 0 && poRate > 0) {
+                poQtyNum = Number((amt / poRate).toFixed(4));
+            }
+
             const uom = (r.uom || "").trim() || normalizePoUom(r.unit, mat);
             const category = r.category || (apvMode === "raw" ? getRawMaterialCategory(r) : getStoreMaterialGroup(r));
 
             // GRN fields
             const grnNo = (r.grn_no && r.grn_no !== "-" && r.grn_no !== "–" && String(r.grn_no).trim() !== "") ? String(r.grn_no).trim() : "–";
             const grnDate = (r.grn_date && r.grn_date !== "-" && r.grn_date !== "–" && String(r.grn_date).trim() !== "") ? String(r.grn_date).trim() : "–";
-            const rawGrnQtyStr = String(r.grn_qty !== null && r.grn_qty !== undefined ? r.grn_qty : "").trim();
-            const grnQtyMatch = rawGrnQtyStr.match(/^[+-]?[\d,]+(\.\d+)?/);
-            const grnQtyNum = grnQtyMatch ? parseFloat(grnQtyMatch[0].replace(/,/g, "")) : (rawGrnQtyStr ? parseFloat(rawGrnQtyStr.replace(/[^\d.]/g, "")) : (grnNo !== "–" ? poQtyNum : null));
+
+            let grnQtyNum = null;
+            if (r.grn_qty !== null && r.grn_qty !== undefined && r.grn_qty !== "" && !isNaN(Number(r.grn_qty))) {
+                grnQtyNum = Number(r.grn_qty);
+            } else if (grnNo !== "–" && grnNo !== "-" && grnNo !== "") {
+                const rawGrnQtyStr = String(r.grn_qty ?? "").trim();
+                const grnQtyMatch = rawGrnQtyStr.match(/^[+-]?[\d,]+(\.\d+)?/);
+                grnQtyNum = grnQtyMatch ? parseFloat(grnQtyMatch[0].replace(/,/g, "")) : (poQtyNum > 0 ? poQtyNum : null);
+            }
 
             const avgVal = materialAvgRateMap[key] || poRate;
+            const poQtyStr = Number(poQtyNum || 0).toLocaleString("en-IN", { minimumFractionDigits: 4, maximumFractionDigits: 4 });
+            const grnQtyStr = (grnQtyNum !== null && grnQtyNum !== undefined && !isNaN(grnQtyNum))
+                ? Number(grnQtyNum).toLocaleString("en-IN", { minimumFractionDigits: 4, maximumFractionDigits: 4 })
+                : "–";
 
             return {
                 id: r.id || `${r.po_number || r.pono || idx}_${code}_${idx}`,
@@ -6016,7 +6085,7 @@ export default function PurchaseAnalysis() {
                 partNo: code,
                 description: mat,
                 poQty: poQtyNum,
-                poQtyStr: poQtyNum.toLocaleString("en-IN", { maximumFractionDigits: 2 }),
+                poQtyStr: poQtyStr,
                 uom: uom,
                 category: category,
                 poRate: poRate,
@@ -6024,6 +6093,7 @@ export default function PurchaseAnalysis() {
                 grnNo: grnNo,
                 grnDate: grnDate,
                 grnQty: grnQtyNum,
+                grnQtyStr: grnQtyStr,
                 avgValue: avgVal,
                 originalRow: r
             };
@@ -6845,7 +6915,7 @@ export default function PurchaseAnalysis() {
                     <SectionHeader
                         icon={<TrendingUp size={16} style={{ color: "#2d6de8" }} />}
                         title="PO Value vs GRN Value Trend"
-                        badge="Received vs Ordered"
+                        badge="Ordered vs Received"
                         badgeCls="pa2-badge-blue"
                     />
                     {poLoading ? (
@@ -6912,7 +6982,7 @@ export default function PurchaseAnalysis() {
                                             </div>
                                             <div className="pa2-prod-meta">
                                                 <div className="pa2-prod-val">₹{(p.totalValue / 100000).toFixed(2)}L</div>
-                                                <div className="pa2-prod-qty">{p.qty.toLocaleString("en-IN")} Qty</div>
+                                                <div className="pa2-prod-qty">{(p.qty || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })} Qty</div>
                                             </div>
                                         </div>
                                     );
@@ -6942,7 +7012,7 @@ export default function PurchaseAnalysis() {
                                             </div>
                                             <div className="pa2-prod-meta">
                                                 <div className="pa2-prod-val">₹{(p.totalValue / 100000).toFixed(2)}L</div>
-                                                <div className="pa2-prod-qty">{p.qty.toLocaleString("en-IN")} Qty</div>
+                                                <div className="pa2-prod-qty">{(p.qty || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })} Qty</div>
                                             </div>
                                         </div>
                                     );
@@ -6973,7 +7043,7 @@ export default function PurchaseAnalysis() {
                                                 </div>
                                                 <div className="pa2-prod-meta">
                                                     <div className="pa2-prod-val">₹{(p.totalValue / 100000).toFixed(2)}L</div>
-                                                    <div className="pa2-prod-qty">{p.qty.toLocaleString("en-IN")} Qty</div>
+                                                    <div className="pa2-prod-qty">{(p.qty || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })} Qty</div>
                                                 </div>
                                             </div>
                                         );
@@ -7368,15 +7438,14 @@ export default function PurchaseAnalysis() {
                                 <col style={{ width: "95px" }} />
                                 <col style={{ width: "220px" }} />
                                 <col style={{ width: "230px" }} />
-                                <col style={{ width: "85px" }} />
+                                <col style={{ width: "95px" }} />
                                 <col style={{ width: "65px" }} />
                                 <col style={{ width: "115px" }} />
                                 <col style={{ width: "95px" }} />
                                 <col style={{ width: "110px" }} />
                                 <col style={{ width: "100px" }} />
                                 <col style={{ width: "95px" }} />
-                                <col style={{ width: "85px" }} />
-                                <col style={{ width: "110px" }} />
+                                <col style={{ width: "95px" }} />
                             </colgroup>
                             <thead>
                                 <tr>
@@ -7448,19 +7517,13 @@ export default function PurchaseAnalysis() {
                                             {apvSortConfig.key === "grnQty" ? (apvSortConfig.direction === "asc" ? <ArrowUp size={11} /> : <ArrowDown size={11} />) : <ArrowUpDown size={11} className="pa2-th-sort-idle" />}
                                         </div>
                                     </th>
-                                    <th className="pa2-po-th pa2-apv-col-avgval" style={{ cursor: "pointer", background: "rgba(37, 99, 235, 0.06)" }} onClick={() => setApvSortConfig(prev => ({ key: "avgValue", direction: prev.key === "avgValue" && prev.direction === "asc" ? "desc" : "asc" }))}>
-                                        <div className="pa2-th-sort" style={{ justifyContent: "flex-end" }}>
-                                            <span style={{ color: "#2563eb", fontWeight: "750" }}>Avg Value (₹)</span>
-                                            {apvSortConfig.key === "avgValue" ? (apvSortConfig.direction === "asc" ? <ArrowUp size={11} /> : <ArrowDown size={11} />) : <ArrowUpDown size={11} className="pa2-th-sort-idle" />}
-                                        </div>
-                                    </th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {(poLoading || apvLoading) ? (
                                     Array.from({ length: 5 }).map((_, idx) => (
                                         <tr key={idx} className="pa2-po-tr pa2-pulse-loader">
-                                            {Array.from({ length: 14 }).map((__, tdIdx) => (
+                                            {Array.from({ length: 13 }).map((__, tdIdx) => (
                                                 <td key={tdIdx} className="pa2-po-td">
                                                     <div className="pa2-skeleton pa2-shimmer" style={{ width: tdIdx === 0 ? "15px" : "50px", height: "12px" }} />
                                                 </td>
@@ -7469,7 +7532,7 @@ export default function PurchaseAnalysis() {
                                     ))
                                 ) : filteredApvTableRows.length === 0 ? (
                                     <tr>
-                                        <td colSpan={14} className="pa2-nodata-td-wrap">
+                                        <td colSpan={13} className="pa2-nodata-td-wrap">
                                             <PaNoData icon={<Search size={16} style={{ color: "#64748b" }} />} message="No PO records found matching criteria" compact />
                                         </td>
                                     </tr>
@@ -7493,7 +7556,7 @@ export default function PurchaseAnalysis() {
                                                 <td className="pa2-po-td pa2-apv-col-desc pa2-po-material" title={row.description}>
                                                     {row.description}
                                                 </td>
-                                                <td className="pa2-po-td pa2-apv-col-qty" style={{ fontWeight: "650", color: "#1e293b" }}>
+                                                <td className="pa2-po-td pa2-apv-col-qty" style={{ fontWeight: "650", color: "#1e293b", textAlign: "right" }}>
                                                     {row.poQtyStr}
                                                 </td>
                                                 <td className="pa2-po-td pa2-apv-col-uom" style={{ fontWeight: "700", color: "#64748b", fontSize: "0.72rem" }}>
@@ -7521,11 +7584,8 @@ export default function PurchaseAnalysis() {
                                                 <td className="pa2-po-td pa2-apv-col-grndate" style={{ color: "#64748b", fontSize: "0.72rem" }}>
                                                     {row.grnDate}
                                                 </td>
-                                                <td className="pa2-po-td pa2-apv-col-grnqty" style={{ fontWeight: "650", color: hasGrn ? "#059669" : "#94a3b8" }}>
-                                                    {row.grnQty !== null && row.grnQty !== undefined && !isNaN(row.grnQty) ? Number(row.grnQty).toLocaleString("en-IN", { maximumFractionDigits: 2 }) : "–"}
-                                                </td>
-                                                <td className="pa2-po-td pa2-apv-col-avgval" style={{ fontWeight: "850", color: "#2563eb", background: "rgba(37, 99, 235, 0.03)" }}>
-                                                    ₹{row.avgValue.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                <td className="pa2-po-td pa2-apv-col-grnqty" style={{ fontWeight: "650", color: hasGrn ? "#059669" : "#94a3b8", textAlign: "right" }}>
+                                                    {row.grnQtyStr || (row.grnQty !== null && row.grnQty !== undefined && !isNaN(row.grnQty) ? Number(row.grnQty).toLocaleString("en-IN", { minimumFractionDigits: 4, maximumFractionDigits: 4 }) : "–")}
                                                 </td>
                                             </tr>
                                         );
@@ -7537,8 +7597,8 @@ export default function PurchaseAnalysis() {
                                     <td className="pa2-po-td pa2-apv-col-idx pa2-apv-col-pono" colSpan={5} style={{ fontWeight: "800", color: "#1e293b", paddingLeft: "12px" }}>
                                         Total Summary ({filteredApvTableRows.length} Records)
                                     </td>
-                                    <td className="pa2-po-td pa2-apv-col-qty" style={{ fontWeight: "800", color: "#1e293b" }}>
-                                        {filteredApvTableRows.reduce((acc, r) => acc + (r.poQty || 0), 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                                    <td className="pa2-po-td pa2-apv-col-qty" style={{ fontWeight: "800", color: "#1e293b", textAlign: "right" }}>
+                                        {filteredApvTableRows.reduce((acc, r) => acc + (r.poQty || 0), 0).toLocaleString("en-IN", { minimumFractionDigits: 4, maximumFractionDigits: 4 })}
                                     </td>
                                     <td className="pa2-po-td pa2-apv-col-uom" style={{ color: "#64748b", fontWeight: "700" }}>—</td>
                                     <td className="pa2-po-td pa2-apv-col-cat" style={{ color: "#64748b", fontWeight: "700" }}>—</td>
@@ -7557,16 +7617,8 @@ export default function PurchaseAnalysis() {
                                         {filteredApvTableRows.filter(r => r.grnNo && r.grnNo !== "–" && r.grnNo !== "-").length} GRNs
                                     </td>
                                     <td className="pa2-po-td pa2-apv-col-grndate" style={{ color: "#64748b", fontWeight: "700" }}>—</td>
-                                    <td className="pa2-po-td pa2-apv-col-grnqty" style={{ fontWeight: "800", color: "#059669" }}>
-                                        {filteredApvTableRows.reduce((acc, r) => acc + (Number(r.grnQty) || 0), 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}
-                                    </td>
-                                    <td className="pa2-po-td pa2-apv-col-avgval" style={{ fontWeight: "850", color: "#2563eb", background: "rgba(37, 99, 235, 0.05)" }}>
-                                        {(() => {
-                                            const totAmt = filteredApvTableRows.reduce((acc, r) => acc + (r.amt || 0), 0);
-                                            const totQty = filteredApvTableRows.reduce((acc, r) => acc + (r.poQty || 0), 0);
-                                            const avg = totQty > 0 ? totAmt / totQty : 0;
-                                            return `₹${avg.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-                                        })()}
+                                    <td className="pa2-po-td pa2-apv-col-grnqty" style={{ fontWeight: "800", color: "#059669", textAlign: "right" }}>
+                                        {filteredApvTableRows.reduce((acc, r) => acc + (Number(r.grnQty) || 0), 0).toLocaleString("en-IN", { minimumFractionDigits: 4, maximumFractionDigits: 4 })}
                                     </td>
                                 </tr>
                             </tfoot>
@@ -8340,177 +8392,177 @@ export default function PurchaseAnalysis() {
                             <div className="pa2-fs-filters-pair">
                                 {/* Supplier Name Filter (Multiple Selection) */}
                                 <div className="pa2-po-dept-select-wrap" ref={fsSupplierRef}>
-                                <button
-                                    type="button"
-                                    className={`pa2-po-dept-trigger${fsSupplierDropdownOpen ? " active" : ""}${fsSupplierFilter.length > 0 ? " has-filter" : ""}`}
-                                    onClick={() => setFsSupplierDropdownOpen(!fsSupplierDropdownOpen)}
-                                    title="Filter by Supplier"
-                                >
-                                    <Building2 size={13} className="pa2-dept-trigger-icon" />
-                                    <span className="pa2-po-dept-trigger-label">
-                                        {fsSupplierFilter.length === 0
-                                            ? "All Suppliers"
-                                            : fsSupplierFilter.length === 1
-                                                ? fsSupplierFilter[0]
-                                                : `${fsSupplierFilter.length} Suppliers`}
-                                    </span>
-                                    {fsSupplierFilter.length > 0 && (
-                                        <span className="pa2-dept-count-badge">{fsSupplierFilter.length}</span>
-                                    )}
-                                    <ChevronDown size={12} className="pa2-dept-arrow-icon" />
-                                </button>
+                                    <button
+                                        type="button"
+                                        className={`pa2-po-dept-trigger${fsSupplierDropdownOpen ? " active" : ""}${fsSupplierFilter.length > 0 ? " has-filter" : ""}`}
+                                        onClick={() => setFsSupplierDropdownOpen(!fsSupplierDropdownOpen)}
+                                        title="Filter by Supplier"
+                                    >
+                                        <Building2 size={13} className="pa2-dept-trigger-icon" />
+                                        <span className="pa2-po-dept-trigger-label">
+                                            {fsSupplierFilter.length === 0
+                                                ? "All Suppliers"
+                                                : fsSupplierFilter.length === 1
+                                                    ? fsSupplierFilter[0]
+                                                    : `${fsSupplierFilter.length} Suppliers`}
+                                        </span>
+                                        {fsSupplierFilter.length > 0 && (
+                                            <span className="pa2-dept-count-badge">{fsSupplierFilter.length}</span>
+                                        )}
+                                        <ChevronDown size={12} className="pa2-dept-arrow-icon" />
+                                    </button>
 
-                                {fsSupplierDropdownOpen && (
-                                    <div className="pa2-po-dept-menu" style={{ width: "260px" }}>
-                                        <div className="pa2-po-dept-search-box">
-                                            <Search size={12} className="pa2-po-dept-search-icon" />
-                                            <input
-                                                type="text"
-                                                className="pa2-po-dept-search-input"
-                                                placeholder="Search supplier..."
-                                                value={fsSupplierSearchQuery}
-                                                onChange={e => setFsSupplierSearchQuery(e.target.value)}
-                                                autoFocus
-                                            />
-                                            {fsSupplierSearchQuery && (
+                                    {fsSupplierDropdownOpen && (
+                                        <div className="pa2-po-dept-menu" style={{ width: "260px" }}>
+                                            <div className="pa2-po-dept-search-box">
+                                                <Search size={12} className="pa2-po-dept-search-icon" />
+                                                <input
+                                                    type="text"
+                                                    className="pa2-po-dept-search-input"
+                                                    placeholder="Search supplier..."
+                                                    value={fsSupplierSearchQuery}
+                                                    onChange={e => setFsSupplierSearchQuery(e.target.value)}
+                                                    autoFocus
+                                                />
+                                                {fsSupplierSearchQuery && (
+                                                    <button
+                                                        type="button"
+                                                        className="pa2-po-dept-search-clear"
+                                                        onClick={() => setFsSupplierSearchQuery("")}
+                                                    >
+                                                        <X size={10} />
+                                                    </button>
+                                                )}
+                                            </div>
+
+                                            <div className="pa2-po-dept-actions">
                                                 <button
                                                     type="button"
-                                                    className="pa2-po-dept-search-clear"
-                                                    onClick={() => setFsSupplierSearchQuery("")}
+                                                    className="pa2-po-dept-action-btn"
+                                                    onClick={() => { setFsSupplierFilter([]); setFsPage(1); }}
                                                 >
-                                                    <X size={10} />
+                                                    Select All
                                                 </button>
-                                            )}
-                                        </div>
-
-                                        <div className="pa2-po-dept-actions">
-                                            <button
-                                                type="button"
-                                                className="pa2-po-dept-action-btn"
-                                                onClick={() => { setFsSupplierFilter([]); setFsPage(1); }}
-                                            >
-                                                Select All
-                                            </button>
-                                            <button
-                                                type="button"
-                                                className="pa2-po-dept-action-btn"
-                                                onClick={() => { setFsSupplierFilter([]); setFsPage(1); }}
-                                            >
-                                                Reset
-                                            </button>
-                                        </div>
-
-                                        <div className="pa2-po-dept-list">
-                                            {filteredDropdownFsSuppliers.length === 0 ? (
-                                                <div className="pa2-po-dept-empty">No supplier found</div>
-                                            ) : (
-                                                filteredDropdownFsSuppliers.map(sup => {
-                                                    const isSelected = fsSupplierFilter.includes(sup);
-                                                    return (
-                                                        <div
-                                                            key={sup}
-                                                            className={`pa2-po-dept-item${isSelected ? " selected" : ""}`}
-                                                            onClick={() => handleFsSupplierToggle(sup)}
-                                                        >
-                                                            <span className={`pa2-po-dept-checkbox${isSelected ? " checked" : ""}`}>
-                                                                {isSelected && <Check size={10} />}
-                                                            </span>
-                                                            <span className="pa2-po-dept-name" title={sup}>{sup}</span>
-                                                        </div>
-                                                    );
-                                                })
-                                            )}
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Part No Filter (Multiple Selection) */}
-                            <div className="pa2-po-dept-select-wrap" ref={fsPartRef}>
-                                <button
-                                    type="button"
-                                    className={`pa2-po-dept-trigger${fsPartDropdownOpen ? " active" : ""}${fsPartFilter.length > 0 ? " has-filter" : ""}`}
-                                    onClick={() => setFsPartDropdownOpen(!fsPartDropdownOpen)}
-                                    title="Filter by Part No"
-                                >
-                                    <Package size={13} className="pa2-dept-trigger-icon" />
-                                    <span className="pa2-po-dept-trigger-label">
-                                        {fsPartFilter.length === 0
-                                            ? "All Parts"
-                                            : fsPartFilter.length === 1
-                                                ? fsPartFilter[0]
-                                                : `${fsPartFilter.length} Parts`}
-                                    </span>
-                                    {fsPartFilter.length > 0 && (
-                                        <span className="pa2-dept-count-badge">{fsPartFilter.length}</span>
-                                    )}
-                                    <ChevronDown size={12} className="pa2-dept-arrow-icon" />
-                                </button>
-
-                                {fsPartDropdownOpen && (
-                                    <div className="pa2-po-dept-menu" style={{ width: "260px" }}>
-                                        <div className="pa2-po-dept-search-box">
-                                            <Search size={12} className="pa2-po-dept-search-icon" />
-                                            <input
-                                                type="text"
-                                                className="pa2-po-dept-search-input"
-                                                placeholder="Search part no..."
-                                                value={fsPartSearchQuery}
-                                                onChange={e => setFsPartSearchQuery(e.target.value)}
-                                                autoFocus
-                                            />
-                                            {fsPartSearchQuery && (
                                                 <button
                                                     type="button"
-                                                    className="pa2-po-dept-search-clear"
-                                                    onClick={() => setFsPartSearchQuery("")}
+                                                    className="pa2-po-dept-action-btn"
+                                                    onClick={() => { setFsSupplierFilter([]); setFsPage(1); }}
                                                 >
-                                                    <X size={10} />
+                                                    Reset
                                                 </button>
-                                            )}
-                                        </div>
+                                            </div>
 
-                                        <div className="pa2-po-dept-actions">
-                                            <button
-                                                type="button"
-                                                className="pa2-po-dept-action-btn"
-                                                onClick={() => { setFsPartFilter([]); setFsPage(1); }}
-                                            >
-                                                Select All
-                                            </button>
-                                            <button
-                                                type="button"
-                                                className="pa2-po-dept-action-btn"
-                                                onClick={() => { setFsPartFilter([]); setFsPage(1); }}
-                                            >
-                                                Reset
-                                            </button>
+                                            <div className="pa2-po-dept-list">
+                                                {filteredDropdownFsSuppliers.length === 0 ? (
+                                                    <div className="pa2-po-dept-empty">No supplier found</div>
+                                                ) : (
+                                                    filteredDropdownFsSuppliers.map(sup => {
+                                                        const isSelected = fsSupplierFilter.includes(sup);
+                                                        return (
+                                                            <div
+                                                                key={sup}
+                                                                className={`pa2-po-dept-item${isSelected ? " selected" : ""}`}
+                                                                onClick={() => handleFsSupplierToggle(sup)}
+                                                            >
+                                                                <span className={`pa2-po-dept-checkbox${isSelected ? " checked" : ""}`}>
+                                                                    {isSelected && <Check size={10} />}
+                                                                </span>
+                                                                <span className="pa2-po-dept-name" title={sup}>{sup}</span>
+                                                            </div>
+                                                        );
+                                                    })
+                                                )}
+                                            </div>
                                         </div>
+                                    )}
+                                </div>
 
-                                        <div className="pa2-po-dept-list">
-                                            {filteredDropdownFsParts.length === 0 ? (
-                                                <div className="pa2-po-dept-empty">No part found</div>
-                                            ) : (
-                                                filteredDropdownFsParts.map(part => {
-                                                    const isSelected = fsPartFilter.includes(part);
-                                                    return (
-                                                        <div
-                                                            key={part}
-                                                            className={`pa2-po-dept-item${isSelected ? " selected" : ""}`}
-                                                            onClick={() => handleFsPartToggle(part)}
-                                                        >
-                                                            <span className={`pa2-po-dept-checkbox${isSelected ? " checked" : ""}`}>
-                                                                {isSelected && <Check size={10} />}
-                                                            </span>
-                                                            <span className="pa2-po-dept-name" title={part}>{part}</span>
-                                                        </div>
-                                                    );
-                                                })
-                                            )}
+                                {/* Part No Filter (Multiple Selection) */}
+                                <div className="pa2-po-dept-select-wrap" ref={fsPartRef}>
+                                    <button
+                                        type="button"
+                                        className={`pa2-po-dept-trigger${fsPartDropdownOpen ? " active" : ""}${fsPartFilter.length > 0 ? " has-filter" : ""}`}
+                                        onClick={() => setFsPartDropdownOpen(!fsPartDropdownOpen)}
+                                        title="Filter by Part No"
+                                    >
+                                        <Package size={13} className="pa2-dept-trigger-icon" />
+                                        <span className="pa2-po-dept-trigger-label">
+                                            {fsPartFilter.length === 0
+                                                ? "All Parts"
+                                                : fsPartFilter.length === 1
+                                                    ? fsPartFilter[0]
+                                                    : `${fsPartFilter.length} Parts`}
+                                        </span>
+                                        {fsPartFilter.length > 0 && (
+                                            <span className="pa2-dept-count-badge">{fsPartFilter.length}</span>
+                                        )}
+                                        <ChevronDown size={12} className="pa2-dept-arrow-icon" />
+                                    </button>
+
+                                    {fsPartDropdownOpen && (
+                                        <div className="pa2-po-dept-menu" style={{ width: "260px" }}>
+                                            <div className="pa2-po-dept-search-box">
+                                                <Search size={12} className="pa2-po-dept-search-icon" />
+                                                <input
+                                                    type="text"
+                                                    className="pa2-po-dept-search-input"
+                                                    placeholder="Search part no..."
+                                                    value={fsPartSearchQuery}
+                                                    onChange={e => setFsPartSearchQuery(e.target.value)}
+                                                    autoFocus
+                                                />
+                                                {fsPartSearchQuery && (
+                                                    <button
+                                                        type="button"
+                                                        className="pa2-po-dept-search-clear"
+                                                        onClick={() => setFsPartSearchQuery("")}
+                                                    >
+                                                        <X size={10} />
+                                                    </button>
+                                                )}
+                                            </div>
+
+                                            <div className="pa2-po-dept-actions">
+                                                <button
+                                                    type="button"
+                                                    className="pa2-po-dept-action-btn"
+                                                    onClick={() => { setFsPartFilter([]); setFsPage(1); }}
+                                                >
+                                                    Select All
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className="pa2-po-dept-action-btn"
+                                                    onClick={() => { setFsPartFilter([]); setFsPage(1); }}
+                                                >
+                                                    Reset
+                                                </button>
+                                            </div>
+
+                                            <div className="pa2-po-dept-list">
+                                                {filteredDropdownFsParts.length === 0 ? (
+                                                    <div className="pa2-po-dept-empty">No part found</div>
+                                                ) : (
+                                                    filteredDropdownFsParts.map(part => {
+                                                        const isSelected = fsPartFilter.includes(part);
+                                                        return (
+                                                            <div
+                                                                key={part}
+                                                                className={`pa2-po-dept-item${isSelected ? " selected" : ""}`}
+                                                                onClick={() => handleFsPartToggle(part)}
+                                                            >
+                                                                <span className={`pa2-po-dept-checkbox${isSelected ? " checked" : ""}`}>
+                                                                    {isSelected && <Check size={10} />}
+                                                                </span>
+                                                                <span className="pa2-po-dept-name" title={part}>{part}</span>
+                                                            </div>
+                                                        );
+                                                    })
+                                                )}
+                                            </div>
                                         </div>
-                                    </div>
-                                )}
-                            </div>
+                                    )}
+                                </div>
                             </div>
 
                             {/* Search Box */}
@@ -8572,177 +8624,177 @@ export default function PurchaseAnalysis() {
                             <div className="pa2-fs-filters-pair">
                                 {/* Supplier Filter Dropdown */}
                                 <div className="pa2-po-dept-select-wrap pa2-futuristic-select-wrap" ref={futuristicSupplierRef}>
-                                <button
-                                    type="button"
-                                    className={`pa2-po-dept-trigger pa2-futuristic-trigger${futuristicSupplierDropdownOpen ? " active" : ""}${futuristicSupplierFilter.length > 0 ? " has-filter" : ""}`}
-                                    onClick={() => setFuturisticSupplierDropdownOpen(!futuristicSupplierDropdownOpen)}
-                                    title="Filter by Supplier"
-                                >
-                                    <Building2 size={13} className="pa2-dept-trigger-icon" />
-                                    <span className="pa2-po-dept-trigger-label">
-                                        {futuristicSupplierFilter.length === 0
-                                            ? "All Suppliers"
-                                            : futuristicSupplierFilter.length === 1
-                                                ? futuristicSupplierFilter[0]
-                                                : `${futuristicSupplierFilter.length} Suppliers`}
-                                    </span>
-                                    {futuristicSupplierFilter.length > 0 && (
-                                        <span className="pa2-dept-count-badge">{futuristicSupplierFilter.length}</span>
-                                    )}
-                                    <ChevronDown size={12} className={`pa2-dept-chevron${futuristicSupplierDropdownOpen ? " open" : ""}`} />
-                                </button>
+                                    <button
+                                        type="button"
+                                        className={`pa2-po-dept-trigger pa2-futuristic-trigger${futuristicSupplierDropdownOpen ? " active" : ""}${futuristicSupplierFilter.length > 0 ? " has-filter" : ""}`}
+                                        onClick={() => setFuturisticSupplierDropdownOpen(!futuristicSupplierDropdownOpen)}
+                                        title="Filter by Supplier"
+                                    >
+                                        <Building2 size={13} className="pa2-dept-trigger-icon" />
+                                        <span className="pa2-po-dept-trigger-label">
+                                            {futuristicSupplierFilter.length === 0
+                                                ? "All Suppliers"
+                                                : futuristicSupplierFilter.length === 1
+                                                    ? futuristicSupplierFilter[0]
+                                                    : `${futuristicSupplierFilter.length} Suppliers`}
+                                        </span>
+                                        {futuristicSupplierFilter.length > 0 && (
+                                            <span className="pa2-dept-count-badge">{futuristicSupplierFilter.length}</span>
+                                        )}
+                                        <ChevronDown size={12} className={`pa2-dept-chevron${futuristicSupplierDropdownOpen ? " open" : ""}`} />
+                                    </button>
 
-                                {futuristicSupplierDropdownOpen && (
-                                    <div className="pa2-po-dept-menu pa2-futuristic-dropdown-menu">
-                                        <div className="pa2-po-dept-search-box">
-                                            <Search size={12} className="pa2-po-dept-search-icon" />
-                                            <input
-                                                type="text"
-                                                className="pa2-po-dept-search-input"
-                                                placeholder="Search supplier..."
-                                                value={futuristicSupplierSearchQuery}
-                                                onChange={e => setFuturisticSupplierSearchQuery(e.target.value)}
-                                                autoFocus
-                                            />
-                                            {futuristicSupplierSearchQuery && (
+                                    {futuristicSupplierDropdownOpen && (
+                                        <div className="pa2-po-dept-menu pa2-futuristic-dropdown-menu">
+                                            <div className="pa2-po-dept-search-box">
+                                                <Search size={12} className="pa2-po-dept-search-icon" />
+                                                <input
+                                                    type="text"
+                                                    className="pa2-po-dept-search-input"
+                                                    placeholder="Search supplier..."
+                                                    value={futuristicSupplierSearchQuery}
+                                                    onChange={e => setFuturisticSupplierSearchQuery(e.target.value)}
+                                                    autoFocus
+                                                />
+                                                {futuristicSupplierSearchQuery && (
+                                                    <button
+                                                        type="button"
+                                                        className="pa2-po-dept-search-clear"
+                                                        onClick={() => setFuturisticSupplierSearchQuery("")}
+                                                    >
+                                                        <X size={10} />
+                                                    </button>
+                                                )}
+                                            </div>
+
+                                            <div className="pa2-po-dept-actions">
                                                 <button
                                                     type="button"
-                                                    className="pa2-po-dept-search-clear"
-                                                    onClick={() => setFuturisticSupplierSearchQuery("")}
+                                                    className="pa2-po-dept-action-btn"
+                                                    onClick={() => { setFuturisticSupplierFilter([]); setFuturisticPage(1); }}
                                                 >
-                                                    <X size={10} />
+                                                    Select All
                                                 </button>
-                                            )}
-                                        </div>
-
-                                        <div className="pa2-po-dept-actions">
-                                            <button
-                                                type="button"
-                                                className="pa2-po-dept-action-btn"
-                                                onClick={() => { setFuturisticSupplierFilter([]); setFuturisticPage(1); }}
-                                            >
-                                                Select All
-                                            </button>
-                                            <button
-                                                type="button"
-                                                className="pa2-po-dept-action-btn"
-                                                onClick={() => { setFuturisticSupplierFilter([]); setFuturisticPage(1); }}
-                                            >
-                                                Reset
-                                            </button>
-                                        </div>
-
-                                        <div className="pa2-po-dept-list">
-                                            {filteredDropdownFuturisticSuppliers.length === 0 ? (
-                                                <div className="pa2-po-dept-empty">No supplier found</div>
-                                            ) : (
-                                                filteredDropdownFuturisticSuppliers.map(sup => {
-                                                    const isSelected = futuristicSupplierFilter.includes(sup);
-                                                    return (
-                                                        <div
-                                                            key={sup}
-                                                            className={`pa2-po-dept-item${isSelected ? " selected" : ""}`}
-                                                            onClick={() => handleFuturisticSupplierToggle(sup)}
-                                                        >
-                                                            <span className={`pa2-po-dept-checkbox${isSelected ? " checked" : ""}`}>
-                                                                {isSelected && <Check size={10} />}
-                                                            </span>
-                                                            <span className="pa2-po-dept-name" title={sup}>{sup}</span>
-                                                        </div>
-                                                    );
-                                                })
-                                            )}
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Parts Filter Dropdown */}
-                            <div className="pa2-po-dept-select-wrap pa2-futuristic-select-wrap" ref={futuristicPartRef}>
-                                <button
-                                    type="button"
-                                    className={`pa2-po-dept-trigger pa2-futuristic-trigger${futuristicPartDropdownOpen ? " active" : ""}${futuristicPartFilter.length > 0 ? " has-filter" : ""}`}
-                                    onClick={() => setFuturisticPartDropdownOpen(!futuristicPartDropdownOpen)}
-                                    title="Filter by Part No"
-                                >
-                                    <Package size={13} className="pa2-dept-trigger-icon" />
-                                    <span className="pa2-po-dept-trigger-label">
-                                        {futuristicPartFilter.length === 0
-                                            ? "All Parts"
-                                            : futuristicPartFilter.length === 1
-                                                ? futuristicPartFilter[0]
-                                                : `${futuristicPartFilter.length} Parts`}
-                                    </span>
-                                    {futuristicPartFilter.length > 0 && (
-                                        <span className="pa2-dept-count-badge">{futuristicPartFilter.length}</span>
-                                    )}
-                                    <ChevronDown size={12} className={`pa2-dept-chevron${futuristicPartDropdownOpen ? " open" : ""}`} />
-                                </button>
-
-                                {futuristicPartDropdownOpen && (
-                                    <div className="pa2-po-dept-menu pa2-futuristic-dropdown-menu">
-                                        <div className="pa2-po-dept-search-box">
-                                            <Search size={12} className="pa2-po-dept-search-icon" />
-                                            <input
-                                                type="text"
-                                                className="pa2-po-dept-search-input"
-                                                placeholder="Search part no..."
-                                                value={futuristicPartSearchQuery}
-                                                onChange={e => setFuturisticPartSearchQuery(e.target.value)}
-                                                autoFocus
-                                            />
-                                            {futuristicPartSearchQuery && (
                                                 <button
                                                     type="button"
-                                                    className="pa2-po-dept-search-clear"
-                                                    onClick={() => setFuturisticPartSearchQuery("")}
+                                                    className="pa2-po-dept-action-btn"
+                                                    onClick={() => { setFuturisticSupplierFilter([]); setFuturisticPage(1); }}
                                                 >
-                                                    <X size={10} />
+                                                    Reset
                                                 </button>
-                                            )}
-                                        </div>
+                                            </div>
 
-                                        <div className="pa2-po-dept-actions">
-                                            <button
-                                                type="button"
-                                                className="pa2-po-dept-action-btn"
-                                                onClick={() => { setFuturisticPartFilter([]); setFuturisticPage(1); }}
-                                            >
-                                                Select All
-                                            </button>
-                                            <button
-                                                type="button"
-                                                className="pa2-po-dept-action-btn"
-                                                onClick={() => { setFuturisticPartFilter([]); setFuturisticPage(1); }}
-                                            >
-                                                Reset
-                                            </button>
+                                            <div className="pa2-po-dept-list">
+                                                {filteredDropdownFuturisticSuppliers.length === 0 ? (
+                                                    <div className="pa2-po-dept-empty">No supplier found</div>
+                                                ) : (
+                                                    filteredDropdownFuturisticSuppliers.map(sup => {
+                                                        const isSelected = futuristicSupplierFilter.includes(sup);
+                                                        return (
+                                                            <div
+                                                                key={sup}
+                                                                className={`pa2-po-dept-item${isSelected ? " selected" : ""}`}
+                                                                onClick={() => handleFuturisticSupplierToggle(sup)}
+                                                            >
+                                                                <span className={`pa2-po-dept-checkbox${isSelected ? " checked" : ""}`}>
+                                                                    {isSelected && <Check size={10} />}
+                                                                </span>
+                                                                <span className="pa2-po-dept-name" title={sup}>{sup}</span>
+                                                            </div>
+                                                        );
+                                                    })
+                                                )}
+                                            </div>
                                         </div>
+                                    )}
+                                </div>
 
-                                        <div className="pa2-po-dept-list">
-                                            {filteredDropdownFuturisticParts.length === 0 ? (
-                                                <div className="pa2-po-dept-empty">No part found</div>
-                                            ) : (
-                                                filteredDropdownFuturisticParts.map(part => {
-                                                    const isSelected = futuristicPartFilter.includes(part);
-                                                    return (
-                                                        <div
-                                                            key={part}
-                                                            className={`pa2-po-dept-item${isSelected ? " selected" : ""}`}
-                                                            onClick={() => handleFuturisticPartToggle(part)}
-                                                        >
-                                                            <span className={`pa2-po-dept-checkbox${isSelected ? " checked" : ""}`}>
-                                                                {isSelected && <Check size={10} />}
-                                                            </span>
-                                                            <span className="pa2-po-dept-name" title={part}>{part}</span>
-                                                        </div>
-                                                    );
-                                                })
-                                            )}
+                                {/* Parts Filter Dropdown */}
+                                <div className="pa2-po-dept-select-wrap pa2-futuristic-select-wrap" ref={futuristicPartRef}>
+                                    <button
+                                        type="button"
+                                        className={`pa2-po-dept-trigger pa2-futuristic-trigger${futuristicPartDropdownOpen ? " active" : ""}${futuristicPartFilter.length > 0 ? " has-filter" : ""}`}
+                                        onClick={() => setFuturisticPartDropdownOpen(!futuristicPartDropdownOpen)}
+                                        title="Filter by Part No"
+                                    >
+                                        <Package size={13} className="pa2-dept-trigger-icon" />
+                                        <span className="pa2-po-dept-trigger-label">
+                                            {futuristicPartFilter.length === 0
+                                                ? "All Parts"
+                                                : futuristicPartFilter.length === 1
+                                                    ? futuristicPartFilter[0]
+                                                    : `${futuristicPartFilter.length} Parts`}
+                                        </span>
+                                        {futuristicPartFilter.length > 0 && (
+                                            <span className="pa2-dept-count-badge">{futuristicPartFilter.length}</span>
+                                        )}
+                                        <ChevronDown size={12} className={`pa2-dept-chevron${futuristicPartDropdownOpen ? " open" : ""}`} />
+                                    </button>
+
+                                    {futuristicPartDropdownOpen && (
+                                        <div className="pa2-po-dept-menu pa2-futuristic-dropdown-menu">
+                                            <div className="pa2-po-dept-search-box">
+                                                <Search size={12} className="pa2-po-dept-search-icon" />
+                                                <input
+                                                    type="text"
+                                                    className="pa2-po-dept-search-input"
+                                                    placeholder="Search part no..."
+                                                    value={futuristicPartSearchQuery}
+                                                    onChange={e => setFuturisticPartSearchQuery(e.target.value)}
+                                                    autoFocus
+                                                />
+                                                {futuristicPartSearchQuery && (
+                                                    <button
+                                                        type="button"
+                                                        className="pa2-po-dept-search-clear"
+                                                        onClick={() => setFuturisticPartSearchQuery("")}
+                                                    >
+                                                        <X size={10} />
+                                                    </button>
+                                                )}
+                                            </div>
+
+                                            <div className="pa2-po-dept-actions">
+                                                <button
+                                                    type="button"
+                                                    className="pa2-po-dept-action-btn"
+                                                    onClick={() => { setFuturisticPartFilter([]); setFuturisticPage(1); }}
+                                                >
+                                                    Select All
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className="pa2-po-dept-action-btn"
+                                                    onClick={() => { setFuturisticPartFilter([]); setFuturisticPage(1); }}
+                                                >
+                                                    Reset
+                                                </button>
+                                            </div>
+
+                                            <div className="pa2-po-dept-list">
+                                                {filteredDropdownFuturisticParts.length === 0 ? (
+                                                    <div className="pa2-po-dept-empty">No part found</div>
+                                                ) : (
+                                                    filteredDropdownFuturisticParts.map(part => {
+                                                        const isSelected = futuristicPartFilter.includes(part);
+                                                        return (
+                                                            <div
+                                                                key={part}
+                                                                className={`pa2-po-dept-item${isSelected ? " selected" : ""}`}
+                                                                onClick={() => handleFuturisticPartToggle(part)}
+                                                            >
+                                                                <span className={`pa2-po-dept-checkbox${isSelected ? " checked" : ""}`}>
+                                                                    {isSelected && <Check size={10} />}
+                                                                </span>
+                                                                <span className="pa2-po-dept-name" title={part}>{part}</span>
+                                                            </div>
+                                                        );
+                                                    })
+                                                )}
+                                            </div>
                                         </div>
-                                    </div>
-                                )}
-                            </div>
+                                    )}
+                                </div>
                             </div>
 
                             {/* Search Filter Input */}
@@ -8890,7 +8942,7 @@ export default function PurchaseAnalysis() {
                                             {renderFsSortableTh("PO NO", "po_number")}
                                             {renderFsSortableTh("PO DATE", "po_date")}
                                             {renderFsSortableTh("SUPPLIER", "supplier")}
-                                            {renderFsSortableTh("PARTNO - DESC", "part_no", false, true)}
+                                            {renderFsSortableTh("PART NO", "part_no", false, true)}
                                             {renderFsSortableTh("PO QTY", "po_qty_num", true)}
                                             {renderFsSortableTh("SCHD DT", "schd_dt")}
                                             {renderFsSortableTh("SCHD QTY", "schd_qty_num", true)}
@@ -9164,7 +9216,7 @@ export default function PurchaseAnalysis() {
                                             {renderFuturisticSortableTh("PONO", "po_number")}
                                             {renderFuturisticSortableTh("Po Date", "po_date")}
                                             {renderFuturisticSortableTh("supplier", "supplier")}
-                                            {renderFuturisticSortableTh("PartNO - Desc", "part_no", false, true)}
+                                            {renderFuturisticSortableTh("PART NO", "part_no", false, true)}
                                             {renderFuturisticSortableTh("PO Qty", "po_qty_num", true)}
                                             {renderFuturisticSortableTh("Schd Qty", "schd_qty_num", true)}
                                             {renderFuturisticSortableTh("Schd Date", "schd_dt")}
@@ -9196,10 +9248,9 @@ export default function PurchaseAnalysis() {
                                                     <td className="pa2-po-td pa2-futuristic-vendor" title={r.supplier}>
                                                         {r.supplier || "–"}
                                                     </td>
-                                                    {/* 5. PartNO - Desc */}
+                                                    {/* 5. PART NO */}
                                                     <td className="pa2-po-td pa2-po-material">
                                                         <span className="pa2-futuristic-part-badge">{r.part_no || "–"}</span>
-                                                        <span className="pa2-futuristic-desc">{r.description || "–"}</span>
                                                     </td>
                                                     {/* 6. PO Qty */}
                                                     <td className="pa2-po-td pa2-po-td--r pa2-futuristic-poqty">
@@ -9329,6 +9380,7 @@ export default function PurchaseAnalysis() {
                                 value={traceSearch}
                                 onChange={e => setTraceSearch(e.target.value)}
                                 className="pa2-macdetail-search-input"
+                                style={{ color: "#0f172a" }}
                             />
                             {traceSearch && (
                                 <X size={14} onClick={() => setTraceSearch("")} style={{ position: "absolute", right: "10px", cursor: "pointer", color: "#64748b" }} />
@@ -9443,7 +9495,7 @@ export default function PurchaseAnalysis() {
                                     <th className="pa2-po-th">PO NO</th>
                                     <th className="pa2-po-th">PO DATE</th>
                                     <th className="pa2-po-th">SUPPLIER NAME</th>
-                                    <th className="pa2-po-th">PARTNO-DESC</th>
+                                    <th className="pa2-po-th" style={{ width: "200px", minWidth: "160px", maxWidth: "220px", whiteSpace: "normal" }}>PARTNO-DESC</th>
                                     <th className="pa2-po-th">UOM</th>
                                     <th className="pa2-po-th pa2-po-th--r">SHORT CLOSE QTY</th>
                                     <th className="pa2-po-th">REASON</th>
@@ -9458,7 +9510,7 @@ export default function PurchaseAnalysis() {
                                             <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "65px", height: "13px" }} /></td>
                                             <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "70px", height: "13px" }} /></td>
                                             <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "110px", height: "13px" }} /></td>
-                                            <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "140px", height: "13px" }} /></td>
+                                            <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "120px", height: "13px" }} /></td>
                                             <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "30px", height: "13px" }} /></td>
                                             <td className="pa2-po-td pa2-po-td--r"><div className="pa2-skeleton pa2-shimmer" style={{ width: "40px", height: "13px" }} /></td>
                                             <td className="pa2-po-td"><div className="pa2-skeleton pa2-shimmer" style={{ width: "120px", height: "13px" }} /></td>
@@ -9477,7 +9529,7 @@ export default function PurchaseAnalysis() {
                                             {row.po_date ? row.po_date.split("-").reverse().join(" ").replace(/^(\d+) (\d+) /, (_, d, m) => `${d} ${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][+m - 1]} `) : "–"}
                                         </td>
                                         <td className="pa2-po-td pa2-po-vendor" style={{ whiteSpace: "nowrap" }}>{row.supplier_name || "–"}</td>
-                                        <td className="pa2-po-td" style={{ fontWeight: "600", whiteSpace: "nowrap" }}>{row.material || "–"}</td>
+                                        <td className="pa2-po-td" style={{ fontWeight: "600", fontSize: "0.72rem", lineHeight: "1.3", whiteSpace: "normal", wordBreak: "break-word", overflowWrap: "anywhere", width: "200px", minWidth: "160px", maxWidth: "220px" }}>{row.material || "–"}</td>
                                         <td className="pa2-po-td">{row.uom}</td>
                                         <td className="pa2-po-td pa2-po-td--r" style={{ fontWeight: "700", color: "#f5a623" }}>{row.short_close_qty.toLocaleString()}</td>
                                         <td className="pa2-po-td" style={{ color: "#64748b", fontSize: "0.78rem" }}>{row.reason || "–"}</td>
@@ -9842,7 +9894,7 @@ export default function PurchaseAnalysis() {
                             <thead>
                                 <tr>
                                     <th className="pa2-po-th" style={{ width: "30px", textAlign: "center" }}>#</th>
-                                    <th className="pa2-po-th" style={{ minWidth: "140px" }}>PARTNO - DESC</th>
+                                    <th className="pa2-po-th" style={{ minWidth: "140px", whiteSpace: "normal" }}>PARTNO - DESC</th>
                                     <th className="pa2-po-th" style={{ width: "76px", textAlign: "center" }}>TYPE</th>
                                     <th className="pa2-po-th" style={{ width: "80px", textAlign: "center" }}>EFF. DATE</th>
                                     <th className="pa2-po-th pa2-po-th--r" style={{ width: "70px" }}>RATE</th>
@@ -9908,8 +9960,8 @@ export default function PurchaseAnalysis() {
                                                     <td className="pa2-po-td pa2-po-dash" style={{ width: "30px", textAlign: "center", color: "#64748b", fontSize: "0.72rem" }}>
                                                         {i + 1}
                                                     </td>
-                                                    <td className="pa2-po-td" style={{ minWidth: "140px" }}>
-                                                        <span className="pa2-pt-part-text" title={row.partDesc}>
+                                                    <td className="pa2-po-td" style={{ minWidth: "140px", whiteSpace: "normal" }}>
+                                                        <span className="pa2-pt-part-text" title={row.partDesc} style={{ whiteSpace: "normal", wordBreak: "break-word", overflowWrap: "anywhere" }}>
                                                             {row.partDesc}
                                                         </span>
                                                     </td>

@@ -790,7 +790,7 @@ def get_production_details(conn, route_card_numbers: List[str]) -> Dict[str, Any
             CT.partno,
             CT.prgno,
             CT.process AS process_code,
-            PD.process AS process_name,
+            COALESCE(PD.process, PD2.process) AS process_name,
             PE.prodid,
             PE.proddate,
             PE.macno,
@@ -806,6 +806,8 @@ def get_production_details(conn, route_card_numbers: List[str]) -> Dict[str, Any
             OR (CT.prodid IS NULL AND CT.TchEntryNo = PE.TchEntryNo)
         ) AND ISNULL(PE.deleted, 0) = 0
         LEFT JOIN ProcessDet PD ON CT.process = PD.pcode AND ISNULL(PD.deleted, 0) = 0
+        LEFT JOIN ProgramNo PN ON PE.prgno = PN.prgno AND PE.macno = PN.macno AND ISNULL(PN.deleted, 0) = 0
+        LEFT JOIN ProcessDet PD2 ON PN.process = PD2.pcode AND ISNULL(PD2.deleted, 0) = 0
         WHERE CT.RouCardNo IN (%IN%) AND ISNULL(CT.deleted, 0) = 0
         ORDER BY PE.proddate ASC, PE.prodid ASC
         """,
@@ -1008,8 +1010,10 @@ def get_production_details(conn, route_card_numbers: List[str]) -> Dict[str, Any
     if sum_prod == 0.0:
         sum_prod = sum(c["ok_qty"] for c in cnc_production) + sum(cp["ok_qty"] for cp in conventional_production)
 
+    all_rc_str = ", ".join(dict.fromkeys(route_card_numbers)) if route_card_numbers else None
+
     return {
-        "route_card_no": route_card_numbers[0] if route_card_numbers else None,
+        "route_card_no": all_rc_str,
         "summary": {
             "production_qty": sum_prod,
             "inter_inspection_qty": sum_inter,
@@ -1149,11 +1153,13 @@ def get_grn_details(conn, route_card_numbers: List[str]) -> Dict[str, Any]:
         verdict = "PASS" if rej_q == 0 else "PARTIAL"
 
         records.append({
+            "route_card_no": _safe_str(r[0]),
             "grn_no": g_no,
             "grn_date": g_date,
             "part_no": p_no,
             "raw_material": f"{rm_name} - {mat_type}" if mat_type else rm_name,
             "material_qty": g_qty,
+            "grn_qty": g_qty,
             "uom": uom_str,
             "ok_qty": ok_q,
             "rej_qty": rej_q,
@@ -1162,10 +1168,14 @@ def get_grn_details(conn, route_card_numbers: List[str]) -> Dict[str, Any]:
             "supplier_name": sup_name,
         })
 
+    all_rc_str = ", ".join(dict.fromkeys(route_card_numbers)) if route_card_numbers else None
+
     return {
+        "route_card_no": all_rc_str,
         "grn_no": first_grn_no,
         "grn_inward_date": first_grn_date,
         "material_qty": tot_mat_qty,
+        "grn_qty": tot_mat_qty,
         "uom": first_uom,
         "records": records,
         "all_grn_numbers": all_grn_nos,
@@ -1200,30 +1210,47 @@ def get_supplier_details(conn, grn_numbers: List[str]) -> Dict[str, Any]:
         cursor,
         """
         SELECT DISTINCT
-            GM.grnno,
-            GM.cid,
+            GIS.grnno,
+            COALESCE(PM.cid, GM.cid) AS cid,
             COALESCE(CM.CName, CAM.CName, N'') AS supplier_name,
             GIS.pono,
-            GIS.podate,
+            COALESCE(PM.podate, GIS.podate) AS po_date,
             GIS.rmname,
             GIS.mattype,
-            ISNULL(GIS.qty, 0) AS qty,
-            ISNULL(GIS.QtyKgs, 0) AS qty_kgs,
-            PM.podate AS po_master_date,
+            COALESCE(NULLIF(PD.qty, 0), NULLIF(PD.QtyKgs, 0), GIS.qty, 0) AS po_qty,
+            COALESCE(NULLIF(LTRIM(RTRIM(PD.uom)), N''), N'Kg') AS po_uom,
             PM.totamt AS po_total_amt
         FROM grninsubdet GIS
         INNER JOIN grn_mas GM ON GIS.grnno = GM.grnno AND ISNULL(GM.deleted, 0) = 0
         LEFT JOIN POMas PM ON
             LTRIM(RTRIM(GIS.pono)) = LTRIM(RTRIM(PM.pono))
             AND ISNULL(PM.deleted, 0) = 0
+        OUTER APPLY (
+            SELECT TOP 1
+                PD.qty,
+                PD.QtyKgs,
+                PD.uom
+            FROM PODet PD
+            WHERE LTRIM(RTRIM(PD.pono)) = LTRIM(RTRIM(GIS.pono))
+              AND ISNULL(PD.deleted, 0) = 0
+            ORDER BY
+                CASE
+                    WHEN LTRIM(RTRIM(ISNULL(GIS.rmname, N''))) <> N'' 
+                         AND LTRIM(RTRIM(ISNULL(PD.rmname, N''))) = LTRIM(RTRIM(ISNULL(GIS.rmname, N''))) THEN 1
+                    WHEN LTRIM(RTRIM(ISNULL(GIS.mattype, N''))) <> N'' 
+                         AND LTRIM(RTRIM(ISNULL(PD.mattype, N''))) = LTRIM(RTRIM(ISNULL(GIS.mattype, N''))) THEN 2
+                    ELSE 3
+                END ASC,
+                PD.seq ASC
+        ) PD
         LEFT JOIN CustMast CM ON
-            LTRIM(RTRIM(CONVERT(NVARCHAR(128), ISNULL(CM.Id, N'')))) = LTRIM(RTRIM(CONVERT(NVARCHAR(128), ISNULL(GM.cid, N''))))
+            LTRIM(RTRIM(CONVERT(NVARCHAR(128), ISNULL(CM.Id, N'')))) = LTRIM(RTRIM(CONVERT(NVARCHAR(128), COALESCE(PM.cid, GM.cid, N''))))
             AND ISNULL(CM.Deleted, 0) = 0
         LEFT JOIN CustAliasMast CAM ON
-            LTRIM(RTRIM(CONVERT(NVARCHAR(128), ISNULL(CAM.Id, N'')))) = LTRIM(RTRIM(CONVERT(NVARCHAR(128), ISNULL(GM.cid, N''))))
+            LTRIM(RTRIM(CONVERT(NVARCHAR(128), ISNULL(CAM.Id, N'')))) = LTRIM(RTRIM(CONVERT(NVARCHAR(128), COALESCE(PM.cid, GM.cid, N''))))
             AND ISNULL(CAM.Deleted, 0) = 0
         WHERE GIS.grnno IN (%IN%) AND ISNULL(GIS.deleted, 0) = 0
-        ORDER BY GM.grnno ASC
+        ORDER BY GIS.pono ASC, GIS.grnno ASC
         """,
         grn_numbers
     )
@@ -1239,16 +1266,31 @@ def get_supplier_details(conn, grn_numbers: List[str]) -> Dict[str, Any]:
             """
             SELECT DISTINCT
                 GM.grnno,
-                GM.cid,
+                COALESCE(PM.cid, GM.cid) AS cid,
                 COALESCE(CM.CName, CAM.CName, N'') AS supplier_name,
                 GM.pono,
-                GM.grndate
+                COALESCE(PM.podate, GM.grndate) AS po_date,
+                COALESCE(NULLIF(PD.qty, 0), NULLIF(PD.QtyKgs, 0), 0) AS po_qty,
+                COALESCE(NULLIF(LTRIM(RTRIM(PD.uom)), N''), N'Kg') AS po_uom
             FROM grn_mas GM
+            LEFT JOIN POMas PM ON
+                LTRIM(RTRIM(GM.pono)) = LTRIM(RTRIM(PM.pono))
+                AND ISNULL(PM.deleted, 0) = 0
+            OUTER APPLY (
+                SELECT TOP 1
+                    PD.qty,
+                    PD.QtyKgs,
+                    PD.uom
+                FROM PODet PD
+                WHERE LTRIM(RTRIM(PD.pono)) = LTRIM(RTRIM(GM.pono))
+                  AND ISNULL(PD.deleted, 0) = 0
+                ORDER BY PD.seq ASC
+            ) PD
             LEFT JOIN CustMast CM ON
-                LTRIM(RTRIM(CONVERT(NVARCHAR(128), ISNULL(CM.Id, N'')))) = LTRIM(RTRIM(CONVERT(NVARCHAR(128), ISNULL(GM.cid, N''))))
+                LTRIM(RTRIM(CONVERT(NVARCHAR(128), ISNULL(CM.Id, N'')))) = LTRIM(RTRIM(CONVERT(NVARCHAR(128), COALESCE(PM.cid, GM.cid, N''))))
                 AND ISNULL(CM.Deleted, 0) = 0
             LEFT JOIN CustAliasMast CAM ON
-                LTRIM(RTRIM(CONVERT(NVARCHAR(128), ISNULL(CAM.Id, N'')))) = LTRIM(RTRIM(CONVERT(NVARCHAR(128), ISNULL(GM.cid, N''))))
+                LTRIM(RTRIM(CONVERT(NVARCHAR(128), ISNULL(CAM.Id, N'')))) = LTRIM(RTRIM(CONVERT(NVARCHAR(128), COALESCE(PM.cid, GM.cid, N''))))
                 AND ISNULL(CAM.Deleted, 0) = 0
             WHERE GM.grnno IN (%IN%) AND ISNULL(GM.deleted, 0) = 0
             """,
@@ -1261,24 +1303,28 @@ def get_supplier_details(conn, grn_numbers: List[str]) -> Dict[str, Any]:
                 f_sup = _safe_str(fb_rows[0][2])
                 f_po = _safe_str(fb_rows[0][3])
                 f_date = _format_date(fb_rows[0][4])
+                f_qty = _safe_float(fb_rows[0][5])
+                f_uom = _safe_str(fb_rows[0][6]) or "Kg"
                 return {
                     "supplier_name": f_sup,
                     "raw_material_po_ref": f_po,
                     "po_date": f_date,
-                    "qty": 0.0,
-                    "uom": "Kg",
+                    "qty": f_qty,
+                    "uom": f_uom,
                     "vendor_rating": None,
                     "rejection_ppm": None,
                     "traceability": None,
                     "records": [
                         {
-                            "supplier_name": f_sup,
-                            "raw_material_po_ref": f_po,
-                            "po_date": f_date,
-                            "qty": 0.0,
-                            "uom": "Kg",
+                            "grn_no": _safe_str(r[0]),
+                            "supplier_name": _safe_str(r[2]),
+                            "raw_material_po_ref": _safe_str(r[3]),
+                            "po_date": _format_date(r[4]),
+                            "qty": _safe_float(r[5]),
+                            "uom": _safe_str(r[6]) or "Kg",
                             "approval_status": "APPROVED",
                         }
+                        for r in fb_rows
                     ],
                 }
 
@@ -1295,35 +1341,49 @@ def get_supplier_details(conn, grn_numbers: List[str]) -> Dict[str, Any]:
         }
 
     records = []
-    tot_qty = 0.0
     first_supplier = _safe_str(sup_rows[0][2])
     first_po = _safe_str(sup_rows[0][3])
-    first_po_date = _format_date(sup_rows[0][9]) or _format_date(sup_rows[0][4])
+    first_po_date = _format_date(sup_rows[0][4])
+    first_uom = _safe_str(sup_rows[0][8]) or "Kg"
+
+    seen_grn_records = set()
+    po_quantities = {}
 
     for r in sup_rows:
+        grn_no = _safe_str(r[0])
         s_name = _safe_str(r[2])
         p_ref = _safe_str(r[3])
-        p_date = _format_date(r[9]) or _format_date(r[4])
-        qty = _safe_float(r[7])
-        qty_kgs = _safe_float(r[8])
-        use_qty = qty_kgs if qty_kgs > 0 else qty
-        tot_qty += use_qty
+        p_date = _format_date(r[4])
+        rm_name = _safe_str(r[5])
+        po_qty = _safe_float(r[7])
+        po_uom = _safe_str(r[8]) or "Kg"
+
+        grn_key = (grn_no, p_ref, rm_name)
+        if grn_key in seen_grn_records:
+            continue
+        seen_grn_records.add(grn_key)
+
+        if p_ref and p_ref not in po_quantities:
+            po_quantities[p_ref] = po_qty
 
         records.append({
+            "grn_no": grn_no,
             "supplier_name": s_name,
             "raw_material_po_ref": p_ref,
             "po_date": p_date,
-            "qty": use_qty,
-            "uom": "Kg",
+            "qty": po_qty,
+            "uom": po_uom,
             "approval_status": "APPROVED",
         })
+
+    tot_qty = sum(po_quantities.values()) if po_quantities else sum(rec["qty"] for rec in records)
 
     return {
         "supplier_name": first_supplier,
         "raw_material_po_ref": first_po,
         "po_date": first_po_date,
         "qty": tot_qty,
-        "uom": "Kg",
+        "uom": first_uom,
         "vendor_rating": None,
         "rejection_ppm": None,
         "traceability": None,
@@ -1358,11 +1418,19 @@ def build_quality_timeline(conn, invoice_no: str) -> Optional[Dict[str, Any]]:
     # STAGE 3
     s3_data = get_inspection_details(conn, all_route_cards)
 
+    # Route cards from final inspection
+    final_insp_rcs = list(dict.fromkeys(
+        r.get("route_card_no") or r.get("routecard_no")
+        for r in (s3_data.get("records", []) + s3_data.get("operations", []))
+        if (r.get("route_card_no") or r.get("routecard_no"))
+    ))
+    prod_route_cards = final_insp_rcs if final_insp_rcs else all_route_cards
+
     # STAGE 4
-    s4_data = get_production_details(conn, all_route_cards)
+    s4_data = get_production_details(conn, prod_route_cards)
 
     # STAGE 5
-    s5_data = get_grn_details(conn, all_route_cards)
+    s5_data = get_grn_details(conn, prod_route_cards)
     all_grn_numbers = s5_data.get("all_grn_numbers", [])
 
     # STAGE 6

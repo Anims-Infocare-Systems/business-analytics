@@ -4597,11 +4597,17 @@
 }
 
 .qa2-step-node-op {
-    font-size: 0.82rem;
-    font-weight: 800;
-    font-family: var(--qa-font-mono);
+    font-size: 0.76rem;
+    font-weight: 700;
+    font-family: var(--qa-font-heading, var(--qa-font-body), sans-serif);
     color: #0f172a;
-    line-height: 1.2;
+    line-height: 1.25;
+    word-break: break-word;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    min-height: 1.9em;
 }
 
 .qa2-step-node-sub {

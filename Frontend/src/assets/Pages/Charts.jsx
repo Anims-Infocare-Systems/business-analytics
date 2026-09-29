@@ -1439,14 +1439,61 @@ function ChartCard({ def, onPreview, idx, dateRange }) {
             });
           }
           else if (def.id === "quality-4") {
-            const ds = [{ label: `Actual PPM — ${data.fy || ""}`, data: data.data || [], fill: true }];
+            const ds = [{
+              label: `Actual PPM — ${data.fy || ""}`,
+              data: data.data || [],
+              borderColor: "#f97316",
+              backgroundColor: "rgba(249,115,22,0.1)",
+              fill: true,
+              tension: 0.4,
+              pointRadius: 3,
+              pointBackgroundColor: "#ffffff",
+              pointBorderColor: "#f97316"
+            }];
             chartRef.current = new Chart(canvasRef.current, {
               type: "line",
               data: { labels: data.labels || [], datasets: styleDatasets(ctx, ds, def.category, "line", def.config.options) },
               options: getPremiumChartOptions("line", def.category, {
                 ...def.config.options,
+                plugins: {
+                  ...def.config.options?.plugins,
+                  legend: {
+                    labels: { font: { size: 9, weight: "600" }, boxWidth: 12 }
+                  },
+                  tooltip: {
+                    callbacks: {
+                      label: (ctx) => {
+                        const val = Number(ctx.parsed.y) || 0;
+                        const val2 = (Math.floor(val * 100) / 100).toFixed(2);
+                        return ` ${ctx.dataset.label || "Actual PPM"}: ${val2} PPM`;
+                      }
+                    }
+                  },
+                  datalabels: {
+                    display: (context) => {
+                      const val = Number(context.dataset.data[context.dataIndex]) || 0;
+                      return val > 0;
+                    },
+                    anchor: "end",
+                    align: (context) => (context.dataIndex === 0 ? "right" : "top"),
+                    offset: (context) => (context.dataIndex === 0 ? 6 : 4),
+                    formatter: (v) => {
+                      const val = Number(v) || 0;
+                      if (val <= 0) return "";
+                      const val2 = (Math.floor(val * 100) / 100).toFixed(2);
+                      return `${val2} PPM`;
+                    },
+                    font: { size: 9, weight: "700" },
+                    color: "#f97316",
+                    backgroundColor: "#ffffff",
+                    borderRadius: 4,
+                    padding: { top: 2, bottom: 2, left: 5, right: 5 },
+                    borderWidth: 1,
+                    borderColor: "rgba(249, 115, 22, 0.25)"
+                  }
+                },
                 scales: {
-                  ...def.config.options.scales,
+                  ...def.config.options?.scales,
                   y: { ticks: { font: { size: 9 }, callback: val => val.toLocaleString() + ' PPM' } }
                 }
               })
@@ -2121,11 +2168,71 @@ function PreviewModal({ def, onClose, initialDateRange, initialOperator, initial
             });
           }
           else if (def.id === "quality-4") {
-            const ds = [{ label: `Actual PPM — ${data.fy || ""}`, data: data.data || [], fill: true }];
+            const ds = [{
+              label: `Actual PPM — ${data.fy || ""}`,
+              data: data.data || [],
+              borderColor: "#f97316",
+              backgroundColor: "rgba(249,115,22,0.1)",
+              fill: true,
+              tension: 0.4,
+              pointRadius: 3,
+              pointBackgroundColor: "#ffffff",
+              pointBorderColor: "#f97316"
+            }];
             chartRef.current = new Chart(canvasRef.current, {
               type: baseType,
               data: { labels: data.labels || [], datasets: styleDatasets(ctx, cleanModalChartDatasets(ds, modalChartType), def.category, baseType, def.config.options) },
-              options: getPremiumChartOptions(baseType, def.category, cleanModalChartOptions({ ...def.config.options, plugins: { ...def.config.options.plugins, title: { display: true, text: `Internal Mac Rejection PPM ${data.fy || ""} (${data.from} → ${data.to})`, font: { size: 10 }, color: "#64748b", padding: { bottom: 8 } } } }, modalChartType))
+              options: getPremiumChartOptions(baseType, def.category, cleanModalChartOptions({
+                ...def.config.options,
+                plugins: {
+                  ...def.config.options.plugins,
+                  title: {
+                    display: true,
+                    text: `Internal Mac Rejection PPM ${data.fy || ""} (${data.from} → ${data.to})`,
+                    font: { size: 10, weight: "700" },
+                    color: "#5a6a9a",
+                    padding: { bottom: 8 }
+                  },
+                  legend: {
+                    labels: { font: { size: 11, weight: "600" }, boxWidth: 12 }
+                  },
+                  tooltip: {
+                    callbacks: {
+                      label: (ctx) => {
+                        const val = Number(ctx.parsed.y) || 0;
+                        const val2 = (Math.floor(val * 100) / 100).toFixed(2);
+                        return ` ${ctx.dataset.label || "Actual PPM"}: ${val2} PPM`;
+                      }
+                    }
+                  },
+                  datalabels: {
+                    display: (context) => {
+                      const val = Number(context.dataset.data[context.dataIndex]) || 0;
+                      return val > 0;
+                    },
+                    anchor: "end",
+                    align: (context) => (context.dataIndex === 0 ? "right" : "top"),
+                    offset: (context) => (context.dataIndex === 0 ? 6 : 4),
+                    formatter: (v) => {
+                      const val = Number(v) || 0;
+                      if (val <= 0) return "";
+                      const val2 = (Math.floor(val * 100) / 100).toFixed(2);
+                      return `${val2} PPM`;
+                    },
+                    font: { size: 9.5, weight: "700" },
+                    color: "#f97316",
+                    backgroundColor: "#ffffff",
+                    borderRadius: 4,
+                    padding: { top: 2, bottom: 2, left: 6, right: 6 },
+                    borderWidth: 1,
+                    borderColor: "rgba(249, 115, 22, 0.25)"
+                  }
+                },
+                scales: {
+                  ...def.config.options?.scales,
+                  y: { ticks: { font: { size: 9.5 }, callback: val => val.toLocaleString() + ' PPM' } }
+                }
+              }, modalChartType))
             });
           }
           else if (def.id === "production-1") {

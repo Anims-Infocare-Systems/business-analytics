@@ -225,8 +225,8 @@ export default function NotificationDropdown({ companyCode, userName }) {
                     {/* Header */}
                     <div className="nd-dropdown__header">
                         <div className="nd-dropdown__header-left">
-                            <div className="nd-header-icon-box">
-                                <Sparkles size={16} />
+                            <div className="nd-header-icon-box" aria-hidden="true">
+                                <Megaphone size={17} strokeWidth={2.2} />
                             </div>
                             <div className="nd-header-title-group">
                                 <h4 className="nd-header-title">

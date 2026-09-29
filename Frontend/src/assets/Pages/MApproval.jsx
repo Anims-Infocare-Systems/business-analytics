@@ -583,7 +583,8 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
     if (!card) return null;
 
     const fin = legacyFinancialFromCard(card);
-    const fmt = n => Number(n).toLocaleString("en-IN", { minimumFractionDigits: n % 1 !== 0 ? 2 : 0 });
+    const fmt = n => Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const fmtRate = n => Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const items = card.items || [];
     const rawMaterials = card.rawMaterials || [
         {
@@ -625,7 +626,11 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                         <div>
                             <div className="map-prev__hd-title">M-Approval Detail Preview</div>
                             <div className="map-prev__hd-sub">
-                                {card.type === "Vendor Rate Master" ? labels.docTitle : `${labels.docTitle} — ${docNo}`}
+                                {card.type === "Vendor Rate Master" ? (
+                                    labels.docTitle
+                                ) : (
+                                    <>{labels.docTitle} — <span className="map-prev__hd-docno">{docNo}</span></>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -962,7 +967,7 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                                                 <td className="map-prev__td--desc">{row.description}</td>
                                                 <td className="map-prev__td--center">{row.uom || "NOS"}</td>
                                                 <td className="map-prev__td--num">{row.qty}</td>
-                                                <td className="map-prev__td--num">₹ {fmt(row.rate)}</td>
+                                                <td className="map-prev__td--num">₹ {fmtRate(row.rate)}</td>
                                                 <td className="map-prev__td--num" style={{ fontWeight: 700, color: "#e11d48" }}>₹ {fmt(amt)}</td>
                                                 <td className="map-prev__td--center map-prev__td--sticky">
                                                     <input
@@ -1190,7 +1195,7 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                                                 <td className="map-prev__td--center">{row.uom}</td>
                                                 <td className="map-prev__td--num" style={{ fontWeight: 700 }}>
                                                     {card.type === "Vendor Rate Master" || card.type === "Commercial Master"
-                                                        ? `₹ ${Number(row.rate || 0).toLocaleString("en-IN")}`
+                                                        ? `₹ ${fmtRate(row.rate)}`
                                                         : Number(row.qty || 0).toLocaleString("en-IN")
                                                     }
                                                 </td>
@@ -1859,7 +1864,7 @@ function TypeGroup({ type, cards, collapsed, onToggle, onPreview, onApprove, onM
                                                     ? `${card.countVal} Nos`
                                                     : ["Customer PO", "Vendor Master", "Purchase Indent Approval"].includes(card.type)
                                                         ? card.countVal
-                                                        : `₹ ${Number(card.countVal).toLocaleString("en-IN")}`}
+                                                        : `₹ ${Number(card.countVal || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                                         </span>
                                     </div>
                                 </div>

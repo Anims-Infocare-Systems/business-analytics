@@ -1485,13 +1485,20 @@
     border-radius: 8px;
     border: 1px solid #cbd5e1;
     font-size: 0.82rem;
+    font-weight: 500;
+    color: #0f172a;
     outline: none;
     background: #f8fafc;
     transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
     box-sizing: border-box;
 }
 
+.pa2-macdetail-search-input::placeholder {
+    color: #94a3b8;
+}
+
 .pa2-macdetail-search-input:focus {
+    color: #0f172a;
     border-color: #2563eb;
     background: #ffffff;
     box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
@@ -4703,23 +4710,14 @@
     font-weight: 600;
     color: #334155;
     display: block;
-    line-height: 1.3;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 210px;
+    line-height: 1.35;
+    white-space: normal;
+    word-break: break-word;
+    overflow-wrap: anywhere;
 }
 
 .pa2-pt-sub-tr:hover {
     background: #f8fafc;
-}
-
-.pa2-pt-part-text {
-    font-size: 0.72rem;
-    font-weight: 600;
-    color: #334155;
-    display: inline-block;
-    line-height: 1.35;
 }
 
 .pa2-pt-pct-badge {

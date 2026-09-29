@@ -697,18 +697,16 @@ export const transformBackendTimeline = (backendData) => {
             title: "Production (Inhouse & Job Order) with Quality Insp",
             subtitle: "Shopfloor Routing & IPQA Process Verification",
             iconName: "Factory",
-            badge: s4.route_card_no || "Pending",
+            badge: s4.route_card_no || s3.routecard_no || "Pending",
             badgeColor: "#f59e0b",
             accentColor: "#d97706",
             status: stages.stage4?.status || "Pending",
-            routeCardNo: s4.route_card_no || "-",
+            routeCardNo: s4.route_card_no || s3.routecard_no || "-",
             summary: s4.summary || {},
             metrics: [
-                { label: "Route Card Number", value: s4.route_card_no || "-", highlight: true },
+                { label: "Route Card Number", value: s4.route_card_no || s3.routecard_no || "-", highlight: true },
                 { label: "Production Qty", value: `${s4.summary?.production_qty ?? 0} Nos`, highlight: true },
                 { label: "Inter Insp Qty", value: `${s4.summary?.inter_inspection_qty ?? 0} Nos` },
-                { label: "Final Insp Qty", value: `${s4.summary?.final_inspection_qty ?? 0} Nos` },
-                { label: "DC Qty", value: `${s4.summary?.dc_qty ?? 0} Nos` },
                 { label: "Job Order Qty", value: `${s4.summary?.job_qty ?? 0} Nos` },
                 { label: "Rejection Qty", value: `${s4.summary?.rejection_qty ?? 0} Nos` },
                 { label: "Rework Qty", value: `${s4.summary?.rework_qty ?? 0} Nos` },
@@ -716,6 +714,7 @@ export const transformBackendTimeline = (backendData) => {
             inhouseOps: (s4.cnc_production || []).concat(s4.conventional_production || []).map((cp, idx) => ({
                 op: cp.process_code || `OP${(idx + 1) * 10}`,
                 name: cp.process_name || "Machining Operation",
+                process: cp.process_name || "Machining Operation",
                 machine: cp.machine || "-",
                 operator: cp.operator || cp.shift || "Operator",
                 cycleTime: cp.cycle_time ? `${cp.cycle_time}s` : "-",
@@ -730,6 +729,7 @@ export const transformBackendTimeline = (backendData) => {
                 inwardChallan: s4.job_orders?.[0]?.job_no || "-",
                 items: (s4.job_orders || []).map((jo, idx) => ({
                     op: jo.process_code || `SUB0${idx + 1}`,
+                    name: jo.process_name || "Subcontract Process",
                     process: jo.process_name || "Subcontract Process",
                     qty: `${jo.qty ?? 0} Nos`,
                     dcNo: jo.income_no || "-",
@@ -749,18 +749,21 @@ export const transformBackendTimeline = (backendData) => {
             badgeColor: "#06b6d4",
             accentColor: "#0891b2",
             status: stages.stage5?.status || "Pending",
+            routeCardNo: s5.route_card_no || s4.route_card_no || s3.routecard_no || "-",
             metrics: [
                 { label: "GRN Number", value: s5.grn_no || "-", highlight: true },
                 { label: "GRN Inward Date", value: s5.grn_inward_date || "-", highlight: true },
-                { label: "Material Qty", value: s5.material_qty ? Number(s5.material_qty).toLocaleString('en-IN') : "-", highlight: true },
-                { label: "Uom", value: s5.uom || "Kg", highlight: true },
+                { label: "GRN Qty", value: (s5.grn_qty ?? s5.material_qty) != null ? Number(s5.grn_qty ?? s5.material_qty).toLocaleString('en-IN') : "-", highlight: true },
+                { label: "Routecard No", value: s5.route_card_no || s4.route_card_no || s3.routecard_no || "-", highlight: true },
             ],
             grnRecords: (s5.records || []).map((gr) => ({
+                routeCardNo: gr.route_card_no || s5.route_card_no || "-",
                 grnNo: gr.grn_no || s5.grn_no,
                 grnDate: gr.grn_date || s5.grn_inward_date || "-",
-                materialQty: Number(gr.material_qty || 0).toLocaleString('en-IN'),
+                materialQty: Number(gr.grn_qty ?? gr.material_qty ?? 0).toLocaleString('en-IN'),
+                grnQty: Number(gr.grn_qty ?? gr.material_qty ?? 0).toLocaleString('en-IN'),
                 uom: gr.uom || s5.uom || "Kg",
-                okQty: Number(gr.ok_qty || gr.material_qty || 0).toLocaleString('en-IN'),
+                okQty: Number(gr.ok_qty || gr.grn_qty || gr.material_qty || 0).toLocaleString('en-IN'),
                 rejQty: String(gr.rej_qty || 0),
                 inspBy: gr.insp_by || "Store Inspector",
                 verdict: gr.verdict || "PASS",
@@ -788,7 +791,7 @@ export const transformBackendTimeline = (backendData) => {
                 supplierName: sr.supplier_name || s6.supplier_name,
                 poRef: sr.raw_material_po_ref || s6.raw_material_po_ref || "-",
                 poDate: sr.po_date || s6.po_date || "-",
-                qty: Number(sr.qty || s6.qty || 0).toLocaleString('en-IN'),
+                qty: Number(sr.qty !== undefined && sr.qty !== null ? sr.qty : (s6.qty || 0)).toLocaleString('en-IN', { maximumFractionDigits: 3 }),
                 uom: sr.uom || s6.uom || "Kg",
                 status: sr.approval_status || "APPROVED",
             })),
@@ -1762,8 +1765,6 @@ function QualityTimelineSection({ isRouteCardProd: propIsRouteCardProd = null })
                                                     <th>#</th>
                                                     <th>Routecard No</th>
                                                     <th>Operation / Process</th>
-                                                    <th>Machine</th>
-                                                    <th>Shift</th>
                                                     <th style={{ textAlign: "right" }}>Total Qty</th>
                                                     <th style={{ textAlign: "right" }}>Inspected Qty</th>
                                                     <th style={{ textAlign: "right" }}>OK Qty</th>
@@ -1781,8 +1782,6 @@ function QualityTimelineSection({ isRouteCardProd: propIsRouteCardProd = null })
                                                         <td className="font-medium text-slate-800" style={{ fontFamily: "var(--qa-font-body)" }}>
                                                             {rec.process}
                                                         </td>
-                                                        <td className="text-slate-600 text-xs" style={{ fontFamily: "var(--qa-font-body)" }}>{rec.machine}</td>
-                                                        <td className="text-slate-500 text-xs" style={{ fontFamily: "var(--qa-font-body)" }}>{rec.shift}</td>
                                                         <td className="font-mono text-right text-slate-700 font-semibold">{rec.totQty}</td>
                                                         <td className="font-mono text-right text-blue-700 font-bold">{rec.inspQty}</td>
                                                         <td className="font-mono text-right text-emerald-600 font-bold">{rec.okQty}</td>
@@ -1808,12 +1807,14 @@ function QualityTimelineSection({ isRouteCardProd: propIsRouteCardProd = null })
                                 const inhouseList = (modalStageData.inhouseOps || []).map((op) => ({
                                     ...op,
                                     type: "inhouse",
+                                    process: op.process || op.name || "Machining Operation",
                                     opNum: parseInt(op.op.replace(/\D/g, "") || "0", 10)
                                 }));
 
                                 const subcontractList = (modalStageData.jobOrder?.items || []).map((item) => ({
                                     ...item,
                                     type: "subcontract",
+                                    process: item.process || item.name || "Subcontract Process",
                                     vendorName: modalStageData.jobOrder.vendorName,
                                     subcontractDC: modalStageData.jobOrder.subcontractDC,
                                     inwardChallan: modalStageData.jobOrder.inwardChallan,
@@ -1837,18 +1838,19 @@ function QualityTimelineSection({ isRouteCardProd: propIsRouteCardProd = null })
                                                     <Factory size={16} style={{ color: "#d97706" }} />
                                                     <span className="qa2-stepper-heading">Manufacturing Process Flow & IPQA Verification Route</span>
                                                 </div>
-                                                <span className="qa2-prod-flow-hint">Chronological Routing (6 Operations)</span>
+                                                <span className="qa2-prod-flow-hint">Chronological Routing ({allOpsSorted.length} Operations)</span>
                                             </div>
                                             <div className="qa2-prod-stepper-flow">
                                                 {allOpsSorted.map((stepItem, sIdx) => {
                                                     const isInhouse = stepItem.type === "inhouse";
+                                                    const processName = stepItem.process || stepItem.name || "Machining Operation";
                                                     return (
                                                         <div key={sIdx} className={`qa2-prod-step-node ${isInhouse ? "node-inhouse" : "node-subcontract"}`}>
                                                             <div className="qa2-step-node-top">
                                                                 <span className="qa2-step-num">STEP 0{sIdx + 1}</span>
                                                                 {isInhouse ? <Cpu size={12} className="qa2-step-ico inhouse" /> : <Flame size={12} className="qa2-step-ico subcontract" />}
                                                             </div>
-                                                            <div className="qa2-step-node-op">{stepItem.op}</div>
+                                                            <div className="qa2-step-node-op" title={processName}>{processName}</div>
                                                             <div className="qa2-step-node-sub">
                                                                 <span className={`qa2-step-pill-tag ${isInhouse ? "pill-inhouse" : "pill-subcontract"}`}>
                                                                     {isInhouse ? "Inhouse CNC" : "Subcontract"}
@@ -1928,7 +1930,7 @@ function QualityTimelineSection({ isRouteCardProd: propIsRouteCardProd = null })
                                                                     </span>
                                                                 </td>
                                                                 <td className="font-medium text-slate-800" style={{ fontFamily: "var(--qa-font-body)" }}>
-                                                                    {op.process}
+                                                                    {op.process || op.name || "Machining Operation"}
                                                                 </td>
                                                                 <td className="text-slate-700 text-xs" style={{ fontFamily: "var(--qa-font-body)" }}>
                                                                     {isInhouse ? op.machine : op.vendorName}
@@ -1979,7 +1981,7 @@ function QualityTimelineSection({ isRouteCardProd: propIsRouteCardProd = null })
                                                     <th style={{ width: "40px" }}>#</th>
                                                     <th>GRN Number</th>
                                                     <th>GRN Inward Date</th>
-                                                    <th style={{ textAlign: "right" }}>Material Qty</th>
+                                                    <th style={{ textAlign: "right" }}>GRN Qty</th>
                                                     <th style={{ textAlign: "center", width: "70px" }}>UOM</th>
                                                     <th style={{ textAlign: "right" }}>OK Qty</th>
                                                     <th style={{ textAlign: "right" }}>Rej Qty</th>
@@ -1999,7 +2001,7 @@ function QualityTimelineSection({ isRouteCardProd: propIsRouteCardProd = null })
                                                                 {rec.grnDate}
                                                             </td>
                                                             <td className="font-mono text-right text-slate-900 font-bold text-xs">
-                                                                {rec.materialQty}
+                                                                {rec.grnQty || rec.materialQty}
                                                             </td>
                                                             <td className="font-mono text-center text-slate-700 font-semibold text-xs">
                                                                 <span className="qa2-grn-uom-badge">{rec.uom}</span>

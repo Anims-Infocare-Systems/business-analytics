@@ -239,7 +239,8 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
         grandTotal,
     } = legacyFinancialFromCard(card);
 
-    const fmt = n => Number(n).toLocaleString("en-IN", { minimumFractionDigits: n % 1 !== 0 ? 2 : 0 });
+    const fmt = n => Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const fmtRate = n => Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const items = card.items || [];
     const approvedBy = card.approvedBy || "—";
     const approvedDateTime = card.approvedDateTime || "—";
@@ -295,7 +296,9 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                         </div>
                         <div>
                             <div className="eap-prev__hd-title">E-Approval Detail Preview</div>
-                            <div className="eap-prev__hd-sub">Purchase Order — {card.poNo}{card.amdNo ? ` (Amnd: ${card.amdNo})` : ""}</div>
+                            <div className="eap-prev__hd-sub">
+                                Purchase Order — <span className="eap-prev__hd-docno">{card.poNo}</span>{card.amdNo ? <span className="eap-prev__hd-amd"> (Amnd: {card.amdNo})</span> : ""}
+                            </div>
                         </div>
                     </div>
                     <div className="eap-prev__hd-right">
@@ -385,7 +388,7 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                                         <td className="eap-prev__td--center"><span className="eap-prev__uom">{row.uom}</span></td>
                                         <td className="eap-prev__td--num">{Number(row.qty || 0).toLocaleString("en-IN")}</td>
                                         <td className="eap-prev__td--num">{Number(row.qtyOthers || 0).toLocaleString("en-IN")}</td>
-                                        <td className="eap-prev__td--num">{Number(row.rate || 0).toLocaleString("en-IN")}</td>
+                                        <td className="eap-prev__td--num">{fmtRate(row.rate)}</td>
                                         <td className="eap-prev__td--num eap-prev__td--amt">{fmt(row.amount)}</td>
                                     </tr>
                                 ))}
@@ -682,7 +685,7 @@ function TypeGroup({ type, cards, collapsed, onToggle, onPreview, onApprove, onM
                                 <div className="eap-card__count">
                                     <div className="eap-count-row">
                                         <span className="eap-count-label">{card.countLabel}:</span>
-                                        <span className="eap-count-val">₹ {Number(card.countVal).toLocaleString()}</span>
+                                        <span className="eap-count-val">₹ {Number(card.countVal || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                     </div>
                                 </div>
                                 <div className="eap-card__actions">

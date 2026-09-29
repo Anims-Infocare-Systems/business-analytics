@@ -209,7 +209,7 @@ export default function EApprovalPdfModal({ card, onClose }) {
         ? Math.round(Number(fin.grandTotal) || 0)
         : Math.round(afTax + cgstAmt + sgstAmt + roundOff);
 
-    const fmt = n => Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: n % 1 !== 0 ? 2 : 0 });
+    const fmt = n => Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const amountInWords = useMemo(() => numberToWordsIndian(grandTotal), [grandTotal]);
 
     // ── Drag & Drop Handlers ──
@@ -985,7 +985,7 @@ export default function EApprovalPdfModal({ card, onClose }) {
                                                             ? Number(row.qtyOthers).toLocaleString("en-IN")
                                                             : "—"}
                                                 </td>
-                                                <td style={{ width: "75px" }} className="text-right">{Number(row.rate || 0).toLocaleString("en-IN")}</td>
+                                                <td style={{ width: "75px" }} className="text-right">{Number(row.rate || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                                                 <td style={{ width: "95px" }} className="text-right eap-doc-item-amt">{fmt(row.amount)}</td>
                                             </tr>
                                         ))}
@@ -1056,7 +1056,7 @@ export default function EApprovalPdfModal({ card, onClose }) {
                                                 </div>
                                                 <div className="eap-doc-fin-row eap-doc-fin-row--sub">
                                                     <span className="eap-doc-fin-label">Discount</span>
-                                                    <span className="eap-doc-fin-val">{discount > 0 ? `- ${fmt(discount)}` : "0"}</span>
+                                                    <span className="eap-doc-fin-val">{discount > 0 ? `- ${fmt(discount)}` : fmt(0)}</span>
                                                 </div>
                                                 <div className="eap-doc-fin-row eap-doc-fin-row--sub">
                                                     <span className="eap-doc-fin-label">Before Tax P & F</span>

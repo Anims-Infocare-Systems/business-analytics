@@ -686,14 +686,14 @@ function buildWeeklyTrendChartData(trend) {
       {
         label: "Cumulative",
         data: cumulative,
-        borderColor: "#10b981",
-        backgroundColor: "rgba(16, 185, 129, 0.04)",
+        borderColor: "#f97316",
+        backgroundColor: "rgba(249, 115, 22, 0.04)",
         borderWidth: 3,
         tension: 0.4,
         fill: true,
         pointRadius: 4,
         pointHoverRadius: 6,
-        pointBackgroundColor: "#10b981",
+        pointBackgroundColor: "#f97316",
         pointBorderColor: "#fff",
         pointBorderWidth: 1.5,
         type: "line",
@@ -1309,7 +1309,7 @@ function PartWiseHistorySection({
               </div>
               <h2 className="pwh-hero-title">{hero.description || hero.partNo}</h2>
               <p className="pwh-hero-desc">
-                Catalog Code: {hero.partNo} &nbsp;·&nbsp; Last Dispatched: {formatInvDate(hero.lastDispatchedDate)}
+                Catalog Code: {hero.partNo} &nbsp;·&nbsp; Last Dispatched: {!hero.lastDispatchedDate || formatInvDate(hero.lastDispatchedDate) === "—" ? "Not Dispatched" : formatInvDate(hero.lastDispatchedDate)}
               </p>
             </div>
 
@@ -1488,36 +1488,83 @@ export default function SalesAnalysis() {
   const [tableLoading, setTableLoading] = useState(true);
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [displayProgress, setDisplayProgress] = useState(0);
+  const [statusVisible, setStatusVisible] = useState(true);
 
-  // ── Fluid Progress Interpolation Timer for Status Bar ──
+  // ── Ultra-Smooth Fluid Organic Progress Interpolation (60fps) ──
   useEffect(() => {
-    let timer = null;
+    let animId = null;
     let finishTimer = null;
+    let lastStamp = performance.now();
 
     if (loading || tableLoading) {
-      timer = setInterval(() => {
+      setStatusVisible(true);
+
+      const stepProgress = (timestamp) => {
+        const dt = Math.min((timestamp - lastStamp) / 1000, 0.08);
+        lastStamp = timestamp;
+
         setDisplayProgress((prev) => {
-          const target = Math.max(loadingProgress, 12);
+          const target = Math.max(loadingProgress, 14);
+
           if (prev < target) {
-            const step = Math.max(1, Math.ceil((target - prev) * 0.35));
-            return Math.min(prev + step, target);
-          }
-          if (prev < 98 && prev < target + 3) {
-            return prev + 1;
+            // Smoothly ease towards the target with natural deceleration
+            const gap = target - prev;
+            const speed = Math.max(gap * 4.2, 10);
+            const next = prev + speed * dt;
+            return Math.min(next, target);
+          } else if (prev < 96) {
+            // Continuous organic trickle so progress glides smoothly and never freezes
+            let rate = 2.4;
+            if (prev > 35) rate = 1.5;
+            if (prev > 65) rate = 0.75;
+            if (prev > 85) rate = 0.3;
+            return Math.min(prev + rate * dt, 96);
           }
           return prev;
         });
-      }, 40);
+
+        animId = requestAnimationFrame(stepProgress);
+      };
+
+      animId = requestAnimationFrame(stepProgress);
     } else {
-      setDisplayProgress(100);
+      // Completed: glide to 100%, hold briefly, then cleanly hide
+      let isDone = false;
+      const glideToComplete = (timestamp) => {
+        const dt = Math.min((timestamp - lastStamp) / 1000, 0.08);
+        lastStamp = timestamp;
+
+        setDisplayProgress((prev) => {
+          if (prev >= 100) {
+            isDone = true;
+            return 100;
+          }
+          const speed = Math.max((100 - prev) * 10, 60);
+          const next = prev + speed * dt;
+          if (next >= 99.5) {
+            isDone = true;
+            return 100;
+          }
+          return next;
+        });
+
+        if (!isDone) {
+          animId = requestAnimationFrame(glideToComplete);
+        }
+      };
+
+      animId = requestAnimationFrame(glideToComplete);
+
+      // Once synchronized at 100%, show the success state for 750ms then hide completely
       finishTimer = setTimeout(() => {
+        setStatusVisible(false);
         setDisplayProgress(0);
         setLoadingProgress(0);
-      }, 500);
+      }, 750);
     }
 
     return () => {
-      if (timer) clearInterval(timer);
+      if (animId) cancelAnimationFrame(animId);
       if (finishTimer) clearTimeout(finishTimer);
     };
   }, [loading, tableLoading, loadingProgress]);
@@ -1612,6 +1659,8 @@ export default function SalesAnalysis() {
   const poTypeRef = useRef(null);
   const [poSortField, setPoSortField] = useState("poDate");
   const [poSortAsc, setPoSortAsc] = useState(false);
+  const [traceSortField, setTraceSortField] = useState("invDate");
+  const [traceSortAsc, setTraceSortAsc] = useState(false);
   const [projSortField, setProjSortField] = useState("customer");
   const [projSortAsc, setProjSortAsc] = useState(true);
   const [planSortField, setPlanSortField] = useState("date");
@@ -2317,6 +2366,53 @@ export default function SalesAnalysis() {
     setTraceCustomerOpen(false);
   }, []);
 
+  const handleTraceSort = (field) => {
+    if (traceSortField === field) {
+      setTraceSortAsc((prev) => !prev);
+    } else {
+      setTraceSortField(field);
+      setTraceSortAsc(true);
+    }
+  };
+
+  const sortedTraceability = useMemo(() => {
+    if (!traceSortField) return filteredTraceability;
+    const sorted = [...filteredTraceability];
+    sorted.sort((a, b) => {
+      let valA = a[traceSortField];
+      let valB = b[traceSortField];
+
+      if (traceSortField === "invDate" || traceSortField === "dcDate") {
+        const parseDate = (d) => {
+          if (!d || d === "—" || d === "-") return 0;
+          if (typeof d === "string" && d.includes("/")) {
+            const parts = d.split("/");
+            if (parts.length === 3) {
+              return new Date(`${parts[2]}-${parts[1]}-${parts[0]}`).getTime() || 0;
+            }
+          }
+          const t = new Date(d).getTime();
+          return isNaN(t) ? 0 : t;
+        };
+        const timeA = parseDate(valA);
+        const timeB = parseDate(valB);
+        return traceSortAsc ? timeA - timeB : timeB - timeA;
+      }
+
+      if (typeof valA === "number" && typeof valB === "number") {
+        return traceSortAsc ? valA - valB : valB - valA;
+      }
+
+      valA = String(valA || "").toLowerCase();
+      valB = String(valB || "").toLowerCase();
+
+      if (valA < valB) return traceSortAsc ? -1 : 1;
+      if (valA > valB) return traceSortAsc ? 1 : -1;
+      return 0;
+    });
+    return sorted;
+  }, [filteredTraceability, traceSortField, traceSortAsc]);
+
   const renderTracePartDesc = useCallback((raw) => {
     if (!raw || raw === "—") return <span style={{ color: "#94a3b8" }}>—</span>;
     const items = raw.split(", ").filter(Boolean);
@@ -2385,6 +2481,26 @@ export default function SalesAnalysis() {
         ageDays = Math.max(0, Math.floor(diffTime / (1000 * 60 * 60 * 24)));
       }
 
+      let invNo = row.invNo || "";
+      let invDate = row.invDate || "";
+
+      if (!invNo && row.invNoDt && row.invNoDt !== "—" && row.invNoDt !== "-") {
+        const items = String(row.invNoDt).split(",").map(s => s.trim()).filter(Boolean);
+        const nos = [];
+        const dts = [];
+        items.forEach(item => {
+          const match = item.match(/^([^(]+?)(?:\s*\(([^)]+)\))?$/);
+          if (match) {
+            if (match[1]?.trim()) nos.push(match[1].trim());
+            if (match[2]?.trim()) dts.push(match[2].trim());
+          } else {
+            nos.push(item);
+          }
+        });
+        invNo = nos.join(", ");
+        invDate = dts.join(", ");
+      }
+
       return {
         ...row,
         amt,
@@ -2392,7 +2508,9 @@ export default function SalesAnalysis() {
         value,
         pendingQty,
         pendingValue,
-        ageDays
+        ageDays,
+        invNo,
+        invDate
       };
     });
   }, [poLedger]);
@@ -2419,7 +2537,9 @@ export default function SalesAnalysis() {
         row.custName.toLowerCase().includes(q) ||
         row.partDesc.toLowerCase().includes(q) ||
         row.apoNo.toLowerCase().includes(q) ||
-        (row.dcNo && row.dcNo.toLowerCase().includes(q))
+        (row.dcNo && row.dcNo.toLowerCase().includes(q)) ||
+        (row.invNo && row.invNo.toLowerCase().includes(q)) ||
+        (row.invDate && row.invDate.toLowerCase().includes(q))
       );
     });
   }, [processedPoLedger, poTypeFilter, poSearchQuery, poPendingOnly, appliedSelectedCustomers]);
@@ -2491,7 +2611,7 @@ export default function SalesAnalysis() {
     const headers = [
       "#", "Type", "Apono", "Po No", "Po date", "Cust Name", "PartNO- Description", "Po Sl.No",
       "Qty", "Shot close Qty", "Rate", "Value", "Dc.NO", "Dc Dt", "Dc Qty",
-      "Pending Qty", "Pending Value", "Age Days", "Invoice No & Dt"
+      "Pending Qty", "Pending Value", "Age Days", "Invoice No", "Invoice Dt"
     ];
 
     const rows = filteredPoLedger.map((row, idx) => [
@@ -2513,7 +2633,8 @@ export default function SalesAnalysis() {
       row.pendingQty,
       row.pendingValue,
       row.ageDays,
-      formatToDdMmYyyy(row.invNoDt)
+      row.invNo || "—",
+      formatToDdMmYyyy(row.invDate) || "—"
     ]);
 
     const csvContent = [
@@ -2748,6 +2869,26 @@ export default function SalesAnalysis() {
   const despatchTotalInvValue = useMemo(() => {
     return (filteredDespatchPlan || []).reduce((sum, row) => sum + (row.invValue || 0), 0);
   }, [filteredDespatchPlan]);
+
+  const activeDespatchFilterCount = useMemo(() => {
+    return (
+      (despatchDateRange.from != null || despatchDateRange.to != null ? 1 : 0) +
+      (despatchCustFilter.length > 0 ? 1 : 0) +
+      (despatchPartFilter.length > 0 ? 1 : 0) +
+      (despatchStatusFilter.length > 0 ? 1 : 0)
+    );
+  }, [despatchDateRange, despatchCustFilter, despatchPartFilter, despatchStatusFilter]);
+
+  const hasActiveDespatchFilters = activeDespatchFilterCount > 0;
+
+  const resetDespatchFilters = useCallback(() => {
+    setDespatchDateRange({ from: null, to: null });
+    setDespatchCustFilter([]);
+    setDespatchPartFilter([]);
+    setDespatchStatusFilter([]);
+    setDespatchCustSearch("");
+    setDespatchPartSearch("");
+  }, []);
 
   const planTotals = useMemo(() => {
     const totals = filteredPlanVsActual.reduce(
@@ -4256,9 +4397,9 @@ export default function SalesAnalysis() {
       gradBlueArea.addColorStop(0, "rgba(45, 109, 232, 0.45)");
       gradBlueArea.addColorStop(1, "rgba(45, 109, 232, 0.02)");
 
-      const gradGreenArea = ctx.createLinearGradient(0, 0, 0, 300);
-      gradGreenArea.addColorStop(0, "rgba(16, 185, 129, 0.45)");
-      gradGreenArea.addColorStop(1, "rgba(16, 185, 129, 0.02)");
+      const gradOrangeArea = ctx.createLinearGradient(0, 0, 0, 300);
+      gradOrangeArea.addColorStop(0, "rgba(249, 115, 22, 0.40)");
+      gradOrangeArea.addColorStop(1, "rgba(249, 115, 22, 0.02)");
 
       let datasets = [];
       let scales = {};
@@ -4280,15 +4421,15 @@ export default function SalesAnalysis() {
             label: "Cumulative (Lakhs)",
             type: "line",
             data: cumulative.map((v) => v / 100000),
-            borderColor: "rgba(16, 185, 129, 1)",
+            borderColor: "rgba(249, 115, 22, 1)",
             borderWidth: 2.5,
             tension: 0.4,
             fill: false,
-            pointRadius: 3,
-            pointHoverRadius: 5,
+            pointRadius: 3.5,
+            pointHoverRadius: 6,
             pointBackgroundColor: "#ffffff",
-            pointBorderColor: "rgba(16, 185, 129, 1)",
-            pointBorderWidth: 1.5,
+            pointBorderColor: "rgba(249, 115, 22, 1)",
+            pointBorderWidth: 2,
             yAxisID: "yCum",
             datalabels: {
               display: true,
@@ -4296,7 +4437,7 @@ export default function SalesAnalysis() {
               anchor: "end",
               offset: 2,
               font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' },
-              color: "#10b981",
+              color: "#ea580c",
               formatter: (v) => `₹${safeToFixed(v, 3)}L`
             }
           }
@@ -4319,12 +4460,12 @@ export default function SalesAnalysis() {
             type: "linear",
             position: "right",
             grid: { drawOnChartArea: false },
-            ticks: { font: { family: 'Plus Jakarta Sans', size: 9 }, color: '#10b981', callback: (v) => `₹${v}L` },
+            ticks: { font: { family: 'Plus Jakarta Sans', size: 9 }, color: '#ea580c', callback: (v) => `₹${v}L` },
             title: {
               display: typeof window !== 'undefined' && window.innerWidth < 640 ? false : true,
               text: "Cumulative Sales",
               font: { family: 'Plus Jakarta Sans', size: 9, weight: '700' },
-              color: '#10b981'
+              color: '#ea580c'
             }
           },
           x: {
@@ -4388,15 +4529,15 @@ export default function SalesAnalysis() {
           label: "Cumulative Sales (Lakhs)",
           type: "line",
           data: cumulative.map((v) => v / 100000),
-          borderColor: "rgba(16, 185, 129, 1)",
-          backgroundColor: gradGreenArea,
+          borderColor: "rgba(249, 115, 22, 1)",
+          backgroundColor: gradOrangeArea,
           borderWidth: 2.5,
           tension: 0.4,
           fill: true,
           pointRadius: 4,
           pointHoverRadius: 6,
           pointBackgroundColor: "#ffffff",
-          pointBorderColor: "rgba(16, 185, 129, 1)",
+          pointBorderColor: "rgba(249, 115, 22, 1)",
           pointBorderWidth: 2,
           yAxisID: "y",
           datalabels: {
@@ -4409,8 +4550,8 @@ export default function SalesAnalysis() {
             borderWidth: 1.5,
             borderRadius: 4,
             padding: { top: 2, bottom: 2, left: 5, right: 5 },
-            borderColor: "rgba(16, 185, 129, 0.4)",
-            color: "#10b981",
+            borderColor: "rgba(249, 115, 22, 0.4)",
+            color: "#ea580c",
             formatter: (v) => `₹${safeToFixed(v, 3)}L`
           }
         }];
@@ -5807,32 +5948,64 @@ export default function SalesAnalysis() {
   };
 
   const isGlobalLoading = loading || tableLoading;
-  const showStatusBar = isGlobalLoading || displayProgress > 0;
+  const showStatusBar = isGlobalLoading || statusVisible;
 
   return (
     <div className="sa-root" data-spotlight="reports-sales-analysis">
-      {/* ── Status Loading Bar with Gradient & Right-End Glassmorphism Pill ── */}
-      <div className={`sa-status-bar-container ${showStatusBar ? "sa-status-bar--active" : "sa-status-bar--hidden"}`}>
-        <div className="sa-status-bar__header">
-          <div className="sa-status-bar__title-wrap">
-            <span className="sa-status-bar__dot" />
-            <span className="sa-status-bar__title">
-              {displayProgress >= 100 ? "Sales Analytics Synchronized" : "Updating Sales Analytics..."}
-            </span>
+      {/* ── Modern Glassmorphism Status Loading Card ── */}
+      <div className={`sa-status-card-container ${showStatusBar ? "sa-status-card--active" : "sa-status-card--hidden"}`}>
+        <div className="sa-status-card">
+          <div className="sa-status-card__glow-bg" />
+          <div className="sa-status-card__body">
+            {/* Left section: Icon + Title + Dynamic Status description */}
+            <div className="sa-status-card__left">
+              <div className={`sa-status-card__icon-box ${displayProgress >= 99.5 ? "sa-status-card__icon-box--done" : ""}`}>
+                {displayProgress >= 99.5 ? (
+                  <CheckCircle2 size={18} className="sa-status-card__icon-check" />
+                ) : (
+                  <Loader2 size={18} className="sa-status-card__icon-spin" />
+                )}
+              </div>
+              <div className="sa-status-card__text-wrap">
+                <div className="sa-status-card__title-row">
+                  <span className="sa-status-card__title">
+                    {displayProgress >= 99.5 ? "Sales Analytics Synchronized" : "Updating Sales Analytics"}
+                  </span>
+                  <span className={`sa-status-card__badge ${displayProgress >= 99.5 ? "sa-status-card__badge--done" : ""}`}>
+                    <span className="sa-status-card__badge-dot" />
+                    {displayProgress >= 99.5 ? "Ready" : "Live Sync"}
+                  </span>
+                </div>
+                <div className="sa-status-card__subtitle">
+                  {displayProgress >= 99.5
+                    ? "All invoice telemetry and financial metrics are up to date"
+                    : displayProgress < 35
+                      ? "Fetching invoice records and customer telemetry..."
+                      : displayProgress < 75
+                        ? "Aggregating revenue analytics, item weights & trends..."
+                        : "Finalizing KPIs and dispatch summaries..."}
+                </div>
+              </div>
+            </div>
+
+            {/* Right section: High-tech glass percentage pill */}
+            <div className="sa-status-card__right">
+              <div className={`sa-status-pill ${displayProgress >= 99.5 ? "sa-status-pill--done" : ""}`}>
+                <span className="sa-status-pill__percent">{Math.round(displayProgress)}%</span>
+                <span className="sa-status-pill__label">{displayProgress >= 99.5 ? "Complete" : "Loaded"}</span>
+              </div>
+            </div>
           </div>
-          <div className="sa-status-glass-pill">
-            <Loader2 className={`sa-status-glass-pill__spin ${displayProgress >= 100 ? "sa-status-glass-pill__spin--done" : ""}`} size={13} />
-            <span className="sa-status-glass-pill__text">
-              {displayProgress >= 100 ? "✓ 100% Complete" : `Loading ${displayProgress}%`}
-            </span>
-            <span className="sa-status-glass-pill__glow" />
+
+          {/* Integrated Sleek Progress Bar with Shimmer Beam */}
+          <div className="sa-status-card__track">
+            <div
+              className={`sa-status-card__fill ${displayProgress >= 99.5 ? "sa-status-card__fill--done" : ""}`}
+              style={{ width: `${Math.min(100, Math.max(0, displayProgress))}%` }}
+            >
+              <div className="sa-status-card__fill-shimmer" />
+            </div>
           </div>
-        </div>
-        <div className="sa-status-bar__track">
-          <div
-            className="sa-status-bar__fill"
-            style={{ width: `${displayProgress}%` }}
-          />
         </div>
       </div>
 
@@ -6300,7 +6473,7 @@ export default function SalesAnalysis() {
           { label: "Total Invoices", val: loading ? <div className="sa-skeleton" style={{ width: '35px', height: '14px', borderRadius: '4px' }} /> : derivedSummary ? String(derivedSummary.total_invoices) : "—" },
           { label: "Customers", val: loading ? <div className="sa-skeleton" style={{ width: '35px', height: '14px', borderRadius: '4px' }} /> : derivedSummary ? String(derivedSummary.customers) : "—" },
           { label: "Total Qty Sold", val: loading ? <div className="sa-skeleton" style={{ width: '55px', height: '14px', borderRadius: '4px' }} /> : derivedSummary ? formatQty(derivedSummary.total_qty_sold) : "—" },
-          { label: "Avg Invoice", val: loading ? <div className="sa-skeleton" style={{ width: '85px', height: '14px', borderRadius: '4px' }} /> : derivedSummary ? `₹${formatRupees(derivedSummary.avg_invoice)}` : "—" },
+          { label: "Avg Invoice Sub total", val: loading ? <div className="sa-skeleton" style={{ width: '85px', height: '14px', borderRadius: '4px' }} /> : derivedSummary ? `₹${formatRupees(derivedSummary.avg_invoice)}` : "—" },
           {
             label: "Turn Over",
             val: loading ? <div className="sa-skeleton" style={{ width: '65px', height: '14px', borderRadius: '4px' }} /> : derivedSummary ? `₹${Number(derivedSummary.turn_over_lakhs).toFixed(3)}L` : "—",
@@ -6898,36 +7071,38 @@ export default function SalesAnalysis() {
 
       {/* Despatch Planning Status Table Card */}
       <div className="sa-card sa-card--table sa-card--despatch-plan sa-animate" data-spotlight="sa-despatch-plan" style={{ marginBottom: "1.4rem" }}>
-        <div className="sa-card__head" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-            <span className="sa-card__title" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+        <div className="sa-card__head sa-despatch-head">
+          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'nowrap', gap: '8px', flexShrink: 0 }}>
+            <span className="sa-card__title" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}>
               <FileText size={16} style={{ color: "#2d6de8" }} /> Despatch Planning Status
             </span>
-            <span className="sa-live-badge" title="Live Auto-Sync active: Data continuously updates without page reload">
+            <span className="sa-live-badge" title="Live Auto-Sync active: Data continuously updates without page reload" style={{ flexShrink: 0 }}>
               <span className="sa-live-dot" />
               <span>Live</span>
             </span>
             <div className="sa-despatch-kpi-badge" style={{
               display: 'inline-flex',
               alignItems: 'center',
-              gap: '6px',
+              gap: '5px',
               background: 'linear-gradient(135deg, rgba(45, 109, 232, 0.06), rgba(6, 182, 212, 0.06))',
               border: '1px solid rgba(45, 109, 232, 0.15)',
-              borderRadius: '10px',
-              padding: '6px 14px',
-              marginLeft: '16px',
-              fontSize: '0.8rem',
+              borderRadius: '8px',
+              padding: '4px 10px',
+              marginLeft: '8px',
+              fontSize: '0.76rem',
               fontWeight: '600',
-              boxShadow: '0 2px 8px rgba(45, 109, 232, 0.04)'
+              boxShadow: '0 2px 8px rgba(45, 109, 232, 0.04)',
+              whiteSpace: 'nowrap',
+              flexShrink: 0
             }}>
-              <span style={{ color: '#475569', fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>Total Inv Value:</span>
-              <span style={{ color: '#2d6de8', fontWeight: '700', fontSize: '0.95rem', display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
+              <span style={{ color: '#475569', fontSize: '0.66rem', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 600 }}>Total Inv Value:</span>
+              <span style={{ color: '#2d6de8', fontWeight: '700', fontSize: '0.88rem', display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
                 ₹{formatExactRupees(despatchTotalInvValue)}
               </span>
             </div>
           </div>
-          <div className="sa-despatch-filters" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-            <div className="sa-despatch-datepicker-wrap" style={{ transform: 'scale(0.9)', transformOrigin: 'right center', margin: '0 -10px 0 0' }}>
+          <div className="sa-despatch-filters">
+            <div className="sa-despatch-datepicker-wrap" style={{ transform: 'scale(0.88)', transformOrigin: 'right center', margin: '0 -6px 0 0', flexShrink: 0 }}>
               <SalesAnalysisDatePicker
                 from={despatchDateRange.from}
                 to={despatchDateRange.to}
@@ -6990,8 +7165,8 @@ export default function SalesAnalysis() {
                     border: '1px solid rgba(45, 109, 232, 0.15)',
                     borderRadius: '8px',
                     marginTop: '4px',
-                    boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05)',
-                    zIndex: 100,
+                    boxShadow: '0 16px 40px rgba(15, 23, 42, 0.2), 0 4px 14px rgba(45, 109, 232, 0.12)',
+                    zIndex: 9999,
                     display: 'flex',
                     flexDirection: 'column',
                     overflow: 'hidden'
@@ -7119,8 +7294,8 @@ export default function SalesAnalysis() {
                     border: '1px solid rgba(45, 109, 232, 0.15)',
                     borderRadius: '8px',
                     marginTop: '4px',
-                    boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05)',
-                    zIndex: 100,
+                    boxShadow: '0 16px 40px rgba(15, 23, 42, 0.2), 0 4px 14px rgba(45, 109, 232, 0.12)',
+                    zIndex: 9999,
                     display: 'flex',
                     flexDirection: 'column',
                     overflow: 'hidden'
@@ -7261,8 +7436,8 @@ export default function SalesAnalysis() {
                     border: '1px solid rgba(45, 109, 232, 0.15)',
                     borderRadius: '8px',
                     marginTop: '4px',
-                    boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05)',
-                    zIndex: 100,
+                    boxShadow: '0 16px 40px rgba(15, 23, 42, 0.2), 0 4px 14px rgba(45, 109, 232, 0.12)',
+                    zIndex: 9999,
                     display: 'flex',
                     flexDirection: 'column',
                     overflow: 'hidden'
@@ -7361,6 +7536,49 @@ export default function SalesAnalysis() {
                 )}
               </div>
 
+              {/* Clear Filters Button */}
+              {hasActiveDespatchFilters && (
+                <button
+                  type="button"
+                  onClick={resetDespatchFilters}
+                  className="sa-btn-reset sa-despatch-clear-btn"
+                  title="Clear all Despatch Planning filters (Customer, Part, Status, Date)"
+                  style={{
+                    height: '32px',
+                    padding: '0 9px',
+                    fontSize: '0.75rem',
+                    borderRadius: '7px',
+                    whiteSpace: 'nowrap',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    flexShrink: 0,
+                    animation: 'sa-fade-up 0.2s ease both'
+                  }}
+                >
+                  <RotateCcw className="sa-btn-reset-icon" size={11} />
+                  <span>Clear Filters</span>
+                  {activeDespatchFilterCount > 0 && (
+                    <span style={{
+                      background: '#dc2626',
+                      color: '#fff',
+                      borderRadius: '50%',
+                      minWidth: '15px',
+                      height: '15px',
+                      fontSize: '0.6rem',
+                      fontWeight: '700',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: '0 3px',
+                      marginLeft: '2px'
+                    }}>
+                      {activeDespatchFilterCount}
+                    </span>
+                  )}
+                </button>
+              )}
+
               {/* Collapse / Expand All Toggle */}
               {Object.keys(groupedDespatchPlan).length > 1 && (
                 <button
@@ -7376,8 +7594,16 @@ export default function SalesAnalysis() {
                   }}
                   className="sa-despatch-collapse-all-btn"
                   title={Object.keys(groupedDespatchPlan).every(k => collapsedDespatchGroups.has(k)) ? "Expand All Customer Groups" : "Collapse All Customer Groups"}
+                  style={{
+                    height: '32px',
+                    padding: '0 9px',
+                    fontSize: '0.75rem',
+                    borderRadius: '7px',
+                    whiteSpace: 'nowrap',
+                    flexShrink: 0
+                  }}
                 >
-                  <Layers size={13} />
+                  <Layers size={12} />
                   <span>
                     {Object.keys(groupedDespatchPlan).every(k => collapsedDespatchGroups.has(k))
                       ? "Expand All"
@@ -7390,9 +7616,19 @@ export default function SalesAnalysis() {
                 onClick={handleDespatchExport}
                 className="sa-btn sa-btn--primary sa-po-export-btn"
                 title="Export Despatch Plan to CSV"
-                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', height: '34px', padding: '0 12px', fontSize: '0.8rem' }}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  height: '32px',
+                  padding: '0 10px',
+                  fontSize: '0.76rem',
+                  borderRadius: '7px',
+                  flexShrink: 0,
+                  whiteSpace: 'nowrap'
+                }}
               >
-                <Download size={14} /> Export CSV
+                <Download size={13} /> Export CSV
               </button>
             </div>
           </div>
@@ -7431,8 +7667,21 @@ export default function SalesAnalysis() {
                 ))
               ) : filteredDespatchPlan.length === 0 ? (
                 <tr>
-                  <td colSpan="10" style={{ textAlign: "center", padding: "24px", color: "#64748b" }}>
-                    No pending despatch plan records found
+                  <td colSpan="10" style={{ textAlign: "center", padding: "32px 24px", color: "#64748b" }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                      <span>No matching despatch planning records found</span>
+                      {hasActiveDespatchFilters && (
+                        <button
+                          type="button"
+                          onClick={resetDespatchFilters}
+                          className="sa-btn-reset"
+                          style={{ height: '30px', padding: '0 12px', fontSize: '0.75rem', borderRadius: '6px' }}
+                        >
+                          <RotateCcw className="sa-btn-reset-icon" size={12} />
+                          Clear Filters
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ) : (
@@ -7658,7 +7907,7 @@ export default function SalesAnalysis() {
         <div className="sa-card sa-card--month" data-spotlight="sa-month-summary">
           <div className="sa-card__head">
             <span className="sa-card__title" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-              <Calendar size={16} style={{ color: "#10b981" }} /> Month-wise Sales Summary
+              <Calendar size={16} style={{ color: "#10b981" }} /> Month-wise Invoice Summary
             </span>
             <span className="sa-badge sa-badge--green">
               {loading ? (
@@ -7674,7 +7923,7 @@ export default function SalesAnalysis() {
                 <tr>
                   <th>Month</th>
                   <th className="sa-num">Invoices</th>
-                  <th className="sa-num">Qty Sold</th>
+                  <th className="sa-num">Qty</th>
                   <th className="sa-num">Amount (₹)</th>
                   <th className="sa-num">Growth</th>
                 </tr>
@@ -9760,14 +10009,102 @@ export default function SalesAnalysis() {
             <thead>
               <tr>
                 <th style={{ textAlign: "center" }}>#</th>
-                <th>CUSTOMER NAME</th>
-                <th>PARTNO - DESCRIPTION</th>
-                <th>INVOICE NO</th>
-                <th>INVOICE DATE</th>
-                <th>DC NO</th>
-                <th>DC DATE</th>
-                <th>GRN/PO DET</th>
-                <th>ROUTECARD NO</th>
+                <th
+                  className={`sa-sortable${traceSortField === "customer" ? " sa-sorted" : ""}`}
+                  onClick={() => handleTraceSort("customer")}
+                  title="Sort by Customer Name"
+                >
+                  <span className="sa-trace-th-content">
+                    CUSTOMER NAME
+                    <span className={`sa-trace-sort-icon ${traceSortField === "customer" ? "active" : "idle"}`}>
+                      {traceSortField === "customer" ? (traceSortAsc ? "▲" : "▼") : "▲▼"}
+                    </span>
+                  </span>
+                </th>
+                <th
+                  className={`sa-sortable${traceSortField === "partNoDesc" ? " sa-sorted" : ""}`}
+                  onClick={() => handleTraceSort("partNoDesc")}
+                  title="Sort by Part Description"
+                >
+                  <span className="sa-trace-th-content">
+                    PARTNO - DESCRIPTION
+                    <span className={`sa-trace-sort-icon ${traceSortField === "partNoDesc" ? "active" : "idle"}`}>
+                      {traceSortField === "partNoDesc" ? (traceSortAsc ? "▲" : "▼") : "▲▼"}
+                    </span>
+                  </span>
+                </th>
+                <th
+                  className={`sa-sortable${traceSortField === "invNo" ? " sa-sorted" : ""}`}
+                  onClick={() => handleTraceSort("invNo")}
+                  title="Sort by Invoice No"
+                >
+                  <span className="sa-trace-th-content">
+                    INVOICE NO
+                    <span className={`sa-trace-sort-icon ${traceSortField === "invNo" ? "active" : "idle"}`}>
+                      {traceSortField === "invNo" ? (traceSortAsc ? "▲" : "▼") : "▲▼"}
+                    </span>
+                  </span>
+                </th>
+                <th
+                  className={`sa-sortable${traceSortField === "invDate" ? " sa-sorted" : ""}`}
+                  onClick={() => handleTraceSort("invDate")}
+                  title="Sort by Invoice Date"
+                >
+                  <span className="sa-trace-th-content">
+                    INVOICE DATE
+                    <span className={`sa-trace-sort-icon ${traceSortField === "invDate" ? "active" : "idle"}`}>
+                      {traceSortField === "invDate" ? (traceSortAsc ? "▲" : "▼") : "▲▼"}
+                    </span>
+                  </span>
+                </th>
+                <th
+                  className={`sa-sortable${traceSortField === "dcNo" ? " sa-sorted" : ""}`}
+                  onClick={() => handleTraceSort("dcNo")}
+                  title="Sort by DC No"
+                >
+                  <span className="sa-trace-th-content">
+                    DC NO
+                    <span className={`sa-trace-sort-icon ${traceSortField === "dcNo" ? "active" : "idle"}`}>
+                      {traceSortField === "dcNo" ? (traceSortAsc ? "▲" : "▼") : "▲▼"}
+                    </span>
+                  </span>
+                </th>
+                <th
+                  className={`sa-sortable${traceSortField === "dcDate" ? " sa-sorted" : ""}`}
+                  onClick={() => handleTraceSort("dcDate")}
+                  title="Sort by DC Date"
+                >
+                  <span className="sa-trace-th-content">
+                    DC DATE
+                    <span className={`sa-trace-sort-icon ${traceSortField === "dcDate" ? "active" : "idle"}`}>
+                      {traceSortField === "dcDate" ? (traceSortAsc ? "▲" : "▼") : "▲▼"}
+                    </span>
+                  </span>
+                </th>
+                <th
+                  className={`sa-sortable${traceSortField === "grnPo" ? " sa-sorted" : ""}`}
+                  onClick={() => handleTraceSort("grnPo")}
+                  title="Sort by GRN / PO"
+                >
+                  <span className="sa-trace-th-content">
+                    GRN/PO DET
+                    <span className={`sa-trace-sort-icon ${traceSortField === "grnPo" ? "active" : "idle"}`}>
+                      {traceSortField === "grnPo" ? (traceSortAsc ? "▲" : "▼") : "▲▼"}
+                    </span>
+                  </span>
+                </th>
+                <th
+                  className={`sa-sortable${traceSortField === "rcNo" ? " sa-sorted" : ""}`}
+                  onClick={() => handleTraceSort("rcNo")}
+                  title="Sort by Routecard No"
+                >
+                  <span className="sa-trace-th-content">
+                    ROUTECARD NO
+                    <span className={`sa-trace-sort-icon ${traceSortField === "rcNo" ? "active" : "idle"}`}>
+                      {traceSortField === "rcNo" ? (traceSortAsc ? "▲" : "▼") : "▲▼"}
+                    </span>
+                  </span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -9785,7 +10122,7 @@ export default function SalesAnalysis() {
                     <td><div className="sa-skeleton" style={{ width: '80px', height: '12px' }} /></td>
                   </tr>
                 ))
-              ) : filteredTraceability.length === 0 ? (
+              ) : sortedTraceability.length === 0 ? (
                 <tr>
                   <td colSpan={9} className="sa-trace-empty">
                     <div className="sa-trace-empty-content">
@@ -9805,7 +10142,7 @@ export default function SalesAnalysis() {
                   </td>
                 </tr>
               ) : (
-                filteredTraceability.map((row, i) => (
+                sortedTraceability.map((row, i) => (
                   <tr key={i} className="sa-trace-row" style={{ "--ri": i }}>
                     <td style={{ textAlign: "center" }}>{i + 1}</td>
                     <td><strong className="sa-trace-cust-name">{row.customer}</strong></td>
