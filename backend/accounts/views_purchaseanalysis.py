@@ -17,12 +17,43 @@ logger = logging.getLogger(__name__)
 from .views import (
     get_tenant_connection,
     parse_date_range,
-    table_exists,
-    find_column_ci,
-    resolve_erp_table,
-    find_first_column,
+    table_exists as _raw_table_exists,
+    find_column_ci as _raw_find_column_ci,
+    resolve_erp_table as _raw_resolve_erp_table,
+    find_first_column as _raw_find_first_column,
     dashboard2_parse_date_range_default_month,
 )
+
+# In-memory schema cache to prevent 260+ redundant INFORMATION_SCHEMA round-trips per request
+_PA_TABLE_EXISTS_CACHE = {}
+_PA_COL_CI_CACHE = {}
+_PA_FIRST_COL_CACHE = {}
+_PA_RESOLVE_ERP_CACHE = {}
+
+def table_exists(cursor, table_name):
+    key = str(table_name).strip().lower()
+    if key not in _PA_TABLE_EXISTS_CACHE:
+        _PA_TABLE_EXISTS_CACHE[key] = _raw_table_exists(cursor, table_name)
+    return _PA_TABLE_EXISTS_CACHE[key]
+
+def find_column_ci(cursor, table_schema, table_name, candidates):
+    key = (str(table_schema).strip().lower(), str(table_name).strip().lower(), tuple(str(c).strip().lower() for c in candidates))
+    if key not in _PA_COL_CI_CACHE:
+        _PA_COL_CI_CACHE[key] = _raw_find_column_ci(cursor, table_schema, table_name, candidates)
+    return _PA_COL_CI_CACHE[key]
+
+def find_first_column(cursor, table_name, candidates):
+    key = (str(table_name).strip().lower(), tuple(str(c).strip().lower() for c in candidates))
+    if key not in _PA_FIRST_COL_CACHE:
+        _PA_FIRST_COL_CACHE[key] = _raw_find_first_column(cursor, table_name, candidates)
+    return _PA_FIRST_COL_CACHE[key]
+
+def resolve_erp_table(cursor, candidates):
+    key = tuple(str(c).strip().lower() for c in candidates)
+    if key not in _PA_RESOLVE_ERP_CACHE:
+        _PA_RESOLVE_ERP_CACHE[key] = _raw_resolve_erp_table(cursor, candidates)
+    return _PA_RESOLVE_ERP_CACHE[key]
+
 
 
 # ─────────────────────────────────────────────────────────────
@@ -2674,13 +2705,8 @@ def purchase_analysis_management_alerts(request):
         except: pass
 
     if not alerts_list:
-        alerts_list = [
-            { "icon": "🔴", "title": "Round Rod DIA 65MM — 325 Nos undelivered", "sub": "P251570 · Musk Metals · Production impact risk", "time": "7d overdue", "urgency": "high" },
-            { "icon": "🟠", "title": "Bottom Bearing GRN balance pending", "sub": "P251574 · Ammarun Foundries · ₹8.2L balance to receive", "time": "3d open", "urgency": "medium" },
-            { "icon": "🟡", "title": 'VCI Cover 8"×8" — DC not confirmed in system', "sub": "P251569 · Sri Vinayaga Enterprises · DC update pending", "time": "Today", "urgency": "low" },
-            { "icon": "🔵", "title": "Musk Metals rate variance — approval needed", "sub": "₹92/kg vs last PO ₹88/kg (+4.5%) — review and approve", "time": "Auto-flag", "urgency": "info" },
-        ]
-        key_action = "Follow up with Musk Metals for DIA 65MM pending lot (325 Nos). Production scheduling depends on receipt by 05-Mar-2026. Also review rate increase ₹88→₹92/kg for formal approval."
+        alerts_list = []
+        key_action = ""
 
     return Response({
         "alerts": alerts_list,
@@ -3915,10 +3941,11 @@ def purchase_analysis_average_purchase_value(request):
                 cursor.close()
             except Exception:
                 pass
-        try:
-            conn.close()
-        except Exception:
-            pass
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 @api_view(["GET"])
@@ -4292,10 +4319,11 @@ def purchase_analysis_advanced_purchase_analytics(request):
                 cursor.close()
             except Exception:
                 pass
-        try:
-            conn.close()
-        except Exception:
-            pass
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 

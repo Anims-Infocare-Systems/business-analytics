@@ -1,8 +1,31 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspense } from "react";
 import "./Settings.css";
 import { resolveApiBase } from "../../apiBase";
-import Tips from "./Tips";
-import SpotlightSettingsTab from "./SpotlightSettingsTab";
+
+const Tips = lazy(() => import("./Tips"));
+const SpotlightSettingsTab = lazy(() => import("./SpotlightSettingsTab"));
+
+function TabSuspenseFallback() {
+    return (
+        <div className="st-tab-skeleton">
+            <div className="st-tab-skeleton__header">
+                <div className="st-tab-skeleton__badge st-shimmer-box" />
+                <div className="st-tab-skeleton__title st-shimmer-box" />
+                <div className="st-tab-skeleton__desc st-shimmer-box" />
+            </div>
+            <div className="st-tab-skeleton__search st-shimmer-box" />
+            <div className="st-tab-skeleton__grid">
+                {[1, 2, 3, 4, 5, 6].map(i => (
+                    <div key={i} className="st-tab-skeleton__card st-shimmer-box">
+                        <div className="st-tab-skeleton__card-top" />
+                        <div className="st-tab-skeleton__card-title" />
+                        <div className="st-tab-skeleton__card-body" />
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
 
 const API = resolveApiBase();
 const PROFILE_CACHE_KEY = "ba_settings_profile";
@@ -113,6 +136,8 @@ const Icons = {
 };
 
 export default function Settings({ isOpen, onClose, isExpiredMode = false, onStartTour, onNavigateModule, onSpotlightNavigate, onOpenSpotlight, initialTab }) {
+    const profileDirtyRef = useRef(false);
+
     // ── Persist active tab across refresh ──
     const [activeTab, setActiveTab] = useState(() => {
         if (isExpiredMode) return "billing";
@@ -120,6 +145,33 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false, onSta
         try { return sessionStorage.getItem("ba_settings_tab") || "account"; }
         catch { return "account"; }
     });
+
+    // ── Keep alive visited sub-tabs so switching is 0ms instant ──
+    const [visitedTabs, setVisitedTabs] = useState(() => new Set([activeTab]));
+    useEffect(() => {
+        setVisitedTabs(prev => {
+            if (prev.has(activeTab)) return prev;
+            const next = new Set(prev);
+            next.add(activeTab);
+            return next;
+        });
+    }, [activeTab]);
+
+    // ── Idle background prefetch of sub-tabs as soon as Settings opens ──
+    useEffect(() => {
+        if (!isOpen) return;
+        const preloadTabs = () => {
+            import("./SpotlightSettingsTab");
+            import("./Tips");
+        };
+        if ("requestIdleCallback" in window) {
+            const id = window.requestIdleCallback(preloadTabs, { timeout: 500 });
+            return () => window.cancelIdleCallback(id);
+        } else {
+            const id = setTimeout(preloadTabs, 100);
+            return () => clearTimeout(id);
+        }
+    }, [isOpen]);
 
     const prevOpenRef = useRef(false);
     const prevInitialTabRef = useRef(initialTab);
@@ -136,6 +188,9 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false, onSta
                     setActiveTab(initialTab);
                 }
             }
+        }
+        if (isOpen) {
+            profileDirtyRef.current = false;
         }
         prevOpenRef.current = isOpen;
         prevInitialTabRef.current = initialTab;
@@ -242,8 +297,14 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false, onSta
         }, 2200);
     };
 
-    // Retrieve local storage user fallback
-    const user = JSON.parse(localStorage.getItem("user") || "{}");
+    // Retrieve local storage user fallback (memoized to eliminate blocking storage reads)
+    const user = useMemo(() => {
+        try {
+            return JSON.parse(localStorage.getItem("user") || "{}");
+        } catch {
+            return {};
+        }
+    }, []);
 
     const [profile, setProfile] = useState(() => {
         try {
@@ -278,7 +339,7 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false, onSta
         }
     }, []);
 
-    const fetchProfile = useCallback(async ({ includeInvoices = false, silent = false } = {}) => {
+    const fetchProfile = useCallback(async ({ includeInvoices = false, silent = false, signal = null } = {}) => {
         const hasCache = !!profileRef.current;
         if (includeInvoices && !silent) {
             setLoadingInvoices(true);
@@ -290,7 +351,7 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false, onSta
 
         const qs = includeInvoices ? "?include_invoices=1" : "";
         try {
-            const res = await fetch(`${API}/settings/profile/${qs}`, { credentials: "include" });
+            const res = await fetch(`${API}/settings/profile/${qs}`, { credentials: "include", signal });
             if (!res.ok) throw new Error(`Status ${res.status}`);
             const data = await res.json();
 
@@ -305,7 +366,9 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false, onSta
                 cacheProfile(data);
             }
         } catch (err) {
-            console.error("Failed to load profile details", err);
+            if (err.name !== "AbortError") {
+                console.error("Failed to load profile details", err);
+            }
         } finally {
             setLoadingProfile(false);
             setRefreshingProfile(false);
@@ -313,10 +376,12 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false, onSta
         }
     }, [cacheProfile]);
 
+    // Consolidated, cancelable profile fetch effect
     useEffect(() => {
         if (!isOpen) return;
 
-        const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
+        const ctrl = new AbortController();
+        const currentUser = user;
         const currentCompany = currentUser.company_code || currentUser.companyCode;
         if (profile && (
             profile?.profile?.username !== currentUser.username ||
@@ -327,17 +392,18 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false, onSta
         }
 
         const wantInvoices = isExpiredMode || activeTab === "billing";
-        fetchProfile({
-            includeInvoices: wantInvoices && !(profile?.invoicesIncluded),
-            silent: !!profileRef.current,
-        });
-    }, [isOpen]);
+        if (wantInvoices && profileRef.current?.invoicesIncluded) {
+            return () => ctrl.abort();
+        }
 
-    useEffect(() => {
-        if (!isOpen || activeTab !== "billing" || isExpiredMode) return;
-        if (profile?.invoicesIncluded) return;
-        fetchProfile({ includeInvoices: true, silent: !!profile });
-    }, [isOpen, activeTab, profile?.invoicesIncluded, fetchProfile, isExpiredMode]);
+        fetchProfile({
+            includeInvoices: wantInvoices,
+            silent: !!profileRef.current,
+            signal: ctrl.signal,
+        });
+
+        return () => ctrl.abort();
+    }, [isOpen, activeTab, isExpiredMode, fetchProfile, user]);
 
     const username = profile?.profile?.username || user.username || "—";
     const userEmail = profile?.profile?.email || (loadingProfile && !profile ? "Loading email..." : "—");
@@ -382,8 +448,10 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false, onSta
         setIsClosing(true);
         setTimeout(() => {
             setIsClosing(false);
-            onClose();
-        }, 300); // matches animation out duration
+            if (typeof onClose === "function") {
+                onClose(profileDirtyRef.current);
+            }
+        }, 220); // matches animation out duration
     };
 
     // Close on escape key
@@ -435,7 +503,7 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false, onSta
         const prevCur = curPass;
         const prevNew = newPass;
         const prevConf = confPass;
-        setPwdSuccess(true);
+        setPwdSuccess(true); profileDirtyRef.current = true;
         setCurPass("");
         setNewPass("");
         setConfPass("");
@@ -480,7 +548,7 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false, onSta
             if (!res.ok) {
                 throw new Error(data.error || `Upgrade failed with status ${res.status}`);
             }
-            setUpgradeOk(data.message || `Successfully upgraded to ${plan}!`);
+            setUpgradeOk(data.message || `Successfully upgraded to ${plan}!`); profileDirtyRef.current = true;
             setShowConfirmModal(false);
             await fetchProfile({ includeInvoices: true, silent: true });
 
@@ -534,6 +602,7 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false, onSta
                             <button
                                 className={`st-sidebar__nav-item ${activeTab === "tips" ? "st-sidebar__nav-item--active" : ""}`}
                                 onClick={() => setActiveTab("tips")}
+                                onMouseEnter={() => import("./Tips")}
                             >
                                 <span className="st-sidebar__nav-icon"><Icons.Tips /></span>
                                 <span className="st-sidebar__nav-label">Tips</span>
@@ -541,6 +610,7 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false, onSta
                             <button
                                 className={`st-sidebar__nav-item ${activeTab === "spotlight" ? "st-sidebar__nav-item--active" : ""}`}
                                 onClick={() => setActiveTab("spotlight")}
+                                onMouseEnter={() => import("./SpotlightSettingsTab")}
                             >
                                 <span className="st-sidebar__nav-icon"><Icons.Spotlight /></span>
                                 <span className="st-sidebar__nav-label">Spotlight</span>
@@ -868,53 +938,65 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false, onSta
                     )}
 
                     {/* ── TAB: TIPS ── */}
-                    {activeTab === "tips" && (
-                        <div className="st-section anim-fade-in-quick" data-spotlight="set-tips">
-                            <Tips
-                                onStartTour={(ver) => {
-                                    handleClose();
-                                    if (typeof onStartTour === "function") {
-                                        setTimeout(() => onStartTour(ver), 320);
-                                    }
-                                }}
-                                onNavigateModule={(target) => {
-                                    handleClose();
-                                    if (typeof onNavigateModule === "function") {
-                                        setTimeout(() => onNavigateModule(target), 320);
-                                    }
-                                }}
-                                onOpenSpotlight={() => {
-                                    handleClose();
-                                    if (typeof onOpenSpotlight === "function") {
-                                        setTimeout(() => onOpenSpotlight(), 320);
-                                    }
-                                }}
-                                onSwitchToSpotlightTab={() => {
-                                    setActiveTab("spotlight");
-                                }}
-                            />
+                    {visitedTabs.has("tips") && (
+                        <div
+                            className="st-section anim-fade-in-quick"
+                            data-spotlight="set-tips"
+                            style={{ display: activeTab === "tips" ? "flex" : "none" }}
+                        >
+                            <Suspense fallback={<TabSuspenseFallback />}>
+                                <Tips
+                                    onStartTour={(ver) => {
+                                        handleClose();
+                                        if (typeof onStartTour === "function") {
+                                            setTimeout(() => onStartTour(ver), 320);
+                                        }
+                                    }}
+                                    onNavigateModule={(target) => {
+                                        handleClose();
+                                        if (typeof onNavigateModule === "function") {
+                                            setTimeout(() => onNavigateModule(target), 320);
+                                        }
+                                    }}
+                                    onOpenSpotlight={() => {
+                                        handleClose();
+                                        if (typeof onOpenSpotlight === "function") {
+                                            setTimeout(() => onOpenSpotlight(), 320);
+                                        }
+                                    }}
+                                    onSwitchToSpotlightTab={() => {
+                                        setActiveTab("spotlight");
+                                    }}
+                                />
+                            </Suspense>
                         </div>
                     )}
 
                     {/* ── TAB: SPOTLIGHT ── */}
-                    {activeTab === "spotlight" && (
-                        <div className="st-section anim-fade-in-quick" data-spotlight="set-spotlight">
-                            <SpotlightSettingsTab
-                                onSelectSection={(item, tourContext) => {
-                                    setIsClosing(false);
-                                    if (typeof onClose === "function") onClose();
-                                    if (typeof onSpotlightNavigate === "function") {
-                                        onSpotlightNavigate(item, tourContext);
-                                    }
-                                }}
-                                onOpenSpotlight={() => {
-                                    setIsClosing(false);
-                                    if (typeof onClose === "function") onClose();
-                                    if (typeof onOpenSpotlight === "function") {
-                                        onOpenSpotlight();
-                                    }
-                                }}
-                            />
+                    {visitedTabs.has("spotlight") && (
+                        <div
+                            className="st-section anim-fade-in-quick"
+                            data-spotlight="set-spotlight"
+                            style={{ display: activeTab === "spotlight" ? "flex" : "none" }}
+                        >
+                            <Suspense fallback={<TabSuspenseFallback />}>
+                                <SpotlightSettingsTab
+                                    onSelectSection={(item, tourContext) => {
+                                        setIsClosing(false);
+                                        if (typeof onClose === "function") onClose();
+                                        if (typeof onSpotlightNavigate === "function") {
+                                            onSpotlightNavigate(item, tourContext);
+                                        }
+                                    }}
+                                    onOpenSpotlight={() => {
+                                        setIsClosing(false);
+                                        if (typeof onClose === "function") onClose();
+                                        if (typeof onOpenSpotlight === "function") {
+                                            onOpenSpotlight();
+                                        }
+                                    }}
+                                />
+                            </Suspense>
                         </div>
                     )}
 
@@ -1044,7 +1126,7 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false, onSta
                                     onClick={() => setConfirmBillingCycle("yearly")}
                                 >
                                     Yearly
-                                    <span className="st-upg-cycle-save">Save 17%</span>
+                                    {/* <span className="st-upg-cycle-save">Save 17%</span> */}
                                 </button>
                             </div>
                         </div>
@@ -1060,7 +1142,7 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false, onSta
                                 <div className="st-upg-card__header">
                                     <div className="st-upg-card__icon st-upg-card__icon--free">
                                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                            <circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/>
+                                            <circle cx="12" cy="12" r="10" /><path d="M8 14s1.5 2 4 2 4-2 4-2" /><line x1="9" y1="9" x2="9.01" y2="9" /><line x1="15" y1="9" x2="15.01" y2="9" />
                                         </svg>
                                     </div>
                                     <div>
@@ -1080,7 +1162,7 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false, onSta
                                 </button>
                                 <div className="st-upg-card__features">
                                     <div className="st-upg-card__feat-title">Includes:</div>
-                                    {["Access to dashboards","Basic Reports","6 months free from registration","Upto 5 user access","Standard support","E-Approval & T-Approval workflows","MIS Reports","Email Notifications"].map(f => (
+                                    {["Access to dashboards", "Basic Reports", "6 months free from registration", "Upto 5 user access", "Standard support", "E-Approval & T-Approval workflows", "MIS Reports", "Email Notifications"].map(f => (
                                         <div key={f} className="st-upg-feat-row">
                                             <span className="st-upg-feat-icon"><Icons.Check /></span>
                                             <span>{f}</span>
@@ -1094,7 +1176,7 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false, onSta
                                 <div className="st-upg-card__header">
                                     <div className="st-upg-card__icon st-upg-card__icon--pro">
                                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                                            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
                                         </svg>
                                     </div>
                                     <div>
@@ -1121,7 +1203,7 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false, onSta
                                 </button>
                                 <div className="st-upg-card__features">
                                     <div className="st-upg-card__feat-title">Everything in Free, plus:</div>
-                                    {["Top Management dashboards","E-Approval & T-Approval workflows","Standard support","Email Notifications"].map(f => (
+                                    {["Top Management dashboards", "E-Approval & T-Approval workflows", "Standard support", "Email Notifications"].map(f => (
                                         <div key={f} className="st-upg-feat-row">
                                             <span className="st-upg-feat-icon"><Icons.Check /></span>
                                             <span>{f}</span>
@@ -1136,7 +1218,7 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false, onSta
                                 <div className="st-upg-card__header">
                                     <div className="st-upg-card__icon st-upg-card__icon--max">
                                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+                                            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
                                         </svg>
                                     </div>
                                     <div>
@@ -1151,8 +1233,8 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false, onSta
                                 <div className="st-upg-card__billing-note">
                                     Min. 2 users &nbsp;·&nbsp;
                                     {confirmBillingCycle === "yearly"
-                                        ? `₹${(Math.max(2,currentUsersCount)*2500*12).toLocaleString("en-IN")}/yr`
-                                        : `₹${(Math.max(2,currentUsersCount)*2500*6).toLocaleString("en-IN")}/6mo`
+                                        ? `₹${(Math.max(2, currentUsersCount) * 2500 * 12).toLocaleString("en-IN")}/yr`
+                                        : `₹${(Math.max(2, currentUsersCount) * 2500 * 6).toLocaleString("en-IN")}/6mo`
                                     }
                                 </div>
                                 <button
@@ -1164,7 +1246,7 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false, onSta
                                 </button>
                                 <div className="st-upg-card__features">
                                     <div className="st-upg-card__feat-title">Everything in Pro, plus:</div>
-                                    {["Unlimited Dashboards","Advanced Analytics Charts","Full MIS & Reports","E-Approval & T-Approval workflows","Priority email support","Email Notifications"].map(f => (
+                                    {["Unlimited Dashboards", "Advanced Analytics Charts", "Full MIS & Reports", "E-Approval & T-Approval workflows", "Priority email support", "Email Notifications"].map(f => (
                                         <div key={f} className="st-upg-feat-row">
                                             <span className="st-upg-feat-icon"><Icons.Check /></span>
                                             <span>{f}</span>
@@ -1221,7 +1303,7 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false, onSta
                                     onClick={() => setConfirmBillingCycle("yearly")}
                                 >
                                     Yearly
-                                    <span className="st-confirm-cycle-save">−17%</span>
+                                    {/* <span className="st-confirm-cycle-save">−17%</span> */}
                                 </button>
                             </div>
                         )}

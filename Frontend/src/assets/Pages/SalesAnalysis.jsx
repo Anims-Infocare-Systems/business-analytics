@@ -1076,7 +1076,7 @@ function PartWiseHistorySection({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Fetch Part Rate History & Catalog from backend
+  // Fetch Part Rate History & Catalog from backend (Staggered to let Tier 1 render instantly)
   useEffect(() => {
     let fromDate = dateRange.from;
     let toDate = dateRange.to;
@@ -1095,38 +1095,43 @@ function PartWiseHistorySection({
     const ctrl = new AbortController();
     setDataLoading(true);
 
-    fetch(`${API_BASE}/sales-analysis/part-rate-history/?${params}`, {
-      credentials: "include",
-      signal: ctrl.signal,
-    })
-      .then(async (r) => {
-        const data = await r.json();
-        if (!r.ok || data?.error) {
-          console.error("Part rate history fetch error:", data?.error || r.statusText);
-          return;
-        }
-
-        const cat = data.catalog || [];
-        setCatalog(cat);
-        setHistoryRows(data.history || []);
-        setHeroData(data.hero || null);
-
-        if (!selectedPartNo && data.part_no) {
-          setSelectedPartNo(data.part_no);
-        } else if (!selectedPartNo && cat.length > 0) {
-          setSelectedPartNo(cat[0].partNo);
-        }
+    const timer = setTimeout(() => {
+      fetch(`${API_BASE}/sales-analysis/part-rate-history/?${params}`, {
+        credentials: "include",
+        signal: ctrl.signal,
       })
-      .catch((err) => {
-        if (err.name !== "AbortError") {
-          console.error("Part rate history fetch failed:", err);
-        }
-      })
-      .finally(() => {
-        setDataLoading(false);
-      });
+        .then(async (r) => {
+          const data = await r.json();
+          if (!r.ok || data?.error) {
+            console.error("Part rate history fetch error:", data?.error || r.statusText);
+            return;
+          }
 
-    return () => ctrl.abort();
+          const cat = data.catalog || [];
+          setCatalog(cat);
+          setHistoryRows(data.history || []);
+          setHeroData(data.hero || null);
+
+          if (!selectedPartNo && data.part_no) {
+            setSelectedPartNo(data.part_no);
+          } else if (!selectedPartNo && cat.length > 0) {
+            setSelectedPartNo(cat[0].partNo);
+          }
+        })
+        .catch((err) => {
+          if (err.name !== "AbortError") {
+            console.error("Part rate history fetch failed:", err);
+          }
+        })
+        .finally(() => {
+          setDataLoading(false);
+        });
+    }, 350);
+
+    return () => {
+      clearTimeout(timer);
+      ctrl.abort();
+    };
   }, [dateRange.from, dateRange.to, selectedPartNo]);
 
   // Filter catalog based on search input & optional customer filter
@@ -1474,29 +1479,17 @@ function PartWiseHistorySection({
   );
 }
 
-
-export default function SalesAnalysis() {
-  const _dflt = getModuleDefaultDateRange("sales_analysis", getTodayMonthRange());
-  const [dateRange, setDateRange] = useState({ from: _dflt.from, to: _dflt.to });
-  const [filters, setFilters] = useState({
-    customer: "All Customers",
-    product: "All Products",
-    salesGroup: "Sales Group",
-    rejection: "No",
-  });
-  const [loading, setLoading] = useState(true);
-  const [tableLoading, setTableLoading] = useState(true);
-  const [loadingProgress, setLoadingProgress] = useState(0);
+// ── Ultra-Smooth Fluid Organic Progress Status Card (Isolated 60fps Sub-Component) ──
+function SalesStatusBar({ isGlobalLoading, loadingProgress }) {
   const [displayProgress, setDisplayProgress] = useState(0);
   const [statusVisible, setStatusVisible] = useState(true);
 
-  // ── Ultra-Smooth Fluid Organic Progress Interpolation (60fps) ──
   useEffect(() => {
     let animId = null;
     let finishTimer = null;
     let lastStamp = performance.now();
 
-    if (loading || tableLoading) {
+    if (isGlobalLoading) {
       setStatusVisible(true);
 
       const stepProgress = (timestamp) => {
@@ -1507,13 +1500,11 @@ export default function SalesAnalysis() {
           const target = Math.max(loadingProgress, 14);
 
           if (prev < target) {
-            // Smoothly ease towards the target with natural deceleration
             const gap = target - prev;
             const speed = Math.max(gap * 4.2, 10);
             const next = prev + speed * dt;
             return Math.min(next, target);
           } else if (prev < 96) {
-            // Continuous organic trickle so progress glides smoothly and never freezes
             let rate = 2.4;
             if (prev > 35) rate = 1.5;
             if (prev > 65) rate = 0.75;
@@ -1528,7 +1519,6 @@ export default function SalesAnalysis() {
 
       animId = requestAnimationFrame(stepProgress);
     } else {
-      // Completed: glide to 100%, hold briefly, then cleanly hide
       let isDone = false;
       const glideToComplete = (timestamp) => {
         const dt = Math.min((timestamp - lastStamp) / 1000, 0.08);
@@ -1555,11 +1545,9 @@ export default function SalesAnalysis() {
 
       animId = requestAnimationFrame(glideToComplete);
 
-      // Once synchronized at 100%, show the success state for 750ms then hide completely
       finishTimer = setTimeout(() => {
         setStatusVisible(false);
         setDisplayProgress(0);
-        setLoadingProgress(0);
       }, 750);
     }
 
@@ -1567,7 +1555,79 @@ export default function SalesAnalysis() {
       if (animId) cancelAnimationFrame(animId);
       if (finishTimer) clearTimeout(finishTimer);
     };
-  }, [loading, tableLoading, loadingProgress]);
+  }, [isGlobalLoading, loadingProgress]);
+
+  const showStatusBar = isGlobalLoading || statusVisible;
+
+  return (
+    <div className={`sa-status-card-container ${showStatusBar ? "sa-status-card--active" : "sa-status-card--hidden"}`}>
+      <div className="sa-status-card">
+        <div className="sa-status-card__glow-bg" />
+        <div className="sa-status-card__body">
+          <div className="sa-status-card__left">
+            <div className={`sa-status-card__icon-box ${displayProgress >= 99.5 ? "sa-status-card__icon-box--done" : ""}`}>
+              {displayProgress >= 99.5 ? (
+                <CheckCircle2 size={18} className="sa-status-card__icon-check" />
+              ) : (
+                <Loader2 size={18} className="sa-status-card__icon-spin" />
+              )}
+            </div>
+            <div className="sa-status-card__text-wrap">
+              <div className="sa-status-card__title-row">
+                <span className="sa-status-card__title">
+                  {displayProgress >= 99.5 ? "Sales Analytics Synchronized" : "Updating Sales Analytics"}
+                </span>
+                <span className={`sa-status-card__badge ${displayProgress >= 99.5 ? "sa-status-card__badge--done" : ""}`}>
+                  <span className="sa-status-card__badge-dot" />
+                  {displayProgress >= 99.5 ? "Ready" : "Live Sync"}
+                </span>
+              </div>
+              <div className="sa-status-card__subtitle">
+                {displayProgress >= 99.5
+                  ? "All invoice telemetry and financial metrics are up to date"
+                  : displayProgress < 35
+                    ? "Fetching invoice records and customer telemetry..."
+                    : displayProgress < 75
+                      ? "Aggregating revenue analytics, item weights & trends..."
+                      : "Finalizing KPIs and dispatch summaries..."}
+              </div>
+            </div>
+          </div>
+
+          <div className="sa-status-card__right">
+            <div className={`sa-status-pill ${displayProgress >= 99.5 ? "sa-status-pill--done" : ""}`}>
+              <span className="sa-status-pill__percent">{Math.round(displayProgress)}%</span>
+              <span className="sa-status-pill__label">{displayProgress >= 99.5 ? "Complete" : "Loaded"}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="sa-status-card__track">
+          <div
+            className={`sa-status-card__fill ${displayProgress >= 99.5 ? "sa-status-card__fill--done" : ""}`}
+            style={{ width: `${Math.min(100, Math.max(0, displayProgress))}%` }}
+          >
+            <div className="sa-status-card__fill-shimmer" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+export default function SalesAnalysis() {
+  const _dflt = getModuleDefaultDateRange("sales_analysis", getTodayMonthRange());
+  const [dateRange, setDateRange] = useState({ from: _dflt.from, to: _dflt.to });
+  const [filters, setFilters] = useState({
+    customer: "All Customers",
+    product: "All Products",
+    salesGroup: "Sales Group",
+    rejection: "No",
+  });
+  const [loading, setLoading] = useState(true);
+  const [tableLoading, setTableLoading] = useState(true);
+  const [loadingProgress, setLoadingProgress] = useState(0);
   const [summary, setSummary] = useState(null);
   const [grandTotalVal, setGrandTotalVal] = useState(null);
   const [avgRateData, setAvgRateData] = useState(null);
@@ -1586,6 +1646,8 @@ export default function SalesAnalysis() {
   const [traceRcFilter, setTraceRcFilter] = useState("");
   const [tracePoFilter, setTracePoFilter] = useState("");
   const [traceInvFilter, setTraceInvFilter] = useState("");
+  const [tracePage, setTracePage] = useState(1);
+  const [tracePageSize, setTracePageSize] = useState(50);
   const [invoiceBtypes, setInvoiceBtypes] = useState([]);
   const [selectedInvoiceTypes, setSelectedInvoiceTypes] = useState([]);
   const [invoiceTypeSearch, setInvoiceTypeSearch] = useState("");
@@ -1666,6 +1728,7 @@ export default function SalesAnalysis() {
   const [planSortField, setPlanSortField] = useState("date");
   const [planSortAsc, setPlanSortAsc] = useState(true);
   const [poPage, setPoPage] = useState(1);
+  const [poPageSize, setPoPageSize] = useState(50);
   const [poPendingOnly, setPoPendingOnly] = useState(false);
   const [performanceChartType, setPerformanceChartType] = useState("bar");
   const [projChartType, setProjChartType] = useState("combo");
@@ -1694,6 +1757,8 @@ export default function SalesAnalysis() {
   const [invTableCustFilter, setInvTableCustFilter] = useState([]);
   const [invTableInvoiceFilter, setInvTableInvoiceFilter] = useState([]);
   const [invTablePartFilter, setInvTablePartFilter] = useState([]);
+  const [invPage, setInvPage] = useState(1);
+  const [invPageSize, setInvPageSize] = useState(50);
   const [invTableCustDropdownOpen, setInvTableCustDropdownOpen] = useState(false);
   const [invTableInvoiceDropdownOpen, setInvTableInvoiceDropdownOpen] = useState(false);
   const [invTablePartDropdownOpen, setInvTablePartDropdownOpen] = useState(false);
@@ -2419,6 +2484,21 @@ export default function SalesAnalysis() {
     return sorted;
   }, [filteredTraceability, traceSortField, traceSortAsc]);
 
+  const totalTracePages = useMemo(() => {
+    if (tracePageSize === -1) return 1;
+    return Math.max(1, Math.ceil(sortedTraceability.length / tracePageSize));
+  }, [sortedTraceability.length, tracePageSize]);
+
+  const paginatedTraceability = useMemo(() => {
+    if (tracePageSize === -1) return sortedTraceability;
+    const start = (tracePage - 1) * tracePageSize;
+    return sortedTraceability.slice(start, start + tracePageSize);
+  }, [sortedTraceability, tracePage, tracePageSize]);
+
+  useEffect(() => {
+    setTracePage(1);
+  }, [appliedDateRange, appliedSearchQuery, traceCustomerFilter, traceRcFilter, tracePoFilter, traceInvFilter]);
+
   const renderTracePartDesc = useCallback((raw) => {
     if (!raw || raw === "—") return <span style={{ color: "#94a3b8" }}>—</span>;
     const items = raw.split(", ").filter(Boolean);
@@ -2571,32 +2651,12 @@ export default function SalesAnalysis() {
     return sorted;
   }, [filteredPoLedger, poSortField, poSortAsc]);
 
-  const poPageSize = 50;
-  const totalPoPages = Math.ceil(sortedPoLedger.length / poPageSize) || 1;
+  const totalPoPages = poPageSize === -1 ? 1 : (Math.ceil(sortedPoLedger.length / poPageSize) || 1);
   const paginatedPoLedger = useMemo(() => {
+    if (poPageSize === -1) return sortedPoLedger;
     const start = (poPage - 1) * poPageSize;
     return sortedPoLedger.slice(start, start + poPageSize);
-  }, [sortedPoLedger, poPage]);
-
-  const getPageNumbers = useMemo(() => {
-    const pages = [];
-    const delta = 1;
-    for (let i = 1; i <= totalPoPages; i++) {
-      if (
-        i === 1 ||
-        i === totalPoPages ||
-        (i >= poPage - delta && i <= poPage + delta)
-      ) {
-        pages.push(i);
-      } else if (
-        (i === 2 && poPage - delta > 2) ||
-        (i === totalPoPages - 1 && poPage + delta < totalPoPages - 1)
-      ) {
-        pages.push("...");
-      }
-    }
-    return pages.filter((item, index, self) => self.indexOf(item) === index);
-  }, [totalPoPages, poPage]);
+  }, [sortedPoLedger, poPage, poPageSize]);
 
   useEffect(() => {
     if (poPage > totalPoPages) {
@@ -3896,6 +3956,21 @@ export default function SalesAnalysis() {
       return true;
     });
   }, [filteredInvoices, invTableCustFilter, invTableInvoiceFilter, invTablePartFilter]);
+
+  const totalInvPages = useMemo(() => {
+    if (invPageSize === -1) return 1;
+    return Math.max(1, Math.ceil(displayedInvoices.length / invPageSize));
+  }, [displayedInvoices.length, invPageSize]);
+
+  const paginatedInvoices = useMemo(() => {
+    if (invPageSize === -1) return displayedInvoices;
+    const start = (invPage - 1) * invPageSize;
+    return displayedInvoices.slice(start, start + invPageSize);
+  }, [displayedInvoices, invPage, invPageSize]);
+
+  useEffect(() => {
+    setInvPage(1);
+  }, [appliedDateRange, appliedSearchQuery, appliedSelectedInvoiceTypes, invTableCustFilter, invTableInvoiceFilter, invTablePartFilter]);
 
   const invoiceStats = useMemo(() => {
     const invSet = new Set();
@@ -5565,6 +5640,7 @@ export default function SalesAnalysis() {
     };
   }, [monthlyProjectionsChartData, loading, projChartType]);
 
+  // ── 3-Tier Staged Progressive Loading Pipeline ──
   useEffect(() => {
     let fromDate = appliedDateRange.from;
     let toDate = appliedDateRange.to;
@@ -5574,7 +5650,9 @@ export default function SalesAnalysis() {
     }
 
     setLoading(true);
-    setLoadingProgress(12);
+    setTableLoading(true);
+    setLoadingProgress(14);
+
     const params = new URLSearchParams({
       from: toIsoDate(fromDate),
       to: toIsoDate(toDate),
@@ -5588,6 +5666,7 @@ export default function SalesAnalysis() {
     const ctrl = new AbortController();
     const fetchOpts = { credentials: "include", signal: ctrl.signal };
 
+    // ── Tier 1: Instant Executive Viewport (Summary Strip, Grand Total, Avg Rates, Weekly Trend) ──
     const p1 = fetch(`${API_BASE}/sales-analysis/summary-strip/?${params}`, fetchOpts)
       .then(async (r) => {
         const data = await r.json();
@@ -5622,193 +5701,6 @@ export default function SalesAnalysis() {
         }
       });
 
-    const p2 = fetch(`${API_BASE}/sales-analysis/weekly-trend/?${params}`, fetchOpts)
-      .then(async (r) => {
-        const data = await r.json();
-        if (!r.ok || data?.error) {
-          console.error("Weekly trend:", data?.error || r.statusText);
-          setWeeklyTrend(null);
-          return;
-        }
-        setWeeklyTrend(data);
-      })
-      .catch((err) => {
-        if (err.name !== "AbortError") {
-          console.error("Weekly trend fetch failed:", err);
-          setWeeklyTrend(null);
-        }
-      });
-
-    const p3 = fetch(`${API_BASE}/sales-analysis/revenue-charts/?${params}`, fetchOpts)
-      .then(async (r) => {
-        const data = await r.json();
-        if (!r.ok || data?.error) {
-          console.error("Revenue charts:", data?.error || r.statusText);
-          setRevenueCharts(null);
-          return;
-        }
-        setRevenueCharts(data);
-      })
-      .catch((err) => {
-        if (err.name !== "AbortError") {
-          console.error("Revenue charts fetch failed:", err);
-          setRevenueCharts(null);
-        }
-      });
-
-    const p4 = fetch(`${API_BASE}/sales-analysis/month-summary/?${params}`, fetchOpts)
-      .then(async (r) => {
-        const data = await r.json();
-        if (!r.ok || data?.error) {
-          console.error("Month summary:", data?.error || r.statusText);
-          setMonthSummary(null);
-          return;
-        }
-        setMonthSummary(data);
-      })
-      .catch((err) => {
-        if (err.name !== "AbortError") {
-          console.error("Month summary fetch failed:", err);
-          setMonthSummary(null);
-        }
-      });
-
-    const p5 = fetch(`${API_BASE}/sales-analysis/top-products/?${params}`, fetchOpts)
-      .then(async (r) => {
-        const data = await r.json();
-        if (!r.ok || data?.error) {
-          console.error("Top products:", data?.error || r.statusText);
-          setTopProductsRaw(null);
-          return;
-        }
-        setTopProductsRaw(data);
-      })
-      .catch((err) => {
-        if (err.name !== "AbortError") {
-          console.error("Top products fetch failed:", err);
-          setTopProductsRaw(null);
-        }
-      });
-
-    const p6 = fetch(`${API_BASE}/sales-analysis/monthly-sales-trend/?${params}`, fetchOpts)
-      .then(async (r) => {
-        const data = await r.json();
-        if (!r.ok || data?.error) {
-          console.error("Monthly sales trend:", data?.error || r.statusText);
-          setMonthlyTrendData(null);
-          return;
-        }
-        setMonthlyTrendData(data);
-      })
-      .catch((err) => {
-        if (err.name !== "AbortError") {
-          console.error("Monthly sales trend fetch failed:", err);
-          setMonthlyTrendData(null);
-        }
-      });
-
-    const p7 = fetch(`${API_BASE}/sales-analysis/bill-type-revenue/?${params}`, fetchOpts)
-      .then(async (r) => {
-        const data = await r.json();
-        if (!r.ok || data?.error) {
-          console.error("Bill type revenue:", data?.error || r.statusText);
-          setBillTypeRevenueData(null);
-          return;
-        }
-        setBillTypeRevenueData(data);
-      })
-      .catch((err) => {
-        if (err.name !== "AbortError") {
-          console.error("Bill type revenue fetch failed:", err);
-          setBillTypeRevenueData(null);
-        }
-      });
-
-    const p8 = fetch(`${API_BASE}/sales-analysis/monthly-tax-trend/?${params}`, fetchOpts)
-      .then(async (r) => {
-        const data = await r.json();
-        if (!r.ok || data?.error) {
-          console.error("Monthly tax trend:", data?.error || r.statusText);
-          setMonthlyTaxData(null);
-          return;
-        }
-        setMonthlyTaxData(data);
-      })
-      .catch((err) => {
-        if (err.name !== "AbortError") {
-          console.error("Monthly tax trend fetch failed:", err);
-          setMonthlyTaxData(null);
-        }
-      });
-
-    const p9 = fetch(`${API_BASE}/sales-analysis/future-projections/?${params}`, fetchOpts)
-      .then(async (r) => {
-        const data = await r.json();
-        if (!r.ok || data?.error) {
-          console.error("Future projections:", data?.error || r.statusText);
-          setProjections([]);
-          return;
-        }
-        setProjections(data.rows ?? []);
-      })
-      .catch((err) => {
-        if (err.name !== "AbortError") {
-          console.error("Future projections fetch failed:", err);
-          setProjections([]);
-        }
-      });
-
-    const p10 = fetch(`${API_BASE}/sales-analysis/plan-vs-actual/?${params}`, fetchOpts)
-      .then(async (r) => {
-        const data = await r.json();
-        if (!r.ok || data?.error) {
-          console.error("Plan vs actual:", data?.error || r.statusText);
-          setPlanVsActual([]);
-          return;
-        }
-        setPlanVsActual(data.rows ?? []);
-      })
-      .catch((err) => {
-        if (err.name !== "AbortError") {
-          console.error("Plan vs actual fetch failed:", err);
-          setPlanVsActual([]);
-        }
-      });
-
-    const p11 = fetch(`${API_BASE}/sales-analysis/po-ledger/?${params}`, fetchOpts)
-      .then(async (r) => {
-        const data = await r.json();
-        if (!r.ok || data?.error) {
-          console.error("PO ledger:", data?.error || r.statusText);
-          setPoLedger([]);
-          return;
-        }
-        setPoLedger(data.rows ?? []);
-      })
-      .catch((err) => {
-        if (err.name !== "AbortError") {
-          console.error("PO ledger fetch failed:", err);
-          setPoLedger([]);
-        }
-      });
-
-    const p12 = fetch(`${API_BASE}/sales-analysis/traceability/?${params}`, fetchOpts)
-      .then(async (r) => {
-        const data = await r.json();
-        if (!r.ok || data?.error) {
-          console.error("Traceability:", data?.error || r.statusText);
-          setTraceability([]);
-          return;
-        }
-        setTraceability(data.rows ?? []);
-      })
-      .catch((err) => {
-        if (err.name !== "AbortError") {
-          console.error("Traceability fetch failed:", err);
-          setTraceability([]);
-        }
-      });
-
     const p13 = fetch(`${API_BASE}/sales-analysis/avg-rate-cards/?${params}`, fetchOpts)
       .then(async (r) => {
         const data = await r.json();
@@ -5826,71 +5718,246 @@ export default function SalesAnalysis() {
         }
       });
 
-    const allPromises = [p1, pGT, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, p13];
-    let completedChunks = 0;
-    allPromises.forEach((p) => {
-      p.finally(() => {
-        completedChunks += 1;
-        const pct = Math.min(98, 12 + Math.round((completedChunks / allPromises.length) * 85));
-        setLoadingProgress((prev) => Math.max(prev, pct));
-      });
-    });
-
-    Promise.all(allPromises).finally(() => {
-      setLoadingProgress(100);
-      setLoading(false);
-    });
-
-    return () => ctrl.abort();
-  }, [appliedDateRange.from, appliedDateRange.to, appliedSelectedInvoiceTypes, appliedSearchQuery, fetchTrigger]);
-
-  useEffect(() => {
-    let fromDate = appliedDateRange.from;
-    let toDate = appliedDateRange.to;
-
-    if (!fromDate || !toDate || !(fromDate instanceof Date) || !(toDate instanceof Date) || isNaN(fromDate.getTime()) || isNaN(toDate.getTime())) {
-      return;
-    }
-
-    setTableLoading(true);
-    const params = new URLSearchParams({
-      from: toIsoDate(fromDate),
-      to: toIsoDate(toDate),
-    });
-    if (appliedSelectedInvoiceTypes.length > 0) params.set("btype", appliedSelectedInvoiceTypes.join(","));
-    if (appliedSearchQuery.trim()) params.set("search", appliedSearchQuery.trim());
-    const ctrl = new AbortController();
-
-    fetch(`${API_BASE}/sales-analysis/invoice-details/?${params}`, {
-      credentials: "include",
-      signal: ctrl.signal,
-    })
+    const p2 = fetch(`${API_BASE}/sales-analysis/weekly-trend/?${params}`, fetchOpts)
       .then(async (r) => {
         const data = await r.json();
         if (!r.ok || data?.error) {
-          console.error("Invoice details:", data?.error || r.statusText);
-          setInvoiceRows([]);
-          setInvoiceBtypes([]);
+          console.error("Weekly trend:", data?.error || r.statusText);
+          setWeeklyTrend(null);
           return;
         }
-        setInvoiceRows(data.rows ?? []);
-        setInvoiceBtypes(data.btypes ?? []);
+        setWeeklyTrend(data);
       })
       .catch((err) => {
         if (err.name !== "AbortError") {
-          console.error("Invoice details fetch failed:", err);
-          setInvoiceRows([]);
-          setInvoiceBtypes([]);
+          console.error("Weekly trend fetch failed:", err);
+          setWeeklyTrend(null);
         }
-      })
+      });
+
+    const tier1Promises = [p1, pGT, p13, p2];
+
+    // ── Tier 2: Analytical Visualizations (Revenue Charts, Month Summary, Top Products, Monthly Trend, Bill Type, Tax) ──
+    const runTier2 = () => {
+      setLoadingProgress((prev) => Math.max(prev, 48));
+
+      const p3 = fetch(`${API_BASE}/sales-analysis/revenue-charts/?${params}`, fetchOpts)
+        .then(async (r) => {
+          const data = await r.json();
+          if (!r.ok || data?.error) {
+            console.error("Revenue charts:", data?.error || r.statusText);
+            setRevenueCharts(null);
+            return;
+          }
+          setRevenueCharts(data);
+        })
+        .catch((err) => {
+          if (err.name !== "AbortError") {
+            console.error("Revenue charts fetch failed:", err);
+            setRevenueCharts(null);
+          }
+        });
+
+      const p4 = fetch(`${API_BASE}/sales-analysis/month-summary/?${params}`, fetchOpts)
+        .then(async (r) => {
+          const data = await r.json();
+          if (!r.ok || data?.error) {
+            console.error("Month summary:", data?.error || r.statusText);
+            setMonthSummary(null);
+            return;
+          }
+          setMonthSummary(data);
+        })
+        .catch((err) => {
+          if (err.name !== "AbortError") {
+            console.error("Month summary fetch failed:", err);
+            setMonthSummary(null);
+          }
+        });
+
+      const p5 = fetch(`${API_BASE}/sales-analysis/top-products/?${params}`, fetchOpts)
+        .then(async (r) => {
+          const data = await r.json();
+          if (!r.ok || data?.error) {
+            console.error("Top products:", data?.error || r.statusText);
+            setTopProductsRaw(null);
+            return;
+          }
+          setTopProductsRaw(data);
+        })
+        .catch((err) => {
+          if (err.name !== "AbortError") {
+            console.error("Top products fetch failed:", err);
+            setTopProductsRaw(null);
+          }
+        });
+
+      const p6 = fetch(`${API_BASE}/sales-analysis/monthly-sales-trend/?${params}`, fetchOpts)
+        .then(async (r) => {
+          const data = await r.json();
+          if (!r.ok || data?.error) {
+            console.error("Monthly sales trend:", data?.error || r.statusText);
+            setMonthlyTrendData(null);
+            return;
+          }
+          setMonthlyTrendData(data);
+        })
+        .catch((err) => {
+          if (err.name !== "AbortError") {
+            console.error("Monthly sales trend fetch failed:", err);
+            setMonthlyTrendData(null);
+          }
+        });
+
+      const p7 = fetch(`${API_BASE}/sales-analysis/bill-type-revenue/?${params}`, fetchOpts)
+        .then(async (r) => {
+          const data = await r.json();
+          if (!r.ok || data?.error) {
+            console.error("Bill type revenue:", data?.error || r.statusText);
+            setBillTypeRevenueData(null);
+            return;
+          }
+          setBillTypeRevenueData(data);
+        })
+        .catch((err) => {
+          if (err.name !== "AbortError") {
+            console.error("Bill type revenue fetch failed:", err);
+            setBillTypeRevenueData(null);
+          }
+        });
+
+      const p8 = fetch(`${API_BASE}/sales-analysis/monthly-tax-trend/?${params}`, fetchOpts)
+        .then(async (r) => {
+          const data = await r.json();
+          if (!r.ok || data?.error) {
+            console.error("Monthly tax trend:", data?.error || r.statusText);
+            setMonthlyTaxData(null);
+            return;
+          }
+          setMonthlyTaxData(data);
+        })
+        .catch((err) => {
+          if (err.name !== "AbortError") {
+            console.error("Monthly tax trend fetch failed:", err);
+            setMonthlyTaxData(null);
+          }
+        });
+
+      return Promise.all([p3, p4, p5, p6, p7, p8]);
+    };
+
+    // ── Tier 3: Deep Data & Tables (Invoice Details, Future Projections, Plan vs Actual, PO Ledger, Traceability) ──
+    const runTier3 = () => {
+      setLoadingProgress((prev) => Math.max(prev, 78));
+
+      const pInv = fetch(`${API_BASE}/sales-analysis/invoice-details/?${params}`, fetchOpts)
+        .then(async (r) => {
+          const data = await r.json();
+          if (!r.ok || data?.error) {
+            console.error("Invoice details:", data?.error || r.statusText);
+            setInvoiceRows([]);
+            setInvoiceBtypes([]);
+            return;
+          }
+          setInvoiceRows(data.rows ?? []);
+          setInvoiceBtypes(data.btypes ?? []);
+        })
+        .catch((err) => {
+          if (err.name !== "AbortError") {
+            console.error("Invoice details fetch failed:", err);
+            setInvoiceRows([]);
+            setInvoiceBtypes([]);
+          }
+        })
+        .finally(() => {
+          setTableLoading(false);
+        });
+
+      const p9 = fetch(`${API_BASE}/sales-analysis/future-projections/?${params}`, fetchOpts)
+        .then(async (r) => {
+          const data = await r.json();
+          if (!r.ok || data?.error) {
+            console.error("Future projections:", data?.error || r.statusText);
+            setProjections([]);
+            return;
+          }
+          setProjections(data.rows ?? []);
+        })
+        .catch((err) => {
+          if (err.name !== "AbortError") {
+            console.error("Future projections fetch failed:", err);
+            setProjections([]);
+          }
+        });
+
+      const p10 = fetch(`${API_BASE}/sales-analysis/plan-vs-actual/?${params}`, fetchOpts)
+        .then(async (r) => {
+          const data = await r.json();
+          if (!r.ok || data?.error) {
+            console.error("Plan vs actual:", data?.error || r.statusText);
+            setPlanVsActual([]);
+            return;
+          }
+          setPlanVsActual(data.rows ?? []);
+        })
+        .catch((err) => {
+          if (err.name !== "AbortError") {
+            console.error("Plan vs actual fetch failed:", err);
+            setPlanVsActual([]);
+          }
+        });
+
+      const p11 = fetch(`${API_BASE}/sales-analysis/po-ledger/?${params}`, fetchOpts)
+        .then(async (r) => {
+          const data = await r.json();
+          if (!r.ok || data?.error) {
+            console.error("PO ledger:", data?.error || r.statusText);
+            setPoLedger([]);
+            return;
+          }
+          setPoLedger(data.rows ?? []);
+        })
+        .catch((err) => {
+          if (err.name !== "AbortError") {
+            console.error("PO ledger fetch failed:", err);
+            setPoLedger([]);
+          }
+        });
+
+      const p12 = fetch(`${API_BASE}/sales-analysis/traceability/?${params}`, fetchOpts)
+        .then(async (r) => {
+          const data = await r.json();
+          if (!r.ok || data?.error) {
+            console.error("Traceability:", data?.error || r.statusText);
+            setTraceability([]);
+            return;
+          }
+          setTraceability(data.rows ?? []);
+        })
+        .catch((err) => {
+          if (err.name !== "AbortError") {
+            console.error("Traceability fetch failed:", err);
+            setTraceability([]);
+          }
+        });
+
+      return Promise.all([pInv, p9, p10, p11, p12]);
+    };
+
+    // Execute staged tiers in clean sequence
+    Promise.all(tier1Promises)
+      .then(() => runTier2())
+      .then(() => runTier3())
       .finally(() => {
+        setLoadingProgress(100);
+        setLoading(false);
         setTableLoading(false);
       });
 
     return () => ctrl.abort();
   }, [appliedDateRange.from, appliedDateRange.to, appliedSelectedInvoiceTypes, appliedSearchQuery, fetchTrigger]);
 
-  // ── Real-time Live Background Sync for Despatch Planning Status ──
+  // ── Real-time Live Background Sync for Despatch Planning Status (15s Lightweight Poll) ──
   const fetchDespatchPlanLive = useCallback(async () => {
     let fromDate = appliedDateRange.from;
     let toDate = appliedDateRange.to;
@@ -5912,9 +5979,17 @@ export default function SalesAnalysis() {
       if (res.ok) {
         const data = await res.json();
         if (data?.rows) {
-          setPlanVsActual(prev => {
-            if (JSON.stringify(prev) === JSON.stringify(data.rows)) {
-              return prev;
+          setPlanVsActual((prev) => {
+            if (prev && prev.length === data.rows.length) {
+              const len = prev.length;
+              if (len === 0 || (
+                prev[0]?.cid === data.rows[0]?.cid &&
+                prev[0]?.partno === data.rows[0]?.partno &&
+                prev[0]?.despatch_qty === data.rows[0]?.despatch_qty &&
+                prev[len - 1]?.despatch_qty === data.rows[len - 1]?.despatch_qty
+              )) {
+                return prev;
+              }
             }
             return data.rows;
           });
@@ -5928,12 +6003,12 @@ export default function SalesAnalysis() {
   }, [appliedDateRange.from, appliedDateRange.to, appliedSelectedInvoiceTypes, appliedSearchQuery]);
 
   useEffect(() => {
-    // Background polling every 3 seconds for near real-time live data
+    // Background polling every 15 seconds for live despatch data (avoids CPU/GC stutter)
     const interval = setInterval(() => {
       if (document.visibilityState === "visible") {
         fetchDespatchPlanLive();
       }
-    }, 3000);
+    }, 15000);
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
@@ -5970,66 +6045,11 @@ export default function SalesAnalysis() {
   };
 
   const isGlobalLoading = loading || tableLoading;
-  const showStatusBar = isGlobalLoading || statusVisible;
 
   return (
     <div className="sa-root" data-spotlight="reports-sales-analysis">
-      {/* ── Modern Glassmorphism Status Loading Card ── */}
-      <div className={`sa-status-card-container ${showStatusBar ? "sa-status-card--active" : "sa-status-card--hidden"}`}>
-        <div className="sa-status-card">
-          <div className="sa-status-card__glow-bg" />
-          <div className="sa-status-card__body">
-            {/* Left section: Icon + Title + Dynamic Status description */}
-            <div className="sa-status-card__left">
-              <div className={`sa-status-card__icon-box ${displayProgress >= 99.5 ? "sa-status-card__icon-box--done" : ""}`}>
-                {displayProgress >= 99.5 ? (
-                  <CheckCircle2 size={18} className="sa-status-card__icon-check" />
-                ) : (
-                  <Loader2 size={18} className="sa-status-card__icon-spin" />
-                )}
-              </div>
-              <div className="sa-status-card__text-wrap">
-                <div className="sa-status-card__title-row">
-                  <span className="sa-status-card__title">
-                    {displayProgress >= 99.5 ? "Sales Analytics Synchronized" : "Updating Sales Analytics"}
-                  </span>
-                  <span className={`sa-status-card__badge ${displayProgress >= 99.5 ? "sa-status-card__badge--done" : ""}`}>
-                    <span className="sa-status-card__badge-dot" />
-                    {displayProgress >= 99.5 ? "Ready" : "Live Sync"}
-                  </span>
-                </div>
-                <div className="sa-status-card__subtitle">
-                  {displayProgress >= 99.5
-                    ? "All invoice telemetry and financial metrics are up to date"
-                    : displayProgress < 35
-                      ? "Fetching invoice records and customer telemetry..."
-                      : displayProgress < 75
-                        ? "Aggregating revenue analytics, item weights & trends..."
-                        : "Finalizing KPIs and dispatch summaries..."}
-                </div>
-              </div>
-            </div>
-
-            {/* Right section: High-tech glass percentage pill */}
-            <div className="sa-status-card__right">
-              <div className={`sa-status-pill ${displayProgress >= 99.5 ? "sa-status-pill--done" : ""}`}>
-                <span className="sa-status-pill__percent">{Math.round(displayProgress)}%</span>
-                <span className="sa-status-pill__label">{displayProgress >= 99.5 ? "Complete" : "Loaded"}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Integrated Sleek Progress Bar with Shimmer Beam */}
-          <div className="sa-status-card__track">
-            <div
-              className={`sa-status-card__fill ${displayProgress >= 99.5 ? "sa-status-card__fill--done" : ""}`}
-              style={{ width: `${Math.min(100, Math.max(0, displayProgress))}%` }}
-            >
-              <div className="sa-status-card__fill-shimmer" />
-            </div>
-          </div>
-        </div>
-      </div>
+      {/* ── Modern Glassmorphism Status Loading Card (Isolated 60fps Component) ── */}
+      <SalesStatusBar isGlobalLoading={isGlobalLoading} loadingProgress={loadingProgress} />
 
       {/* ── Filter Section ── */}
       <div
@@ -9283,7 +9303,7 @@ export default function SalesAnalysis() {
                   </tr>
                 ))
               ) : (
-                (displayedInvoices.length ? displayedInvoices : []).map((r, i) => (
+                (paginatedInvoices.length ? paginatedInvoices : []).map((r, i) => (
                   <tr key={`${r.invoice_no}-${r.part_no || ''}-${i}`} style={{ "--ri": i }} className="sa-inv-table-row">
                     <td><strong className="sa-inv-no">{r.invoice_no || "—"}</strong></td>
                     <td className="sa-date">{formatInvDate(r.date)}</td>
@@ -9350,11 +9370,52 @@ export default function SalesAnalysis() {
             )}
           </table>
         </div>
-        <div className="sa-action-bar" data-spotlight="sa-export-controls">
-          {/* <button className="sa-btn sa-btn--primary" onClick={() => alert("Exporting to Excel…")}>📥 Export Excel</button> */}
-          {/* <button className="sa-btn sa-btn--primary" onClick={() => alert("Exporting to PDF…")}>📄 Export PDF</button> */}
-          {/* <button className="sa-btn sa-btn--ghost" onClick={() => window.print()}>🖨️ Print</button> */}
-        </div>
+
+        {/* ── Invoice Details Pagination Bar ── */}
+        {!tableLoading && displayedInvoices.length > 0 && (
+          <div className="sa-table-pagination-bar">
+            <span className="sa-pagination-info">
+              Showing {displayedInvoices.length === 0 ? 0 : ((invPage - 1) * (invPageSize === -1 ? displayedInvoices.length : invPageSize)) + 1}–{Math.min(invPage * (invPageSize === -1 ? displayedInvoices.length : invPageSize), displayedInvoices.length)} of {displayedInvoices.length} transactions
+            </span>
+            <div className="sa-pagination-actions">
+              <select
+                className="sa-pagination-size-select"
+                value={invPageSize}
+                onChange={(e) => {
+                  setInvPageSize(Number(e.target.value));
+                  setInvPage(1);
+                }}
+              >
+                <option value={25}>25 rows</option>
+                <option value={50}>50 rows</option>
+                <option value={100}>100 rows</option>
+                <option value={-1}>All rows</option>
+              </select>
+              <button
+                type="button"
+                className="sa-pagination-btn"
+                disabled={invPage <= 1}
+                onClick={() => setInvPage((p) => Math.max(1, p - 1))}
+                title="Previous page"
+              >
+                <ChevronLeft size={14} />
+              </button>
+              <span className="sa-pagination-current-page">
+                {invPage} / {totalInvPages}
+              </span>
+              <button
+                type="button"
+                className="sa-pagination-btn"
+                disabled={invPage >= totalInvPages}
+                onClick={() => setInvPage((p) => Math.min(totalInvPages, p + 1))}
+                title="Next page"
+              >
+                <ChevronRight size={14} />
+              </button>
+            </div>
+          </div>
+        )}
+        <div className="sa-action-bar" data-spotlight="sa-export-controls" style={{ display: 'none' }} />
       </div>
 
       {/* ═══════════════════════════════════════════════════════
@@ -10166,17 +10227,17 @@ export default function SalesAnalysis() {
               {loading ? (
                 [...Array(5)].map((_, idx) => (
                   <tr key={idx}>
-                    <td style={{ textAlign: "center" }}><div className="sa-skeleton" style={{ width: '20px', height: '12px' }} /></td>
+                    <td style={{ textAlign: "center" }}><div className="sa-skeleton" style={{ width: '20px', height: '12px', margin: '0 auto' }} /></td>
                     <td><div className="sa-skeleton" style={{ width: '160px', height: '12px' }} /></td>
                     <td><div className="sa-skeleton" style={{ width: '220px', height: '12px' }} /></td>
-                    <td><div className="sa-skeleton" style={{ width: '80px', height: '12px' }} /></td>
-                    <td><div className="sa-skeleton" style={{ width: '65px', height: '12px' }} /></td>
+                    <td style={{ textAlign: "center" }}><div className="sa-skeleton" style={{ width: '80px', height: '12px', margin: '0 auto' }} /></td>
+                    <td style={{ textAlign: "center" }}><div className="sa-skeleton" style={{ width: '65px', height: '12px', margin: '0 auto' }} /></td>
                     <td style={{ textAlign: "right" }}><div className="sa-skeleton" style={{ width: '55px', height: '12px', marginLeft: 'auto' }} /></td>
-                    <td><div className="sa-skeleton" style={{ width: '80px', height: '12px' }} /></td>
-                    <td><div className="sa-skeleton" style={{ width: '65px', height: '12px' }} /></td>
+                    <td style={{ textAlign: "center" }}><div className="sa-skeleton" style={{ width: '80px', height: '12px', margin: '0 auto' }} /></td>
+                    <td style={{ textAlign: "center" }}><div className="sa-skeleton" style={{ width: '65px', height: '12px', margin: '0 auto' }} /></td>
                     <td style={{ textAlign: "right" }}><div className="sa-skeleton" style={{ width: '55px', height: '12px', marginLeft: 'auto' }} /></td>
-                    <td><div className="sa-skeleton" style={{ width: '80px', height: '12px' }} /></td>
-                    <td><div className="sa-skeleton" style={{ width: '80px', height: '12px' }} /></td>
+                    <td style={{ textAlign: "center" }}><div className="sa-skeleton" style={{ width: '80px', height: '12px', margin: '0 auto' }} /></td>
+                    <td style={{ textAlign: "center" }}><div className="sa-skeleton" style={{ width: '80px', height: '12px', margin: '0 auto' }} /></td>
                   </tr>
                 ))
               ) : sortedTraceability.length === 0 ? (
@@ -10199,29 +10260,74 @@ export default function SalesAnalysis() {
                   </td>
                 </tr>
               ) : (
-                sortedTraceability.map((row, i) => (
+                (paginatedTraceability.length ? paginatedTraceability : []).map((row, i) => (
                   <tr key={i} className="sa-trace-row" style={{ "--ri": i }}>
-                    <td style={{ textAlign: "center" }}>{i + 1}</td>
+                    <td style={{ textAlign: "center" }}>{((tracePage - 1) * (tracePageSize === -1 ? sortedTraceability.length : tracePageSize)) + i + 1}</td>
                     <td><strong className="sa-trace-cust-name">{row.customer}</strong></td>
                     <td>
                       <div className="sa-trace-part-cell" title={row.partNoDesc || "—"}>
                         {renderTracePartDesc(row.partNoDesc)}
                       </div>
                     </td>
-                    <td><strong className="sa-trace-inv">{row.invNo}</strong></td>
-                    <td className="sa-date">{formatToDdMmYyyy(row.invDate)}</td>
+                    <td style={{ textAlign: "center" }}><strong className="sa-trace-inv">{row.invNo}</strong></td>
+                    <td className="sa-date" style={{ textAlign: "center" }}>{formatToDdMmYyyy(row.invDate)}</td>
                     <td className="sa-num" style={{ textAlign: "right" }}>{formatQty(row.invQty)}</td>
-                    <td>{row.dcNo}</td>
-                    <td className="sa-date">{formatToDdMmYyyy(row.dcDate)}</td>
+                    <td style={{ textAlign: "center" }}>{row.dcNo}</td>
+                    <td className="sa-date" style={{ textAlign: "center" }}>{formatToDdMmYyyy(row.dcDate)}</td>
                     <td className="sa-num" style={{ textAlign: "right" }}>{formatQty(row.dcQty)}</td>
-                    <td><span className="sa-trace-po">{row.grnPo}</span></td>
-                    <td><span className="sa-trace-code">{row.rcNo}</span></td>
+                    <td style={{ textAlign: "center" }}><span className="sa-trace-po">{row.grnPo}</span></td>
+                    <td style={{ textAlign: "center" }}><span className="sa-trace-code">{row.rcNo}</span></td>
                   </tr>
                 ))
               )}
             </tbody>
           </table>
         </div>
+
+        {/* ── Traceability Pagination Bar ── */}
+        {!loading && sortedTraceability.length > 0 && (
+          <div className="sa-table-pagination-bar">
+            <span className="sa-pagination-info">
+              Showing {sortedTraceability.length === 0 ? 0 : ((tracePage - 1) * (tracePageSize === -1 ? sortedTraceability.length : tracePageSize)) + 1}–{Math.min(tracePage * (tracePageSize === -1 ? sortedTraceability.length : tracePageSize), sortedTraceability.length)} of {sortedTraceability.length} records
+            </span>
+            <div className="sa-pagination-actions">
+              <select
+                className="sa-pagination-size-select"
+                value={tracePageSize}
+                onChange={(e) => {
+                  setTracePageSize(Number(e.target.value));
+                  setTracePage(1);
+                }}
+              >
+                <option value={25}>25 rows</option>
+                <option value={50}>50 rows</option>
+                <option value={100}>100 rows</option>
+                <option value={-1}>All rows</option>
+              </select>
+              <button
+                type="button"
+                className="sa-pagination-btn"
+                disabled={tracePage <= 1}
+                onClick={() => setTracePage((p) => Math.max(1, p - 1))}
+                title="Previous page"
+              >
+                <ChevronLeft size={14} />
+              </button>
+              <span className="sa-pagination-current-page">
+                {tracePage} / {totalTracePages}
+              </span>
+              <button
+                type="button"
+                className="sa-pagination-btn"
+                disabled={tracePage >= totalTracePages}
+                onClick={() => setTracePage((p) => Math.min(totalTracePages, p + 1))}
+                title="Next page"
+              >
+                <ChevronRight size={14} />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── PO Ledger Table ── */}
@@ -10410,7 +10516,7 @@ export default function SalesAnalysis() {
             <tbody>
               {paginatedPoLedger.length ? (
                 paginatedPoLedger.map((row, i) => {
-                  const absoluteRowIdx = (poPage - 1) * poPageSize + i + 1;
+                  const absoluteRowIdx = poPageSize === -1 ? i + 1 : (poPage - 1) * poPageSize + i + 1;
                   return (
                     <tr key={`${row.poNo}-${i}`} className="sa-po-row" style={{ "--ri": i }}>
                       <td>{absoluteRowIdx}</td>
@@ -10537,43 +10643,48 @@ export default function SalesAnalysis() {
           </table>
         </div>
 
-        {/* Pagination controls */}
-        {totalPoPages > 1 && (
-          <div className="sa-po-pagination">
-            <button
-              onClick={() => setPoPage(p => Math.max(1, p - 1))}
-              disabled={poPage === 1}
-              className="sa-pagination-btn"
-            >
-              ◀ Previous
-            </button>
-            <div className="sa-pagination-pages">
-              {getPageNumbers.map((item, idx) => {
-                if (item === "...") {
-                  return (
-                    <span key={`ellipsis-${idx}`} className="sa-pagination-ellipsis">
-                      ...
-                    </span>
-                  );
-                }
-                return (
-                  <button
-                    key={item}
-                    onClick={() => setPoPage(item)}
-                    className={`sa-pagination-page-btn ${poPage === item ? 'active' : ''}`}
-                  >
-                    {item}
-                  </button>
-                );
-              })}
+        {/* ── Purchase Order (PO) Ledger Pagination Bar ── */}
+        {!loading && sortedPoLedger.length > 0 && (
+          <div className="sa-table-pagination-bar">
+            <span className="sa-pagination-info">
+              Showing {sortedPoLedger.length === 0 ? 0 : ((poPage - 1) * (poPageSize === -1 ? sortedPoLedger.length : poPageSize)) + 1}–{Math.min(poPage * (poPageSize === -1 ? sortedPoLedger.length : poPageSize), sortedPoLedger.length)} of {sortedPoLedger.length} POs
+            </span>
+            <div className="sa-pagination-actions">
+              <select
+                className="sa-pagination-size-select"
+                value={poPageSize}
+                onChange={(e) => {
+                  setPoPageSize(Number(e.target.value));
+                  setPoPage(1);
+                }}
+              >
+                <option value={25}>25 rows</option>
+                <option value={50}>50 rows</option>
+                <option value={100}>100 rows</option>
+                <option value={-1}>All rows</option>
+              </select>
+              <button
+                type="button"
+                className="sa-pagination-btn"
+                disabled={poPage <= 1}
+                onClick={() => setPoPage((p) => Math.max(1, p - 1))}
+                title="Previous page"
+              >
+                <ChevronLeft size={14} />
+              </button>
+              <span className="sa-pagination-current-page">
+                {poPage} / {totalPoPages}
+              </span>
+              <button
+                type="button"
+                className="sa-pagination-btn"
+                disabled={poPage >= totalPoPages}
+                onClick={() => setPoPage((p) => Math.min(totalPoPages, p + 1))}
+                title="Next page"
+              >
+                <ChevronRight size={14} />
+              </button>
             </div>
-            <button
-              onClick={() => setPoPage(p => Math.min(totalPoPages, p + 1))}
-              disabled={poPage === totalPoPages}
-              className="sa-pagination-btn"
-            >
-              Next ▶
-            </button>
           </div>
         )}
       </div>

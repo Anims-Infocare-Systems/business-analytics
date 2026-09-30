@@ -20,11 +20,40 @@ logger = logging.getLogger(__name__)
 from .views import (
     get_tenant_connection,
     parse_date_range,
-    table_exists,
-    find_column_ci,
+    table_exists as _raw_table_exists,
+    find_column_ci as _raw_find_column_ci,
     resolve_erp_table,
-    find_first_column,
+    find_first_column as _raw_find_first_column,
 )
+
+# ── High-Performance In-Memory Schema Caches ──
+_QA_TABLE_EXISTS_CACHE = {}
+_QA_FIRST_COL_CACHE = {}
+_QA_COL_CI_CACHE = {}
+
+def table_exists(cursor, table_name):
+    key = str(table_name).strip().lower()
+    if key in _QA_TABLE_EXISTS_CACHE:
+        return _QA_TABLE_EXISTS_CACHE[key]
+    val = _raw_table_exists(cursor, table_name)
+    _QA_TABLE_EXISTS_CACHE[key] = val
+    return val
+
+def find_first_column(cursor, table_name, candidates):
+    key = (str(table_name).strip().lower(), tuple(str(c).strip().lower() for c in candidates))
+    if key in _QA_FIRST_COL_CACHE:
+        return _QA_FIRST_COL_CACHE[key]
+    val = _raw_find_first_column(cursor, table_name, candidates)
+    _QA_FIRST_COL_CACHE[key] = val
+    return val
+
+def find_column_ci(cursor, schema, table, candidates):
+    key = (str(schema).strip().lower(), str(table).strip().lower(), tuple(str(c).strip().lower() for c in candidates))
+    if key in _QA_COL_CI_CACHE:
+        return _QA_COL_CI_CACHE[key]
+    val = _raw_find_column_ci(cursor, schema, table, candidates)
+    _QA_COL_CI_CACHE[key] = val
+    return val
 
 def table_has_column(cursor, table_name, column_name):
     return find_first_column(cursor, table_name, [column_name]) is not None
@@ -2935,7 +2964,7 @@ def quality_analysis_records(request):
                 ), 0) AS INT)
             """ if has_rework_table else "0"
 
-            job_rc_join = """
+            job_rc_join = f"""
                 LEFT JOIN (
                     SELECT 
                         InspNo, 
@@ -2944,6 +2973,10 @@ def quality_analysis_records(request):
                         MAX(RouCardNo) AS RouCardNo
                     FROM JobIncomeDetInspRouteCard
                     WHERE RouCardNo IS NOT NULL AND LTRIM(RTRIM(RouCardNo)) <> ''
+                      AND (
+                          InspNo IN (SELECT inspno FROM InJob_Mas WHERE ISNULL(deleted, 0) = 0 AND CAST(inspdate AS DATE) BETWEEN '{start_date}' AND '{end_date}')
+                          OR JiNo IN (SELECT jino FROM InJob_Mas WHERE ISNULL(deleted, 0) = 0 AND CAST(inspdate AS DATE) BETWEEN '{start_date}' AND '{end_date}')
+                      )
                     GROUP BY InspNo, JiNo, PartNo
                 ) jrc ON (
                     LTRIM(RTRIM(m.inspno)) = LTRIM(RTRIM(jrc.InspNo)) 
@@ -2953,7 +2986,7 @@ def quality_analysis_records(request):
             """ if has_job_rc_table else ""
             job_rc_select = "COALESCE(NULLIF(LTRIM(RTRIM(jrc.RouCardNo)), ''), m.jino)" if has_job_rc_table else "m.jino"
 
-            inter_rc_join = """
+            inter_rc_join = f"""
                 LEFT JOIN (
                     SELECT 
                         inter_inspno, 
@@ -2961,12 +2994,16 @@ def quality_analysis_records(request):
                         MAX(RouCardNo) AS RouCardNo
                     FROM InterInspEntryRouteCard
                     WHERE ISNULL(deleted, 0) = 0 AND RouCardNo IS NOT NULL AND LTRIM(RTRIM(RouCardNo)) <> ''
+                      AND inter_inspno IN (
+                          SELECT inter_inspno FROM InterInspectionEntry
+                          WHERE ISNULL(deleted, 0) = 0 AND CAST(inter_inspdate AS DATE) BETWEEN '{start_date}' AND '{end_date}'
+                      )
                     GROUP BY inter_inspno, partno
                 ) irc ON LTRIM(RTRIM(i.inter_inspno)) = LTRIM(RTRIM(irc.inter_inspno)) AND LTRIM(RTRIM(i.partno)) = LTRIM(RTRIM(irc.partno))
             """ if has_inter_rc_table else ""
             inter_rc_select = "COALESCE(NULLIF(LTRIM(RTRIM(irc.RouCardNo)), ''), '')" if has_inter_rc_table else "NULL"
 
-            final_rc_join = """
+            final_rc_join = f"""
                 LEFT JOIN (
                     SELECT
                         LTRIM(RTRIM(FinspNo)) AS FinspNo,
@@ -2985,6 +3022,10 @@ def quality_analysis_records(request):
                         ), '') AS RouCardNo
                     FROM FinalInspRouteCard frc
                     WHERE ISNULL(frc.deleted, 0) = 0 AND frc.RouCardNo IS NOT NULL AND LTRIM(RTRIM(frc.RouCardNo)) <> ''
+                      AND frc.FinspNo IN (
+                          SELECT finspno FROM FinalInspectionEntry
+                          WHERE ISNULL(deleted, 0) = 0 AND CAST(finspdate AS DATE) BETWEEN '{start_date}' AND '{end_date}'
+                      )
                     GROUP BY LTRIM(RTRIM(FinspNo)), LTRIM(RTRIM(partno))
                 ) frc_agg ON LTRIM(RTRIM(f.finspno)) = frc_agg.FinspNo AND LTRIM(RTRIM(f.partno)) = frc_agg.partno
             """ if has_final_rc_table else ""

@@ -192,11 +192,11 @@ export default function Tips({ onStartTour, onNavigateModule, onOpenSpotlight, o
                     <span className="tips-meta-pill">
                         <HiSparkles size={14} style={{ color: "#eab308" }} /> {currentVersionData.tips?.length || 0} Curated Tips
                     </span>
-                    {tourSteps.length > 0 && (
+                    {/* {tourSteps.length > 0 && (
                         <span className="tips-meta-pill tips-meta-pill--highlight">
                             <FiTarget size={14} /> {tourSteps.length}-Step Interactive Spotlight
                         </span>
-                    )}
+                    )} */}
                 </div>
             </div>
 
@@ -213,12 +213,12 @@ export default function Tips({ onStartTour, onNavigateModule, onOpenSpotlight, o
                                 <span className="tips-tour-hero__pulse-dot" />
                                 <HiSparkles size={13} /> {selectedVersion} INTERACTIVE SPOTLIGHT
                             </span>
-                            <span className="tips-tour-hero__pill-stat">
+                            {/* <span className="tips-tour-hero__pill-stat">
                                 <FiTarget size={13} /> {tourSteps.length} Live Steps
                             </span>
                             <span className="tips-tour-hero__pill-stat">
                                 <FiClock size={13} /> ~2 Mins Walkthrough
-                            </span>
+                            </span> */}
                         </div>
 
                         <h3 className="tips-tour-hero__title">
@@ -230,7 +230,7 @@ export default function Tips({ onStartTour, onNavigateModule, onOpenSpotlight, o
                         </p>
 
                         <div className="tips-tour-hero__chips">
-                            <span className="tips-hero-chip">
+                            {/* <span className="tips-hero-chip">
                                 <FiCheck size={13} /> Live DOM Highlighting
                             </span>
                             <span className="tips-hero-chip">
@@ -238,7 +238,7 @@ export default function Tips({ onStartTour, onNavigateModule, onOpenSpotlight, o
                             </span>
                             <span className="tips-hero-chip">
                                 <FiCheck size={13} /> Keyboard Shortcut Support
-                            </span>
+                            </span> */}
                             <button
                                 type="button"
                                 className="tips-hero-chip tips-hero-chip--spotlight"

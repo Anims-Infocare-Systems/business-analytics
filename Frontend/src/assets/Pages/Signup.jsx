@@ -213,9 +213,9 @@ function PlanCard({ plan, billing, onBillingChange, onSelect }) {
                             <IconFree />}
                 </div>
                 {(plan.id === "pro" || plan.id === "max") && (
-                    <div className="sg-billing-badge">
-                        <span>Yearly</span>
-                        <span className="sg-save-badge" id="save-badge">Save 17%</span>
+                    <div className="sg-billing-badge1">
+                        {/* <span>Yearly</span>
+                        <span className="sg-save-badge" id="save-badge">Save 17%</span> */}
                     </div>
                 )}
             </div>

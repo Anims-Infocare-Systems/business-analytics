@@ -17,7 +17,11 @@ import {
     FiBarChart2,
     FiAlertCircle,
     FiCalendar,
-    FiPackage
+    FiPackage,
+    FiSliders,
+    FiUserCheck,
+    FiCpu,
+    FiLayers
 } from "react-icons/fi";
 import { HiSparkles } from "react-icons/hi2";
 
@@ -36,6 +40,10 @@ function renderStepIcon(iconName) {
     if (key === "shieldalert") return <FiAlertCircle className="tg-step-icon-svg" />;
     if (key === "calendar") return <FiCalendar className="tg-step-icon-svg" />;
     if (key === "package") return <FiPackage className="tg-step-icon-svg" />;
+    if (key === "sliders" || key === "slidershorizontal" || key === "filter") return <FiSliders className="tg-step-icon-svg" />;
+    if (key === "usercheck" || key === "operator") return <FiUserCheck className="tg-step-icon-svg" />;
+    if (key === "cpu" || key === "machine") return <FiCpu className="tg-step-icon-svg" />;
+    if (key === "layers" || key === "timeline") return <FiLayers className="tg-step-icon-svg" />;
     return <span className="tg-step-icon-emoji">✨</span>;
 }
 
@@ -52,6 +60,7 @@ export default function TourGuide({
     const [popoverPos, setPopoverPos] = useState({ top: 0, left: 0, placement: "bottom" });
     const [isCelebrating, setIsCelebrating] = useState(false);
     const retryTimersRef = useRef([]);
+    const popoverRef = useRef(null);
 
     const currentStep = steps[currentStepIndex];
 
@@ -63,20 +72,12 @@ export default function TourGuide({
         }
     }, [currentStepIndex, isOpen, isCelebrating, currentStep, onStepChange]);
 
-    // Helper: Check if element is genuinely visible and within viewport bounds
+    // Helper: Check if element is genuinely rendered in DOM
     const isElementVisible = (el) => {
         if (!el) return false;
         try {
             const style = window.getComputedStyle(el);
-            if (style.display === "none" || style.visibility === "hidden" || style.opacity === "0") {
-                return false;
-            }
-            const rect = el.getBoundingClientRect();
-            if (rect.width <= 0 || rect.height <= 0) {
-                return false;
-            }
-            // Must not be completely outside viewport (e.g. inside an offscreen drawer)
-            if (rect.right <= 0 || rect.bottom <= 0 || rect.left >= window.innerWidth || rect.top >= window.innerHeight) {
+            if (style.display === "none" || style.visibility === "hidden") {
                 return false;
             }
             return true;
@@ -95,7 +96,23 @@ export default function TourGuide({
         }
 
         if (isElementVisible(el)) {
-            const rect = el.getBoundingClientRect();
+            let rect = el.getBoundingClientRect();
+
+            // If target is currently scrolled off-screen, auto-scroll enclosing section into view immediately
+            if (rect.bottom < 0 || rect.top > window.innerHeight) {
+                const contentContainer = document.querySelector(".dl-content");
+                const enclosingCard = el.closest(".qa2-card, .qa2-timeline-container, .qa2-filter-card, .pa2-card, .pa2-fs-section, .apa-root, .sa-card") || el;
+                if (contentContainer && enclosingCard) {
+                    const cRect = contentContainer.getBoundingClientRect();
+                    const eRect = enclosingCard.getBoundingClientRect();
+                    const targetScrollTop = contentContainer.scrollTop + (eRect.top - cRect.top) - 16;
+                    const finalScroll = Math.max(0, targetScrollTop);
+                    contentContainer.scrollTop = finalScroll;
+                    contentContainer.scrollTo({ top: finalScroll, behavior: "auto" });
+                    rect = el.getBoundingClientRect();
+                }
+            }
+
             const padding = 6;
             const newRect = {
                 top: Math.max(4, rect.top - padding),
@@ -109,9 +126,6 @@ export default function TourGuide({
             const isMobile = window.innerWidth <= 768;
 
             if (isMobile) {
-                // Smart mobile docking:
-                // If target element midpoint is in top 48% of screen, dock card at bottom
-                // If target element midpoint is in bottom 52% of screen, dock card at top
                 const targetMidY = newRect.top + (newRect.height / 2);
                 const placeAtBottom = targetMidY < (window.innerHeight * 0.48);
 
@@ -127,13 +141,35 @@ export default function TourGuide({
 
             // Desktop positioning
             const hasSubItems = currentStep.subItems && currentStep.subItems.length > 0;
-            const popoverWidth = Math.min(window.innerWidth - 24, hasSubItems ? 400 : 360);
-            const popoverHeight = hasSubItems ? 280 : 220;
+            const hasExpandable = Boolean(currentStep.isExpandable);
+
+            // Measure actual rendered popover dimensions if mounted in DOM
+            const popoverEl = popoverRef.current;
+            const measuredHeight = popoverEl ? popoverEl.offsetHeight : 0;
+            const measuredWidth = popoverEl ? popoverEl.offsetWidth : 0;
+
+            // Realistic estimated dimensions before DOM measurement
+            const estimatedHeight = 110
+                + (currentStep.title ? 40 : 0)
+                + (currentStep.description ? 70 : 0)
+                + (hasExpandable ? 65 : 0)
+                + (hasSubItems ? (currentStep.subItems.length * 60) : 0)
+                + 65;
+
+            const popoverHeight = Math.max(measuredHeight, estimatedHeight, 380);
+            const popoverWidth = Math.min(window.innerWidth - 32, measuredWidth > 0 ? measuredWidth : (hasSubItems ? 400 : 360));
             const margin = 14;
 
             let top = 0;
             let left = 0;
             let placement = currentStep.placement || "bottom";
+
+            // Calculate safe bounds considering the left sidebar
+            const sidebarEl = document.querySelector(".dl-sidebar");
+            const minAllowedLeft = sidebarEl && window.getComputedStyle(sidebarEl).position !== "fixed"
+                ? Math.max(16, sidebarEl.getBoundingClientRect().right + 16)
+                : 16;
+            const maxAllowedLeft = Math.max(minAllowedLeft, window.innerWidth - popoverWidth - 16);
 
             if (window.innerWidth < 820) {
                 if (placement === "right" || placement === "left") {
@@ -141,41 +177,77 @@ export default function TourGuide({
                 }
             }
 
-            if (placement === "bottom") {
+            const spaceAbove = newRect.top - 16;
+            const spaceBelow = window.innerHeight - (newRect.top + newRect.height) - 16;
+
+            // Check if card takes up majority of screen height (tall sections)
+            const isTallCard = newRect.height > (window.innerHeight * 0.55);
+
+            // Smart horizontal alignment calculation
+            const computeHorizontalLeft = () => {
+                if (currentStep.align === "start") {
+                    return Math.max(minAllowedLeft, Math.min(maxAllowedLeft, newRect.left));
+                }
+                if (currentStep.align === "right") {
+                    return Math.max(minAllowedLeft, Math.min(maxAllowedLeft, newRect.left + newRect.width - popoverWidth));
+                }
+                return Math.max(minAllowedLeft, Math.min(maxAllowedLeft, newRect.left + (newRect.width / 2) - (popoverWidth / 2)));
+            };
+
+            if (isTallCard) {
+                // When the target element is taller than 55% of the viewport:
+                if (placement === "top" && spaceAbove >= popoverHeight + margin) {
+                    top = newRect.top - popoverHeight - margin;
+                    left = computeHorizontalLeft();
+                } else if (spaceBelow >= popoverHeight + margin) {
+                    top = newRect.top + newRect.height + margin;
+                    left = computeHorizontalLeft();
+                } else {
+                    // Dock inside viewport cleanly near bottom, avoiding obstructing center data
+                    top = window.innerHeight - popoverHeight - 24;
+                    left = currentStep.align === "start"
+                        ? Math.max(minAllowedLeft, Math.min(maxAllowedLeft, newRect.left + 16))
+                        : Math.max(minAllowedLeft, Math.min(maxAllowedLeft, newRect.left + newRect.width - popoverWidth - 24));
+                }
+            } else if (placement === "bottom") {
                 top = newRect.top + newRect.height + margin;
-                left = newRect.left + (newRect.width / 2) - (popoverWidth / 2);
+                left = computeHorizontalLeft();
                 if (top + popoverHeight > window.innerHeight - 20) {
-                    top = Math.max(16, newRect.top - popoverHeight - margin);
-                    placement = "top";
+                    if (spaceAbove >= popoverHeight + margin) {
+                        top = newRect.top - popoverHeight - margin;
+                        placement = "top";
+                    }
                 }
             } else if (placement === "top") {
                 top = newRect.top - popoverHeight - margin;
-                left = newRect.left + (newRect.width / 2) - (popoverWidth / 2);
+                left = computeHorizontalLeft();
                 if (top < 16) {
-                    top = newRect.top + newRect.height + margin;
-                    placement = "bottom";
+                    if (spaceBelow >= popoverHeight + margin) {
+                        top = newRect.top + newRect.height + margin;
+                        placement = "bottom";
+                    }
                 }
             } else if (placement === "right") {
                 top = newRect.top + (newRect.height / 2) - (popoverHeight / 2);
                 left = newRect.left + newRect.width + margin;
                 if (left + popoverWidth > window.innerWidth - 20) {
                     top = newRect.top + newRect.height + margin;
-                    left = newRect.left + (newRect.width / 2) - (popoverWidth / 2);
+                    left = computeHorizontalLeft();
                     placement = "bottom";
                 }
             } else if (placement === "left") {
                 top = newRect.top + (newRect.height / 2) - (popoverHeight / 2);
                 left = newRect.left - popoverWidth - margin;
-                if (left < 16) {
+                if (left < minAllowedLeft) {
                     top = newRect.top + newRect.height + margin;
-                    left = newRect.left + (newRect.width / 2) - (popoverWidth / 2);
+                    left = computeHorizontalLeft();
                     placement = "bottom";
                 }
             }
 
-            // Keep inside horizontal viewport boundaries
-            left = Math.max(12, Math.min(window.innerWidth - popoverWidth - 12, left));
-            top = Math.max(12, Math.min(window.innerHeight - popoverHeight - 12, top));
+            // CRITICAL: Clamping ensures that popover NEVER exceeds viewport boundaries:
+            left = Math.max(minAllowedLeft, Math.min(maxAllowedLeft, left));
+            top = Math.max(16, Math.min(window.innerHeight - popoverHeight - 24, top));
 
             setPopoverPos({ top, left, placement, isMobileDocked: false });
             return;
@@ -186,26 +258,63 @@ export default function TourGuide({
         setPopoverPos({ top: 0, left: 0, placement: "bottom", isMobileDocked: false });
     }, [isOpen, isCelebrating, currentStep]);
 
-    // Handle step change & scroll target into view
-    useEffect(() => {
+    // Smart scroll & spotlight positioning
+    const attemptScrollAndPosition = useCallback(() => {
         if (!isOpen || isCelebrating || !currentStep) return;
 
-        const attemptScrollAndPosition = () => {
-            let el = document.querySelector(currentStep.targetSelector);
-            if (!isElementVisible(el) && currentStep.fallbackSelector) {
-                el = document.querySelector(currentStep.fallbackSelector);
+        // 1. In-card tab switching (e.g. PO Fulfillment vs Futuristic Schedule)
+        if (currentStep.tabAction === "standard") {
+            const stdBtn = document.querySelector("[data-spotlight='pa-po-fulfillment-btn'], .pa2-fs-main-tab-btn:not(.pa2-fs-main-tab-btn--futuristic)");
+            if (stdBtn && !stdBtn.classList.contains("active")) {
+                stdBtn.click();
             }
+        } else if (currentStep.tabAction === "futuristic") {
+            const futBtn = document.querySelector("[data-spotlight='pa-futuristic-schedule-btn'], .pa2-fs-main-tab-btn--futuristic");
+            if (futBtn && !futBtn.classList.contains("active")) {
+                futBtn.click();
+            }
+        }
 
-            if (el) {
+        let el = document.querySelector(currentStep.targetSelector);
+        if (!isElementVisible(el) && currentStep.fallbackSelector) {
+            el = document.querySelector(currentStep.fallbackSelector);
+        }
+
+        if (el) {
+            // Smart scroll: position the section top neatly ~16px below the topbar in .dl-content
+            const contentContainer = document.querySelector(".dl-content");
+            const enclosingCard = el.closest(".qa2-card, .qa2-timeline-container, .qa2-filter-card, .pa2-card, .pa2-fs-section, .apa-root, .sa-card") || el;
+
+            if (contentContainer && enclosingCard) {
+                const containerRect = contentContainer.getBoundingClientRect();
+                const cardRect = enclosingCard.getBoundingClientRect();
+                const relativeTop = cardRect.top - containerRect.top;
+
+                // If section is not already aligned ~16px below topbar, perform instant scroll
+                if (Math.abs(relativeTop - 16) > 20) {
+                    const targetScrollTop = contentContainer.scrollTop + relativeTop - 16;
+                    const finalScroll = Math.max(0, targetScrollTop);
+                    contentContainer.scrollTop = finalScroll;
+                    contentContainer.scrollTo({
+                        top: finalScroll,
+                        behavior: "auto"
+                    });
+                }
+            } else {
                 try {
-                    el.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+                    (enclosingCard || el).scrollIntoView({ behavior: "auto", block: "start" });
                 } catch {
                     /* fallback */
                 }
             }
+        }
 
-            updateTargetPosition();
-        };
+        updateTargetPosition();
+    }, [isOpen, isCelebrating, currentStep, updateTargetPosition]);
+
+    // Handle step change & scroll target into view
+    useEffect(() => {
+        if (!isOpen || isCelebrating || !currentStep) return;
 
         attemptScrollAndPosition();
 
@@ -214,7 +323,7 @@ export default function TourGuide({
         retryTimersRef.current = [];
 
         // Staggered checks to accommodate route transitions, table loading, CSS animations & mobile drawer
-        [80, 180, 320, 520, 850, 1200].forEach(delay => {
+        [80, 180, 320, 520, 850, 1200, 1800, 2600].forEach(delay => {
             const t = setTimeout(attemptScrollAndPosition, delay);
             retryTimersRef.current.push(t);
         });
@@ -223,7 +332,29 @@ export default function TourGuide({
             retryTimersRef.current.forEach(clearTimeout);
             retryTimersRef.current = [];
         };
-    }, [currentStepIndex, isOpen, isCelebrating, currentStep, updateTargetPosition]);
+    }, [currentStepIndex, isOpen, isCelebrating, currentStep, attemptScrollAndPosition]);
+
+    // Auto-adjust scroll & spotlight whenever content size changes (e.g. API data load, chart rendering)
+    useEffect(() => {
+        if (!isOpen || isCelebrating || !currentStep) return;
+
+        const contentContainer = document.querySelector(".dl-content");
+        if (!contentContainer || typeof ResizeObserver === "undefined") return;
+
+        let frameId;
+        const ro = new ResizeObserver(() => {
+            cancelAnimationFrame(frameId);
+            frameId = requestAnimationFrame(() => {
+                attemptScrollAndPosition();
+            });
+        });
+
+        ro.observe(contentContainer);
+        return () => {
+            cancelAnimationFrame(frameId);
+            ro.disconnect();
+        };
+    }, [isOpen, isCelebrating, currentStepIndex, attemptScrollAndPosition]);
 
     // Listen to resize and scroll
     useEffect(() => {
@@ -372,6 +503,7 @@ export default function TourGuide({
             {/* ── Popover Tooltip ── */}
             {!isCelebrating && currentStep && (
                 <div
+                    ref={popoverRef}
                     className={[
                         "tg-popover",
                         !targetRect ? "tg-popover--centered" : "",
@@ -430,6 +562,20 @@ export default function TourGuide({
                                 <span className="tg-expand-icon-wrap">⤢</span>
                                 <span>
                                     <strong>Expandable View:</strong> Click the <strong>Maximize icon (⤢)</strong> on the top-right of the card to expand this table into a wide full-width workspace.
+                                </span>
+                            </div>
+                        )}
+
+                        {currentStep.tabAction && (
+                            <div className="tg-tabmode-tip-banner">
+                                <span className="tg-tabmode-icon-wrap">
+                                    {currentStep.tabAction === "futuristic" ? "✨" : "📅"}
+                                </span>
+                                <span>
+                                    <strong>{currentStep.tabAction === "futuristic" ? "Futuristic AI Schedule Mode:" : "PO Fulfillment Schedule Mode:"}</strong>{" "}
+                                    {currentStep.tabDesc || (currentStep.tabAction === "futuristic"
+                                        ? "Switched to predictive reorder timeline and safety buffer runout forecast."
+                                        : "Switched to committed supplier PO fulfillment lots and delivery progress.")}
                                 </span>
                             </div>
                         )}

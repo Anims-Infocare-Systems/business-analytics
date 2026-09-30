@@ -118,8 +118,11 @@
 /* ── Tooltip Popover Card ── */
 .tg-popover {
     position: fixed;
-    width: 360px;
+    width: 380px;
     max-width: calc(100vw - 32px);
+    max-height: calc(100vh - 36px);
+    display: flex;
+    flex-direction: column;
     background: rgba(255, 255, 255, 0.98);
     border: 1px solid rgba(255, 255, 255, 0.9);
     border-radius: 20px;
@@ -195,6 +198,7 @@
     justify-content: space-between;
     padding: 16px 20px 10px;
     gap: 10px;
+    flex-shrink: 0;
 }
 
 .tg-popover__badge-cluster {
@@ -278,8 +282,9 @@
 
 /* Body */
 .tg-popover__body {
-    padding: 6px 20px 16px;
-    max-height: calc(100vh - 220px);
+    flex: 1 1 auto;
+    min-height: 0;
+    padding: 4px 20px 12px;
     overflow-y: auto;
     overscroll-behavior: contain;
 }
@@ -384,20 +389,50 @@
     box-shadow: 0 2px 6px rgba(99, 102, 241, 0.35);
 }
 
+.tg-tabmode-tip-banner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    background: linear-gradient(135deg, rgba(14, 165, 233, 0.08) 0%, rgba(59, 130, 246, 0.12) 100%);
+    border: 1px solid rgba(59, 130, 246, 0.28);
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #0369a1;
+    margin: 6px 0 12px;
+    line-height: 1.45;
+}
+
+.tg-tabmode-icon-wrap {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    background: linear-gradient(135deg, #0284c7, #2563eb);
+    color: #ffffff;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 800;
+    flex-shrink: 0;
+    box-shadow: 0 2px 6px rgba(37, 99, 235, 0.35);
+}
+
 .tg-step-desc {
-    font-size: 13px;
+    font-size: 12.5px;
     color: #475569;
-    line-height: 1.5;
-    margin: 0 0 10px;
+    line-height: 1.45;
+    margin: 0 0 8px;
 }
 
 /* Sub-items list in popover */
 .tg-subitems-grid {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    margin-top: 10px;
-    max-height: 240px;
+    gap: 6px;
+    margin-top: 8px;
+    max-height: 180px;
     overflow-y: auto;
     padding-right: 6px;
     scrollbar-width: thin;
@@ -472,6 +507,7 @@
 
 /* Footer & Actions */
 .tg-popover__footer {
+    flex-shrink: 0;
     display: flex;
     align-items: center;
     justify-content: space-between;

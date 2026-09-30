@@ -533,7 +533,16 @@ const SidebarItem = memo(function SidebarItem({ item, isActive, isOpen, isExpand
     const showMenu = isOpen || hovered;
     const collapsedMode = !isExpanded && !isMobile;
 
-    const handleMouseEnter = () => { clearTimeout(leaveTimer.current); setHovered(true); };
+    const handleMouseEnter = () => {
+        clearTimeout(leaveTimer.current);
+        setHovered(true);
+        if (item.key === "Settings" || item.key === "Spotlight") {
+            import("./Settings");
+            if (item.key === "Spotlight") {
+                import("./SpotlightSettingsTab");
+            }
+        }
+    };
     const handleMouseLeave = () => { leaveTimer.current = setTimeout(() => setHovered(false), 90); };
     useEffect(() => () => clearTimeout(leaveTimer.current), []);
 
@@ -1046,6 +1055,21 @@ export default function DashboardLayout() {
         return () => clearTimeout(t);
     }, []);
 
+    /* Background idle prefetch of Settings & Spotlight after dashboard stabilizes */
+    useEffect(() => {
+        const warmUp = () => {
+            import("./Settings");
+            import("./SpotlightSettingsTab");
+        };
+        if ("requestIdleCallback" in window) {
+            const id = window.requestIdleCallback(warmUp, { timeout: 2500 });
+            return () => window.cancelIdleCallback(id);
+        } else {
+            const id = setTimeout(warmUp, 1500);
+            return () => clearTimeout(id);
+        }
+    }, []);
+
     /* persist settingsOpen to sessionStorage */
     useEffect(() => {
         try { sessionStorage.setItem("ba_settings_open", settingsOpen ? "1" : "0"); } catch { }
@@ -1413,8 +1437,8 @@ export default function DashboardLayout() {
         if (isPageChange) {
             prevNavKeyRef.current = newNavKey;
 
-            // Always scroll to the top of the active module
-            if (!activeSpotlightTarget && contentRef.current) {
+            // Always scroll to the top of the active module (unless Spotlight or Guided Tour is controlling position)
+            if (!activeSpotlightTarget && !isTourActive && contentRef.current) {
                 contentRef.current.scrollTo({ top: 0, behavior: "instant" });
 
                 requestAnimationFrame(() => {
@@ -1426,7 +1450,7 @@ export default function DashboardLayout() {
                 });
             }
         }
-    }, [activeSubItem, activeItem, activeSpotlightTarget]);
+    }, [activeSubItem, activeItem, activeSpotlightTarget, isTourActive]);
 
     /* close flyouts when clicking outside collapsed sidebar */
     useEffect(() => {
@@ -1459,6 +1483,7 @@ export default function DashboardLayout() {
     /* parent-level toggle */
     const handleToggle = useCallback((key) => {
         if (key === "Spotlight") {
+            import("./SpotlightSettingsTab");
             setSettingsInitialTab("spotlight");
             try { sessionStorage.setItem("ba_settings_tab", "spotlight"); } catch { }
             setSettingsOpen(true);
@@ -1521,6 +1546,7 @@ export default function DashboardLayout() {
 
     const handleWelcomeNavigate = useCallback((target) => {
         if (target === "Spotlight") {
+            import("./SpotlightSettingsTab");
             setSettingsInitialTab("spotlight");
             try { sessionStorage.setItem("ba_settings_tab", "spotlight"); } catch { }
             setSettingsOpen(true);
@@ -1769,6 +1795,7 @@ export default function DashboardLayout() {
                                 <div className="dl-profile-dropdown" onClick={(e) => e.stopPropagation()}>
                                     <button
                                         className="dl-profile-dropdown__item"
+                                        onMouseEnter={() => import("./Settings")}
                                         onClick={() => {
                                             setSettingsOpen(true);
                                             setProfileDropdownOpen(false);
@@ -1829,16 +1856,21 @@ export default function DashboardLayout() {
             </div>
 
             {/* Settings Overlay Modal */}
-            <Settings
-                isOpen={settingsOpen}
-                onClose={() => { setSettingsOpen(false); refreshProfile(); }}
-                isExpiredMode={isExpired}
-                onStartTour={handleStartTourFromSettings}
-                onNavigateModule={handleWelcomeNavigate}
-                onSpotlightNavigate={handleSpotlightNavigate}
-                onOpenSpotlight={() => setSpotlightOpen(true)}
-                initialTab={settingsInitialTab}
-            />
+            <Suspense fallback={null}>
+                <Settings
+                    isOpen={settingsOpen}
+                    onClose={(needsRefresh) => {
+                        setSettingsOpen(false);
+                        if (needsRefresh) refreshProfile();
+                    }}
+                    isExpiredMode={isExpired}
+                    onStartTour={handleStartTourFromSettings}
+                    onNavigateModule={handleWelcomeNavigate}
+                    onSpotlightNavigate={handleSpotlightNavigate}
+                    onOpenSpotlight={() => setSpotlightOpen(true)}
+                    initialTab={settingsInitialTab}
+                />
+            </Suspense>
 
             {/* ── Version Interactive Tour Guide ── */}
             <TourGuide

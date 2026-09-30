@@ -13,11 +13,27 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
 from .utils.cache import cache_analytics_response
-from .views import get_tenant_connection, parse_date_range, table_exists, find_column_ci
+from .views import get_tenant_connection, parse_date_range, table_exists as _raw_table_exists, find_column_ci as _raw_find_column_ci
+
+_SCHEMA_TABLE_CACHE = {}
+_SCHEMA_COL_CACHE = {}
+_SEARCH_COLS_CACHE = {}
+
+def table_exists(cursor, table_name):
+    key = str(table_name).strip().lower()
+    if key not in _SCHEMA_TABLE_CACHE:
+        _SCHEMA_TABLE_CACHE[key] = _raw_table_exists(cursor, table_name)
+    return _SCHEMA_TABLE_CACHE[key]
+
+def find_column_ci(cursor, table_schema, table_name, candidates):
+    key = (str(table_schema).strip().lower(), str(table_name).strip().lower(), tuple(str(c).strip().lower() for c in candidates))
+    if key not in _SCHEMA_COL_CACHE:
+        _SCHEMA_COL_CACHE[key] = _raw_find_column_ci(cursor, table_schema, table_name, candidates)
+    return _SCHEMA_COL_CACHE[key]
 
 def _build_search_sql(cursor, search_q, table_name, alias=""):
     """
-    Returns (sql_cond, params_list).
+    Returns (sql_cond, params_list) with in-memory column caching.
     """
     if not search_q:
         return "", []
@@ -40,22 +56,26 @@ def _build_search_sql(cursor, search_q, table_name, alias=""):
     if not candidates:
         return "", []
 
-    valid_cols = []
-    for col in candidates:
-        cursor.execute(
-            """
-            SELECT TOP 1 COLUMN_NAME 
-            FROM INFORMATION_SCHEMA.COLUMNS 
-            WHERE TABLE_SCHEMA = 'dbo' 
-              AND TABLE_NAME = ? 
-              AND UPPER(LTRIM(RTRIM(COLUMN_NAME))) = UPPER(LTRIM(RTRIM(?)))
-            """, 
-            (table_name, col)
-        )
-        row = cursor.fetchone()
-        if row:
-            valid_cols.append(row[0])
+    t_key = table_name.lower()
+    if t_key not in _SEARCH_COLS_CACHE:
+        valid_cols = []
+        for col in candidates:
+            cursor.execute(
+                """
+                SELECT TOP 1 COLUMN_NAME 
+                FROM INFORMATION_SCHEMA.COLUMNS 
+                WHERE TABLE_SCHEMA = 'dbo' 
+                  AND TABLE_NAME = ? 
+                  AND UPPER(LTRIM(RTRIM(COLUMN_NAME))) = UPPER(LTRIM(RTRIM(?)))
+                """, 
+                (table_name, col)
+            )
+            row = cursor.fetchone()
+            if row:
+                valid_cols.append(row[0])
+        _SEARCH_COLS_CACHE[t_key] = valid_cols
 
+    valid_cols = _SEARCH_COLS_CACHE[t_key]
     if not valid_cols:
         return "", []
 
@@ -1096,6 +1116,7 @@ def _build_invoice_status_groups(btype_counts):
 
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="sales_analysis_month_sum")
 def sales_analysis_month_summary(request):
     """
     Month-wise sales table + invoice counts by btype group for the selected date range.
@@ -1657,6 +1678,7 @@ def sales_analysis_customer_part_wise(request):
 
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="sales_analysis_top_prod")
 def sales_analysis_top_products(request):
     """Top 5 products by SUM(Bill_Det.amt) in the selected date range (lakhs)."""
     try:
@@ -1736,6 +1758,7 @@ def sales_analysis_top_products(request):
 
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="sales_analysis_monthly_trend")
 def sales_analysis_monthly_sales_trend(request):
     """
     Monthly Sales Trend (Value) — Bar chart data.
@@ -1834,6 +1857,7 @@ def sales_analysis_monthly_sales_trend(request):
 
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="sales_analysis_bill_type")
 def sales_analysis_bill_type_revenue(request):
     """
     Bill Type Revenue Contribution (Month-wise) — Grouped/Stacked Bar chart data.
@@ -1969,6 +1993,7 @@ def sales_analysis_bill_type_revenue(request):
 
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="sales_analysis_tax_trend")
 def sales_analysis_monthly_tax_trend(request):
     """
     Monthly Tax Trend (Value) — Bar chart data.
@@ -2064,6 +2089,7 @@ def sales_analysis_monthly_tax_trend(request):
 
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="sales_analysis_projections")
 def sales_analysis_future_projections(request):
     try:
         conn, tenant = get_tenant_connection(request)
@@ -3140,6 +3166,7 @@ def sales_analysis_avg_rate_cards(request):
 # ════════════════════════════════════════════
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="sales_analysis_part_history")
 def sales_analysis_part_rate_history(request):
     """
     Returns Part-wise Rate Revision History and Billing Intelligence

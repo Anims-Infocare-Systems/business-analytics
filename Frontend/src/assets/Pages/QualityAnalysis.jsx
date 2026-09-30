@@ -1236,7 +1236,7 @@ function QualityTimelineSection({ isRouteCardProd: propIsRouteCardProd = null })
     return (
         <div className="qa2-card qa2-card-premium qa2-animate qa2-d3 qa2-timeline-container" id="quality-timeline-section">
             {/* ── Section Header ── */}
-            <div className="qa2-timeline-header">
+            <div className="qa2-timeline-header" data-spotlight="qa-timeline-header">
                 <div className="qa2-timeline-header-left">
                     <div className="qa2-timeline-icon-box">
                         <Layers size={22} className="qa2-timeline-main-icon" />
@@ -2283,6 +2283,145 @@ function writeFilterSession(key, data) {
     try { sessionStorage.setItem(key, JSON.stringify(data)); } catch { }
 }
 
+// ── Ultra-Smooth Fluid Organic Progress Status Card (Isolated 60fps Sub-Component) ──
+function QualityStatusBar({ isGlobalLoading, loadingProgress }) {
+    const [displayProgress, setDisplayProgress] = useState(0);
+    const [statusVisible, setStatusVisible] = useState(true);
+
+    useEffect(() => {
+        let animId = null;
+        let finishTimer = null;
+        let lastStamp = performance.now();
+
+        if (isGlobalLoading) {
+            setStatusVisible(true);
+
+            const stepProgress = (timestamp) => {
+                const dt = Math.min((timestamp - lastStamp) / 1000, 0.08);
+                lastStamp = timestamp;
+
+                setDisplayProgress((prev) => {
+                    const target = Math.max(loadingProgress, 14);
+
+                    if (prev < target) {
+                        const gap = target - prev;
+                        const speed = Math.max(gap * 4.2, 10);
+                        const next = prev + speed * dt;
+                        return Math.min(next, target);
+                    } else if (prev < 96) {
+                        let rate = 2.4;
+                        if (prev > 35) rate = 1.5;
+                        if (prev > 65) rate = 0.75;
+                        if (prev > 85) rate = 0.3;
+                        return Math.min(prev + rate * dt, 96);
+                    }
+                    return prev;
+                });
+
+                animId = requestAnimationFrame(stepProgress);
+            };
+
+            animId = requestAnimationFrame(stepProgress);
+        } else {
+            let isDone = false;
+            const glideToComplete = (timestamp) => {
+                const dt = Math.min((timestamp - lastStamp) / 1000, 0.08);
+                lastStamp = timestamp;
+
+                setDisplayProgress((prev) => {
+                    if (prev >= 100) {
+                        isDone = true;
+                        return 100;
+                    }
+                    const speed = Math.max((100 - prev) * 10, 60);
+                    const next = prev + speed * dt;
+                    if (next >= 99.5) {
+                        isDone = true;
+                        return 100;
+                    }
+                    return next;
+                });
+
+                if (!isDone) {
+                    animId = requestAnimationFrame(glideToComplete);
+                }
+            };
+
+            animId = requestAnimationFrame(glideToComplete);
+
+            finishTimer = setTimeout(() => {
+                setStatusVisible(false);
+                setDisplayProgress(0);
+            }, 750);
+        }
+
+        return () => {
+            if (animId) cancelAnimationFrame(animId);
+            if (finishTimer) clearTimeout(finishTimer);
+        };
+    }, [isGlobalLoading, loadingProgress]);
+
+    const showStatusBar = isGlobalLoading || statusVisible;
+
+    return (
+        <div className={`qa2-status-card-container ${showStatusBar ? "qa2-status-card--active" : "qa2-status-card--hidden"}`}>
+            <div className="qa2-status-card">
+                <div className="qa2-status-card__glow-bg" />
+                <div className="qa2-status-card__body">
+                    {/* Left section: Icon + Title + Dynamic Status description */}
+                    <div className="qa2-status-card__left">
+                        <div className={`qa2-status-card__icon-box ${displayProgress >= 99.5 ? "qa2-status-card__icon-box--done" : ""}`}>
+                            {displayProgress >= 99.5 ? (
+                                <CheckCircle2 size={18} className="qa2-status-card__icon-check" />
+                            ) : (
+                                <Loader2 size={18} className="qa2-status-card__icon-spin" />
+                            )}
+                        </div>
+                        <div className="qa2-status-card__text-wrap">
+                            <div className="qa2-status-card__title-row">
+                                <span className="qa2-status-card__title">
+                                    {displayProgress >= 99.5 ? "Quality Analytics Synchronized" : "Updating Quality Analytics"}
+                                </span>
+                                <span className={`qa2-status-card__badge ${displayProgress >= 99.5 ? "qa2-status-card__badge--done" : ""}`}>
+                                    <span className="qa2-status-card__badge-dot" />
+                                    {displayProgress >= 99.5 ? "Ready" : "Live Sync"}
+                                </span>
+                            </div>
+                            <div className="qa2-status-card__subtitle">
+                                {displayProgress >= 99.5
+                                    ? "All inspection records, rejection metrics, and telemetry are up to date"
+                                    : displayProgress < 30
+                                        ? "Fetching inspection records and quality telemetry..."
+                                        : displayProgress < 65
+                                            ? "Aggregating defect causes, machine rejections & trends..."
+                                            : "Finalizing KPIs, PPM calculations, and traceability logs..."}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Right section: High-tech glass percentage pill */}
+                    <div className="qa2-status-card__right">
+                        <div className={`qa2-status-pill ${displayProgress >= 99.5 ? "qa2-status-pill--done" : ""}`}>
+                            <span className="qa2-status-pill__percent">{Math.round(displayProgress)}%</span>
+                            <span className="qa2-status-pill__label">{displayProgress >= 99.5 ? "Complete" : "Loaded"}</span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Integrated Sleek Progress Bar with Shimmer Beam */}
+                <div className="qa2-status-card__track">
+                    <div
+                        className={`qa2-status-card__fill ${displayProgress >= 99.5 ? "qa2-status-card__fill--done" : ""}`}
+                        style={{ width: `${Math.min(100, Math.max(0, displayProgress))}%` }}
+                    >
+                        <div className="qa2-status-card__fill-shimmer" />
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 export default function QualityAnalysis() {
     const today = new Date();
     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
@@ -2439,89 +2578,6 @@ export default function QualityAnalysis() {
     const isGlobalLoading = summaryLoading || chartsLoading || prodPerfLoading || defectCausesLoading || recordsLoading || calibrationLoading || insightsLoading || customerComplaintsLoading || supplierLoading;
 
     const [loadingProgress, setLoadingProgress] = useState(0);
-    const [displayProgress, setDisplayProgress] = useState(0);
-    const [statusVisible, setStatusVisible] = useState(true);
-
-    // ── Ultra-Smooth Fluid Organic Progress Interpolation (60fps, identical to Sales Analysis) ──
-    useEffect(() => {
-        let animId = null;
-        let finishTimer = null;
-        let lastStamp = performance.now();
-
-        if (isGlobalLoading) {
-            setStatusVisible(true);
-
-            const stepProgress = (timestamp) => {
-                const dt = Math.min((timestamp - lastStamp) / 1000, 0.08);
-                lastStamp = timestamp;
-
-                setDisplayProgress((prev) => {
-                    const target = Math.max(loadingProgress, 14);
-
-                    if (prev < target) {
-                        // Smoothly ease towards the target with natural deceleration
-                        const gap = target - prev;
-                        const speed = Math.max(gap * 4.2, 10);
-                        const next = prev + speed * dt;
-                        return Math.min(next, target);
-                    } else if (prev < 96) {
-                        // Continuous organic trickle so progress glides smoothly and never freezes
-                        let rate = 2.4;
-                        if (prev > 35) rate = 1.5;
-                        if (prev > 65) rate = 0.75;
-                        if (prev > 85) rate = 0.3;
-                        return Math.min(prev + rate * dt, 96);
-                    }
-                    return prev;
-                });
-
-                animId = requestAnimationFrame(stepProgress);
-            };
-
-            animId = requestAnimationFrame(stepProgress);
-        } else {
-            // Completed: glide to 100%, hold briefly, then cleanly hide
-            let isDone = false;
-            const glideToComplete = (timestamp) => {
-                const dt = Math.min((timestamp - lastStamp) / 1000, 0.08);
-                lastStamp = timestamp;
-
-                setDisplayProgress((prev) => {
-                    if (prev >= 100) {
-                        isDone = true;
-                        return 100;
-                    }
-                    const speed = Math.max((100 - prev) * 10, 60);
-                    const next = prev + speed * dt;
-                    if (next >= 99.5) {
-                        isDone = true;
-                        return 100;
-                    }
-                    return next;
-                });
-
-                if (!isDone) {
-                    animId = requestAnimationFrame(glideToComplete);
-                }
-            };
-
-            animId = requestAnimationFrame(glideToComplete);
-
-            // Once synchronized at 100%, show the success state for 750ms then hide completely
-            finishTimer = setTimeout(() => {
-                setStatusVisible(false);
-                setDisplayProgress(0);
-                setLoadingProgress(0);
-            }, 750);
-        }
-
-        return () => {
-            if (animId) cancelAnimationFrame(animId);
-            if (finishTimer) clearTimeout(finishTimer);
-        };
-    }, [isGlobalLoading, loadingProgress]);
-
-    const showStatusBar = isGlobalLoading || statusVisible;
 
     const trendRef = useRef(null); const trendChart = useRef(null);
     const ppmRef = useRef(null); const ppmChart = useRef(null);
@@ -3992,20 +4048,29 @@ export default function QualityAnalysis() {
 
             setLoadingProgress(15);
 
-            // ── Tier 1: Summary KPIs + Charts in Parallel ──
-            // Immediately renders Top KPIs, Gauges, Rejection % and Weekly Trend Charts (~1-1.5s)!
+            // ── Tier 1: Summary KPIs + Trend Charts (Instant First Contentful Paint) ──
+            // Renders Top 12 KPIs, Pass Rate, Gauges, Rejection % & Trend Charts immediately!
             await Promise.allSettled([
                 fetchTracked(buildUrl("/api/quality-analysis/summary/"), setSummaryData, setSummaryLoading),
                 fetchTracked(buildUrl("/api/quality-analysis/charts/"), setChartsData, setChartsLoading),
             ]);
 
-            // ── Tier 2: Heavy Breakdown Data in Parallel ──
-            // Product Performance, Defect Causes, Records, Insights, Supplier Rejections, Complaints, Calibration
+            setLoadingProgress(prev => Math.max(prev, 45));
+
+            // ── Tier 2: Analytical Breakdowns (Pareto, Defect Causes, Insights) ──
+            // Populates Product Performance table, Defect Causes Pareto, and AI Insights
             await Promise.allSettled([
                 fetchTracked(buildUrl("/api/quality-analysis/product-performance/"), setProdPerfData, setProdPerfLoading),
                 fetchTracked(buildUrl("/api/quality-analysis/defect-causes/"), setDefectCausesData, setDefectCausesLoading),
-                fetchTracked(buildUrl("/api/quality-analysis/records/"), setRecordsData, setRecordsLoading),
                 fetchTracked(buildUrl("/api/quality-analysis/insights/"), setInsightsData, setInsightsLoading),
+            ]);
+
+            setLoadingProgress(prev => Math.max(prev, 80));
+
+            // ── Tier 3: Detailed Data Tables & Supplementary Modules ──
+            // Heavy Records Table, Supplier Rejections, Calibration Schedules, Customer Complaints
+            await Promise.allSettled([
+                fetchTracked(buildUrl("/api/quality-analysis/records/"), setRecordsData, setRecordsLoading),
                 fetchTracked(buildUrl("/api/quality-analysis/calibration/"), setCalibrationData, setCalibrationLoading),
                 fetchTracked(buildUrl("/api/dashboard2/customer-complaints/"), setCustomerComplaintsData, setCustomerComplaintsLoading),
                 fetchTracked(buildDateOnlyUrl("/api/quality-analysis/supplier-rejections/"), setSupplierData, setSupplierLoading),
@@ -7629,65 +7694,11 @@ export default function QualityAnalysis() {
 
     return (
         <div className={`qa2-root ${animated ? "qa2-root--visible" : ""}`}>
-            {/* ── Modern Glassmorphism Status Loading Card (Identical to Sales Analysis) ── */}
-            <div className={`qa2-status-card-container ${showStatusBar ? "qa2-status-card--active" : "qa2-status-card--hidden"}`}>
-                <div className="qa2-status-card">
-                    <div className="qa2-status-card__glow-bg" />
-                    <div className="qa2-status-card__body">
-                        {/* Left section: Icon + Title + Dynamic Status description */}
-                        <div className="qa2-status-card__left">
-                            <div className={`qa2-status-card__icon-box ${displayProgress >= 99.5 ? "qa2-status-card__icon-box--done" : ""}`}>
-                                {displayProgress >= 99.5 ? (
-                                    <CheckCircle2 size={18} className="qa2-status-card__icon-check" />
-                                ) : (
-                                    <Loader2 size={18} className="qa2-status-card__icon-spin" />
-                                )}
-                            </div>
-                            <div className="qa2-status-card__text-wrap">
-                                <div className="qa2-status-card__title-row">
-                                    <span className="qa2-status-card__title">
-                                        {displayProgress >= 99.5 ? "Quality Analytics Synchronized" : "Updating Quality Analytics"}
-                                    </span>
-                                    <span className={`qa2-status-card__badge ${displayProgress >= 99.5 ? "qa2-status-card__badge--done" : ""}`}>
-                                        <span className="qa2-status-card__badge-dot" />
-                                        {displayProgress >= 99.5 ? "Ready" : "Live Sync"}
-                                    </span>
-                                </div>
-                                <div className="qa2-status-card__subtitle">
-                                    {displayProgress >= 99.5
-                                        ? "All inspection records, rejection metrics, and telemetry are up to date"
-                                        : displayProgress < 30
-                                            ? "Fetching inspection records and quality telemetry..."
-                                            : displayProgress < 65
-                                                ? "Aggregating defect causes, machine rejections & trends..."
-                                                : "Finalizing KPIs, PPM calculations, and traceability logs..."}
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Right section: High-tech glass percentage pill */}
-                        <div className="qa2-status-card__right">
-                            <div className={`qa2-status-pill ${displayProgress >= 99.5 ? "qa2-status-pill--done" : ""}`}>
-                                <span className="qa2-status-pill__percent">{Math.round(displayProgress)}%</span>
-                                <span className="qa2-status-pill__label">{displayProgress >= 99.5 ? "Complete" : "Loaded"}</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Integrated Sleek Progress Bar with Shimmer Beam */}
-                    <div className="qa2-status-card__track">
-                        <div
-                            className={`qa2-status-card__fill ${displayProgress >= 99.5 ? "qa2-status-card__fill--done" : ""}`}
-                            style={{ width: `${Math.min(100, Math.max(0, displayProgress))}%` }}
-                        >
-                            <div className="qa2-status-card__fill-shimmer" />
-                        </div>
-                    </div>
-                </div>
-            </div>
+            {/* ── Modern Glassmorphism Status Loading Card (Isolated 60fps Sub-Component) ── */}
+            <QualityStatusBar isGlobalLoading={isGlobalLoading} loadingProgress={loadingProgress} />
 
             {/* ── Filters ── */}
-            <div className="qa2-card qa2-filter-card qa2-animate qa2-d1">
+            <div className="qa2-card qa2-filter-card qa2-animate qa2-d1" data-spotlight="qa-report-filters">
                 <div className="qa2-filter-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <SlidersHorizontal size={18} style={{ color: '#2d6de8', strokeWidth: 2.25 }} /> Report Filters

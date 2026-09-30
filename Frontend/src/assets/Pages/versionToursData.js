@@ -20,7 +20,15 @@ export const VERSION_REGISTRY = [
             "Multi-Month Delivery Schedule Analysis with Dual-View Expansion",
             "Live Warehouse Despatch Planning & Fulfillment Status",
             "Type-Filtered Customer & Part Revenue Performance",
-            "Part-Wise Rate Intelligence, Price Variance & Revision History"
+            "Part-Wise Rate Intelligence, Price Variance & Revision History",
+            "Average Purchase Value Cost Benchmark (Raw vs Store Materials)",
+            "Advanced Purchase Analytics with Top Spend & Variance Insights",
+            "PO Fulfillment Schedule with Live Due & Overdue Lot Tracking",
+            "Futuristic Expected Schedule with Predictive ROL & Safety Stock",
+            "Quality Analysis Multi-Dimensional Report Filters & Disposition Pills",
+            "Operator-Wise Rejection Analytics with Dual Grid & Chart Mode",
+            "Machine-Wise Rejection Matrix with Equipment Work-Center Filters",
+            "Interactive End-to-End 6-Stage Quality Lineage Pipeline"
         ],
         tourSteps: [
             {
@@ -31,7 +39,7 @@ export const VERSION_REGISTRY = [
                 navSubItem: "Sales Analysis",
                 title: "Customer & Part-Wise Pending PO Summary",
                 category: "Order Backlog",
-                badge: "Step 1 of 5 • Expandable View",
+                badge: "Step 1 of 13 • Expandable View",
                 iconName: "FileSpreadsheet",
                 placement: "bottom",
                 isExpandable: true,
@@ -55,7 +63,7 @@ export const VERSION_REGISTRY = [
                 navSubItem: "Sales Analysis",
                 title: "Customer & Part-Wise Schedule Analysis",
                 category: "Delivery Schedules",
-                badge: "Step 2 of 5 • Expandable View",
+                badge: "Step 2 of 13 • Expandable View",
                 iconName: "Calendar",
                 placement: "bottom",
                 isExpandable: true,
@@ -79,7 +87,7 @@ export const VERSION_REGISTRY = [
                 navSubItem: "Sales Analysis",
                 title: "Despatch Planning Status",
                 category: "Warehouse & Shipping",
-                badge: "Step 3 of 5 • Live Auto-Sync",
+                badge: "Step 3 of 13 • Live Auto-Sync",
                 iconName: "Zap",
                 placement: "top",
                 isExpandable: false,
@@ -103,7 +111,7 @@ export const VERSION_REGISTRY = [
                 navSubItem: "Sales Analysis",
                 title: "Customer & Part-Wise Sales Analysis",
                 category: "Revenue Analysis",
-                badge: "Step 4 of 5 • Multi-Type Filter",
+                badge: "Step 4 of 13 • Multi-Type Filter",
                 iconName: "TrendingUp",
                 placement: "top",
                 isExpandable: false,
@@ -127,7 +135,7 @@ export const VERSION_REGISTRY = [
                 navSubItem: "Sales Analysis",
                 title: "Part-wise History & Rate Intelligence",
                 category: "Pricing Intelligence",
-                badge: "Step 5 of 5 • Pricing Analytics",
+                badge: "Step 5 of 13 • Pricing Analytics",
                 iconName: "Shield",
                 placement: "top",
                 isExpandable: false,
@@ -140,6 +148,210 @@ export const VERSION_REGISTRY = [
                     {
                         title: "Rate Variance KPI Banner",
                         desc: "Live comparison of active rate vs base rate, percentage change, and cumulative revenue."
+                    }
+                ]
+            },
+            {
+                id: "pa-tour-average-purchase-value",
+                targetSelector: "[data-spotlight='pa-apv-header'], [data-spotlight='pa-average-purchase-value'] .pa2-apv-header-row",
+                fallbackSelector: "[data-spotlight='pa-average-purchase-value'], .pa2-apv-card",
+                navItem: "Reports",
+                navSubItem: "Purchase Analysis",
+                title: "Average Purchase Value",
+                category: "Material Costing",
+                badge: "Step 6 of 13 • Raw vs Store Materials",
+                iconName: "TrendingUp",
+                placement: "bottom",
+                align: "start",
+                isExpandable: false,
+                description: "Comprehensive purchase cost benchmark comparing average procurement prices across Raw Material and Store Material categories with interactive sub-tabs, supplier variance, and purchase volume trends.",
+                subItems: [
+                    {
+                        title: "Dual Material Mode Switcher",
+                        desc: "Toggle between Raw Material (RM) and Store Material (Consumables & Spares) to inspect category-specific weighted purchase rates."
+                    },
+                    {
+                        title: "Unit Cost Realization & Trends",
+                        desc: "Track item-level historical purchase costs, latest PO unit prices, and vendor-wise procurement efficiency side-by-side."
+                    }
+                ]
+            },
+            {
+                id: "pa-tour-advanced-analytics",
+                targetSelector: "[data-spotlight='pa-apa-header'], #advanced-purchase-analytics-section .apa-header",
+                fallbackSelector: "#advanced-purchase-analytics-section, .apa-root",
+                navItem: "Reports",
+                navSubItem: "Purchase Analysis",
+                title: "Advanced Purchase Analytics",
+                category: "Procurement Analytics",
+                badge: "Step 7 of 13 • Deep Analytics & Heatmaps",
+                iconName: "Sparkles",
+                placement: "bottom",
+                align: "start",
+                isExpandable: false,
+                description: "Deep-dive multi-dimensional purchase intelligence featuring top supplier rankings, spend variance breakdowns, category distribution charts, and interactive spend heatmaps.",
+                subItems: [
+                    {
+                        title: "Multi-Perspective Analytics",
+                        desc: "Switch between visual charts and detailed tabular matrices covering Vendor Spend, Material Group distribution, and purchase variance."
+                    },
+                    {
+                        title: "Spend Anomalies & Drivers",
+                        desc: "Instantly detect major spend drivers, cost inflation outliers, and procurement volume shifts across monthly and quarterly cycles."
+                    }
+                ]
+            },
+            {
+                id: "pa-tour-po-fulfillment",
+                targetSelector: "[data-spotlight='pa-po-fulfillment-btn']",
+                fallbackSelector: "[data-spotlight='pa-fs-header-row'], [data-spotlight='pa-fs-main-tabs'], #pa-fulfillment-schedule-section",
+                navItem: "Reports",
+                navSubItem: "Purchase Analysis",
+                tabAction: "standard",
+                tabDesc: "Switched to committed supplier PO fulfillment lots and delivery progress.",
+                title: "PO Fulfillment Schedule",
+                category: "Supplier Fulfillment",
+                badge: "Step 8 of 13 • Committed Delivery Lots",
+                iconName: "Calendar",
+                placement: "bottom",
+                align: "start",
+                isExpandable: false,
+                description: "Track committed supplier delivery lots and purchase order schedules. Monitor delivery milestones, overdue shipments, and on-track purchase lots with live status pill filters.",
+                subItems: [
+                    {
+                        title: "Status Quick Pill Filters",
+                        desc: "Filter fulfillment schedules by All, On Track, Due Soon (15-30d), and Overdue lots with live count chips."
+                    },
+                    {
+                        title: "Lot-Wise Balance & Adherence",
+                        desc: "Inspect scheduled date, order quantity, pending lot balance, and supplier delivery adherence at a single glance."
+                    }
+                ]
+            },
+            {
+                id: "pa-tour-futuristic-schedule",
+                targetSelector: "[data-spotlight='pa-futuristic-schedule-btn']",
+                fallbackSelector: "[data-spotlight='pa-fs-header-row'], [data-spotlight='pa-fs-main-tabs'], #pa-fulfillment-schedule-section",
+                navItem: "Reports",
+                navSubItem: "Purchase Analysis",
+                tabAction: "futuristic",
+                tabDesc: "Switched to predictive reorder timeline and safety buffer runout forecast.",
+                title: "Futuristic Expected Schedule",
+                category: "Predictive Procurement",
+                badge: "Step 9 of 13 • AI Predictive ROL",
+                iconName: "Sparkles",
+                placement: "bottom",
+                align: "start",
+                isExpandable: false,
+                description: "Next-generation procurement forecasting calculating futuristic reorder levels, expected lead times, buffer stock depletion, and proactive replenishment alerts.",
+                subItems: [
+                    {
+                        title: "Predictive In-Card Tab Switcher",
+                        desc: "Seamlessly switch from standard supplier fulfillment to the futuristic predictive schedule model within the same card."
+                    },
+                    {
+                        title: "Safety Buffer & Replenishment Alerts",
+                        desc: "Identifies high-velocity items nearing safety limits with projected stockout dates and automated procurement trigger recommendations."
+                    }
+                ]
+            },
+            {
+                id: "qa-tour-report-filters",
+                targetSelector: "[data-spotlight='qa-report-filters'], .qa2-filter-card",
+                fallbackSelector: ".qa2-filter-card",
+                navItem: "Reports",
+                navSubItem: "Quality Analysis",
+                title: "Quality Report Filters",
+                category: "Telemetry & Filtering",
+                badge: "Step 10 of 13 • Global Quality Filters",
+                iconName: "SlidersHorizontal",
+                placement: "bottom",
+                align: "start",
+                isExpandable: false,
+                description: "Centralized filtering deck providing fine-grained control over inspection records, customer consignments, part numbers, machine work-centers, and defect categories.",
+                subItems: [
+                    {
+                        title: "Multi-Parameter Filter Matrix",
+                        desc: "Combine Date Range presets with multi-select dropdowns for Customers, Operators, Machines, and Processes."
+                    },
+                    {
+                        title: "Disposition & Stage Badges",
+                        desc: "Quickly isolate records by inspection type (Inward, In-Process, Final, Jobwork) or disposition (Rejection vs Rework)."
+                    }
+                ]
+            },
+            {
+                id: "qa-tour-operator-rejection",
+                targetSelector: "[data-spotlight='qa-operator-rejection'] .qa2-head, [data-spotlight='qa-operator-rejection']",
+                fallbackSelector: "[data-spotlight='qa-operator-rejection'], .qa2-rej-table-card",
+                navItem: "Reports",
+                navSubItem: "Quality Analysis",
+                title: "Operator wise Rejection",
+                category: "Workmanship Analysis",
+                badge: "Step 11 of 13 • Operator Accountability",
+                iconName: "UserCheck",
+                placement: "bottom",
+                align: "start",
+                isExpandable: false,
+                description: "Granular operator quality audit attributing material vs machining defects per operator and part line, with integrated view switching and multi-select filters.",
+                subItems: [
+                    {
+                        title: "Dual Grid & Chart View",
+                        desc: "Switch seamlessly between row-by-row operator rejection tables and comparative Pareto bar charts."
+                    },
+                    {
+                        title: "Material vs Machining Classification",
+                        desc: "Distinguishes incoming raw material defects from operational machining rejections to ensure fair performance tracking."
+                    }
+                ]
+            },
+            {
+                id: "qa-tour-machine-rejection",
+                targetSelector: "[data-spotlight='qa-machine-rejection'] .qa2-head, [data-spotlight='qa-machine-rejection']",
+                fallbackSelector: "[data-spotlight='qa-machine-rejection'], .qa2-rej-table-card",
+                navItem: "Reports",
+                navSubItem: "Quality Analysis",
+                title: "Machine wise Rejection",
+                category: "Equipment Quality",
+                badge: "Step 12 of 13 • Machine & Tooling Health",
+                iconName: "Cpu",
+                placement: "bottom",
+                align: "start",
+                isExpandable: false,
+                description: "Machine-centric quality performance deck analyzing defect concentration across production machines, CNC centers, and tool fixtures.",
+                subItems: [
+                    {
+                        title: "Tooling Variance & Defect Spikes",
+                        desc: "Pinpoints specific machines generating abnormal machine scrap or dimensional rejections."
+                    },
+                    {
+                        title: "In-Card Machine Selector",
+                        desc: "Instant multi-select dropdown to isolate individual equipment lines or compare work center groups."
+                    }
+                ]
+            },
+            {
+                id: "qa-tour-quality-timeline",
+                targetSelector: "[data-spotlight='qa-timeline-header'], [data-spotlight='qa-timeline'] .qa2-timeline-header, #quality-timeline-section",
+                fallbackSelector: "[data-spotlight='qa-timeline'], .quality-timeline-section, .qa2-timeline-container",
+                navItem: "Reports",
+                navSubItem: "Quality Analysis",
+                title: "Interactive Quality Timeline",
+                category: "Traceability Pipeline",
+                badge: "Step 13 of 13 • End-to-End Lineage",
+                iconName: "Layers",
+                placement: "bottom",
+                align: "start",
+                isExpandable: false,
+                description: "Six-stage end-to-end quality pipeline tracing part provenance from customer dispatch invoices back to supplier raw material mill heat numbers.",
+                subItems: [
+                    {
+                        title: "6-Stage Interactive Audit Trail",
+                        desc: "Tracks Customer Invoice → DC → Final PDI → Production Routecard → Inward GRN → Supplier Mill."
+                    },
+                    {
+                        title: "Hierarchical Invoice Selector",
+                        desc: "Switch active customer invoices and part numbers directly from the search-enabled dropdown."
                     }
                 ]
             }
@@ -219,6 +431,126 @@ export const VERSION_REGISTRY = [
                 ],
                 actionLabel: "Explore Rate Intelligence",
                 actionTarget: "Sales Analysis"
+            },
+            {
+                id: "tip-250-6",
+                title: "Average Purchase Value (Raw vs Store Materials)",
+                category: "Procurement",
+                type: "PRO TIP",
+                icon: "TrendingUp",
+                summary: "Benchmark procurement prices and compare average purchase rates across Raw Material and Store Material categories.",
+                steps: [
+                    "Navigate to Reports → Purchase Analysis and locate the 'Average Purchase Value' card.",
+                    "Switch between the 'Raw Material' and 'Store Material' tabs to view category-specific pricing averages.",
+                    "Evaluate item-level purchase variances to identify cost savings and negotiate better vendor volume discounts."
+                ],
+                actionLabel: "Open Purchase Analysis",
+                actionTarget: "Purchase Analysis"
+            },
+            {
+                id: "tip-250-7",
+                title: "Advanced Purchase Analytics & Top Spends",
+                category: "Analytics",
+                type: "NEW FEATURE",
+                icon: "Sparkles",
+                summary: "Uncover high-impact procurement trends, supplier concentration, and spend variance with deep analytics.",
+                steps: [
+                    "Scroll to the 'Advanced Purchase Analytics' section in Purchase Analysis.",
+                    "Toggle between Spend Views to visualize monthly procurement outflow and top vendor concentration.",
+                    "Use interactive filters to dissect expense trends across custom date ranges and product lines."
+                ],
+                actionLabel: "Explore Purchase Analytics",
+                actionTarget: "Purchase Analysis"
+            },
+            {
+                id: "tip-250-8",
+                title: "PO Fulfillment Schedule & Overdue Tracking",
+                category: "Operations",
+                type: "BEST PRACTICE",
+                icon: "Calendar",
+                summary: "Track supplier delivery commitments, lot-wise schedule dates, and overdue purchase shipments.",
+                steps: [
+                    "Select the 'PO Fulfillment Schedule' tab on the fulfillment card in Purchase Analysis.",
+                    "Click the 'Due Soon' or 'Overdue' status pills to highlight lots requiring immediate follow-up.",
+                    "Inspect pending lot balances and supplier contact details to prevent manufacturing bottlenecks."
+                ],
+                actionLabel: "Track Fulfillment",
+                actionTarget: "Purchase Analysis"
+            },
+            {
+                id: "tip-250-9",
+                title: "Futuristic Expected Schedule & ROL Forecast",
+                category: "Predictive AI",
+                type: "PRO TIP",
+                icon: "Sparkles",
+                summary: "Anticipate stock depletion, calculate buffer days, and automate reorder planning with predictive analytics.",
+                steps: [
+                    "Switch to the 'Futuristic Expected Schedule' tab in Purchase Analysis.",
+                    "Review projected stock runout dates and safety buffer cushions for key production materials.",
+                    "Generate proactive purchase orders based on AI-forecasted lead times before stockouts occur."
+                ],
+                actionLabel: "View Futuristic Schedule",
+                actionTarget: "Purchase Analysis"
+            },
+            {
+                id: "tip-250-10",
+                title: "Quality Report Filters & Multiselect Matrix",
+                category: "Quality Filters",
+                type: "BEST PRACTICE",
+                icon: "SlidersHorizontal",
+                summary: "Filter complex inspection records, customer consignments, and defect categories across custom date ranges.",
+                steps: [
+                    "Navigate to Reports → Quality Analysis to access the top filter card.",
+                    "Select specific Customers, Operators, Machines, and Processes to narrow down quality telemetry.",
+                    "Use Disposition quick badges (Rejection vs Rework) to immediately isolate defect volume."
+                ],
+                actionLabel: "Open Quality Analysis",
+                actionTarget: "Quality Analysis"
+            },
+            {
+                id: "tip-250-11",
+                title: "Operator wise Rejection Attribution",
+                category: "Operator Analytics",
+                type: "PRO TIP",
+                icon: "UserCheck",
+                summary: "Evaluate operator performance and isolate incoming material flaws from operational machining defects.",
+                steps: [
+                    "Locate the 'Operator wise Rejection' card in Quality Analysis.",
+                    "Toggle between Grid View and Chart View for tabular precision or visual Pareto comparison.",
+                    "Filter by specific operators to target skill development and training where machine rejection spikes occur."
+                ],
+                actionLabel: "Inspect Operator Rejection",
+                actionTarget: "Quality Analysis"
+            },
+            {
+                id: "tip-250-12",
+                title: "Machine wise Rejection & Tooling Quality",
+                category: "Equipment Quality",
+                type: "PRO TIP",
+                icon: "Cpu",
+                summary: "Identify defect concentration across CNC centers, tool fixtures, and processing work stations.",
+                steps: [
+                    "Locate the 'Machine wise Rejection' card in Quality Analysis.",
+                    "Use the multi-select machine dropdown to isolate specific work centers and tooling lines.",
+                    "Audit machine rework vs outright scrap to schedule proactive tool changes and preventative maintenance."
+                ],
+                actionLabel: "Inspect Machine Rejection",
+                actionTarget: "Quality Analysis"
+            },
+            {
+                id: "tip-250-13",
+                title: "6-Stage End-to-End Quality Lineage Pipeline",
+                category: "Traceability",
+                type: "NEW FEATURE",
+                icon: "Layers",
+                summary: "Trace part provenance from customer dispatch invoices back to supplier raw material heat numbers.",
+                steps: [
+                    "Scroll down to the 'Quality Timeline' card in Quality Analysis.",
+                    "Select any invoice or part number from the hierarchical dropdown selector.",
+                    "Click on any of the 6 pipeline stages to inspect inspection sheets, route cards, and certification records."
+                ],
+                actionLabel: "Explore Quality Timeline",
+                actionTarget: "Quality Analysis"
             }
         ]
     },

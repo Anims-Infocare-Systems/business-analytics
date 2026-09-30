@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import "./SpotlightSettingsTab.css";
 import {
     SPOTLIGHT_REGISTRY,
@@ -101,6 +101,18 @@ export default function SpotlightSettingsTab({ onSelectSection, onOpenSpotlight 
         return searchSpotlightRegistry(searchQuery, selectedCategory);
     }, [searchQuery, selectedCategory]);
 
+    // Initial viewport slice (first 15 cards render on frame 0; remainder deferred via rAF for instant mount)
+    const INITIAL_COUNT = 15;
+    const [renderLimit, setRenderLimit] = useState(INITIAL_COUNT);
+
+    useEffect(() => {
+        setRenderLimit(INITIAL_COUNT);
+        const raf = requestAnimationFrame(() => {
+            setRenderLimit(filteredItems.length);
+        });
+        return () => cancelAnimationFrame(raf);
+    }, [filteredItems.length, searchQuery, selectedCategory]);
+
     // Handle deep link copy
     const handleCopyLink = useCallback((e, item) => {
         e.stopPropagation();
@@ -189,8 +201,8 @@ export default function SpotlightSettingsTab({ onSelectSection, onOpenSpotlight 
                     </div>
                 </div>
 
-                <div className="sst-header__meta-bar">
-                    <span className="sst-meta-chip">
+                {/* <div className="sst-header__meta-bar"> */}
+                {/* <span className="sst-meta-chip">
                         <Navigation size={13} style={{ color: "#38bdf8" }} />
                         <span>Interactive DOM Radar Beacon</span>
                     </span>
@@ -201,8 +213,8 @@ export default function SpotlightSettingsTab({ onSelectSection, onOpenSpotlight 
                     <span className="sst-meta-chip sst-meta-chip--hotkey">
                         <Command size={13} />
                         <span>Global Shortcut: <kbd className="sst-kbd">Ctrl</kbd> + <kbd className="sst-kbd">K</kbd></span>
-                    </span>
-                </div>
+                    </span> */}
+                {/* </div> */}
             </div>
 
             {/* ── Luminous Tour Hero Banner ── */}
@@ -232,7 +244,7 @@ export default function SpotlightSettingsTab({ onSelectSection, onOpenSpotlight 
                             Looking for an audit ledger, CSV exporter, or futuristic stock forecast? Selecting any feature card switches the view, smoothly scrolls to the target element, and lights up a luminous spotlight beacon with instant tips.
                         </p>
 
-                        <div className="sst-hero-banner__features">
+                        {/* <div className="sst-hero-banner__features">
                             <span className="sst-hero-feature-chip">
                                 <CheckCircle2 size={13} className="sst-hero-feature-icon" /> Live DOM Highlighting
                             </span>
@@ -242,7 +254,7 @@ export default function SpotlightSettingsTab({ onSelectSection, onOpenSpotlight 
                             <span className="sst-hero-feature-chip">
                                 <CheckCircle2 size={13} className="sst-hero-feature-icon" /> Keyboard Shortcut Navigation
                             </span>
-                        </div>
+                        </div> */}
                     </div>
 
                     <div className="sst-hero-banner__right">
@@ -337,7 +349,7 @@ export default function SpotlightSettingsTab({ onSelectSection, onOpenSpotlight 
             {/* ── Bento Grid of Spotlight Feature Cards ── */}
             {filteredItems.length > 0 ? (
                 <div className="sst-grid">
-                    {filteredItems.map((item, idx) => {
+                    {filteredItems.slice(0, renderLimit).map((item, idx) => {
                         const isCopied = copiedId === item.id;
                         return (
                             <div

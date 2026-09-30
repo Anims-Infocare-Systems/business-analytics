@@ -296,95 +296,6 @@ function PaNoData({ icon, message = "No data found on this period", compact = fa
     );
 }
 
-// ─────────────────────────────────────────────
-//  Static Data
-// ─────────────────────────────────────────────
-const KPI_CARDS = [
-    { icon: "🛒", label: "Total PO Value", value: "₹24.99L", raw: 2499, sub: "Jan – Feb 2026", trend: "↑ 8.3% vs last period", cls: "pa2-trend-up" },
-    { icon: "🏭", label: "Active Suppliers", value: "6", raw: 6, sub: "14 orders placed", trend: "4 Raw Material", cls: "pa2-trend-neutral" },
-    { icon: "✅", label: "GRN Received", value: "₹19.2L", raw: 1920, sub: "76.8% of PO value", trend: "On track", cls: "pa2-trend-up" },
-    { icon: "⏳", label: "GRN Done", value: "₹5.8L", raw: 580, sub: "3 POs awaiting receipt", trend: "2 overdue", cls: "pa2-trend-down" },
-    { icon: "📦", label: "Avg Lead Time", value: "17 days", raw: 17, sub: "Across all suppliers", trend: "+2d vs target", cls: "pa2-trend-down" },
-];
-
-const SUPPLIER_RANKING = [
-    { name: "Musk Metals Pvt Ltd", barW: 100, amount: "₹38.56L", pct: "42%", color: "#2d6de8" },
-    { name: "Ammarun Foundries", barW: 72, amount: "₹27.80L", pct: "30%", color: "#10b981" },
-    { name: "Ansari CNC Centre", barW: 48, amount: "₹18.30L", pct: "20%", color: "#f5a623" },
-    { name: "Aquasub Engineering", barW: 11, amount: "₹3.91L", pct: "4%", color: "#ef4444" },
-    { name: "Sri Vinayaga Enterprises", barW: 5, amount: "₹1.60L", pct: "2%", color: "#8b5cf6" },
-    { name: "Vishal DTP", barW: 3, amount: "₹0.93L", pct: "1%", color: "#94a3b8" },
-];
-
-const PO_ROWS = [
-    { po: "P251568", date: "01/01/2026", supBg: "#64748b", supInit: "VD", supName: "Vishal DTP", partNo: "GNC0013", desc: "Letter Pad", ordQty: "5", rcvQty: "5", rate: "415.00", amount: "2,075.00", status: "Closed", tagCls: "pa2-tag-closed" },
-    { po: "P251568", date: "01/01/2026", supBg: "#64748b", supInit: "VD", supName: "Vishal DTP", partNo: "PDC0012", desc: "Record Note – WIP Tag", ordQty: "3,000", rcvQty: "3,000", rate: "0.65", amount: "1,950.00", status: "Closed", tagCls: "pa2-tag-closed" },
-    { po: "P251568", date: "01/01/2026", supBg: "#64748b", supInit: "VD", supName: "Vishal DTP", partNo: "PDC0015", desc: "Record Note – Final Inspection Tag", ordQty: "2,000", rcvQty: "2,000", rate: "0.65", amount: "1,300.00", status: "Closed", tagCls: "pa2-tag-closed" },
-    { po: "P251569", date: "01/01/2026", supBg: "#8b5cf6", supInit: "SV", supName: "Sri Vinayaga", partNo: "PKM0012", desc: 'VCI Cover 8"×8"', ordQty: "100", rcvQty: "100", rate: "320.00", amount: "32,000.00", status: "Closed", tagCls: "pa2-tag-closed" },
-    { po: "P251569", date: "01/01/2026", supBg: "#8b5cf6", supInit: "SV", supName: "Sri Vinayaga", partNo: "PKM0013", desc: 'VCI Cover 10"×12"', ordQty: "25", rcvQty: "25", rate: "320.00", amount: "8,000.00", status: "Closed", tagCls: "pa2-tag-closed" },
-    { po: "P251570", date: "01/01/2026", supBg: "#2d6de8", supInit: "MM", supName: "Musk Metals", partNo: "RRD03-05050-00", desc: "Round Rod DIA 50MM AISI410", ordQty: "390", rcvQty: "390", rate: "92.00", amount: "5,52,946.68", status: "Closed", tagCls: "pa2-tag-closed" },
-    { po: "P251570", date: "01/01/2026", supBg: "#2d6de8", supInit: "MM", supName: "Musk Metals", partNo: "RRD03-06060-00", desc: "Round Rod DIA 60MM AISI410", ordQty: "366", rcvQty: "366", rate: "92.00", amount: "7,47,518.40", status: "Closed", tagCls: "pa2-tag-closed" },
-    { po: "P251570", date: "01/01/2026", supBg: "#2d6de8", supInit: "MM", supName: "Musk Metals", partNo: "RRD03-06565-00", desc: "Round Rod DIA 65MM AISI410", ordQty: "325", rcvQty: "0", rate: "92.00", amount: "7,79,406.29", status: "Overdue", tagCls: "pa2-tag-overdue", overdueRcv: true },
-    { po: "P251570", date: "01/01/2026", supBg: "#2d6de8", supInit: "MM", supName: "Musk Metals", partNo: "RRD03-04545-00", desc: "Round Rod DIA 45MM AISI410", ordQty: "79", rcvQty: "79", rate: "92.00", amount: "92,667.00", status: "Closed", tagCls: "pa2-tag-closed" },
-    { po: "P251570", date: "01/01/2026", supBg: "#2d6de8", supInit: "MM", supName: "Musk Metals", partNo: "RRD03-07070-00", desc: "Round Rod DIA 70MM AISI410", ordQty: "240", rcvQty: "240", rate: "92.00", amount: "6,80,792.64", status: "Closed", tagCls: "pa2-tag-closed" },
-    { po: "P251571", date: "01/01/2026", supBg: "#f97316", supInit: "AQ", supName: "Aquasub Engg", partNo: "PDC0017", desc: "Paint-Seal Red Oxide Primer", ordQty: "40", rcvQty: "40", rate: "189.00", amount: "7,560.00", status: "Closed", tagCls: "pa2-tag-closed" },
-    { po: "P251571", date: "01/01/2026", supBg: "#f97316", supInit: "AQ", supName: "Aquasub Engg", partNo: "PDC0018", desc: "Thinner GP 015 (RAS)", ordQty: "30", rcvQty: "30", rate: "145.00", amount: "4,350.00", status: "Closed", tagCls: "pa2-tag-closed" },
-    { po: "P251572", date: "01/01/2026", supBg: "#ef4444", supInit: "AC", supName: "Ansari CNC", partNo: "PDCT0165", desc: "Insert CCMT 09T304 HM WT6430 Carbide", ordQty: "100", rcvQty: "100", rate: "110.00", amount: "11,000.00", status: "Closed", tagCls: "pa2-tag-closed" },
-];
-
-const GRN_ROWS = [
-    { dotColor: "#ef4444", name: "Round Rod DIA 65MM AISI410", code: "P251570 · RRD03-06565-00 · Musk Metals Pvt Ltd", daysCls: "pa2-days-over", daysLbl: "+7 days", qty: "325 Nos" },
-    { dotColor: "#f5a623", name: "Bottom Bearing Housing BEH04×1", code: "P251574 · Ammarun Foundries · Balance Lot", daysCls: "pa2-days-warn", daysLbl: "+3 days", qty: "1,200 Nos" },
-    { dotColor: "#10b981", name: "Record Note – WIP Tag", code: "P251568 · Vishal DTP · PDC0012", daysCls: "pa2-days-ok", daysLbl: "On Time", qty: "3,000 Nos" },
-    { dotColor: "#10b981", name: "Paint-Seal Red Oxide Primer", code: "P251571 · Aquasub Engineering · PDC0017", daysCls: "pa2-days-ok", daysLbl: "Received", qty: "40 Ltrs" },
-    { dotColor: "#10b981", name: "Insert CCMT 09T304 Carbide", code: "P251572 · Ansari CNC Centre · PDCT0165", daysCls: "pa2-days-ok", daysLbl: "Received", qty: "100 Nos" },
-];
-
-const ALERTS = [
-    { icon: "🔴", title: "Round Rod DIA 65MM — 325 Nos undelivered", sub: "P251570 · Musk Metals · Production impact risk", time: "7d overdue", urgency: "high" },
-    { icon: "🟠", title: "Bottom Bearing GRN balance pending", sub: "P251574 · Ammarun Foundries · ₹8.2L balance to receive", time: "3d open", urgency: "medium" },
-    { icon: "🟡", title: 'VCI Cover 8"×8" — DC not confirmed in system', sub: "P251569 · Sri Vinayaga Enterprises · DC update pending", time: "Today", urgency: "low" },
-    { icon: "🔵", title: "Musk Metals rate variance — approval needed", sub: "₹92/kg vs last PO ₹88/kg (+4.5%) — review and approve", time: "Auto-flag", urgency: "info" },
-];
-
-const TREND_DATA = {
-    labels: ["Wk 1", "Wk 2", "Wk 3", "Wk 4", "Wk 5", "Wk 6", "Wk 7", "Wk 8"],
-    datasets: [
-        {
-            label: "PO Value (₹ L)",
-            data: [2.1, 3.5, 5.8, 7.2, 6.4, 4.1, 3.0, 2.8],
-            backgroundColor: "rgba(45,109,232,0.18)",
-            borderColor: "#2d6de8",
-            borderWidth: 2,
-            borderRadius: 6,
-            type: "bar",
-        },
-        {
-            label: "GRN Received (₹ L)",
-            data: [1.8, 3.0, 5.2, 6.5, 5.8, 3.6, 2.5, 0.8],
-            borderColor: "#10b981",
-            backgroundColor: "rgba(16,185,129,0.08)",
-            borderWidth: 2.5,
-            tension: 0.45,
-            fill: true,
-            pointRadius: 4,
-            pointBackgroundColor: "#10b981",
-            pointBorderColor: "#fff",
-            pointBorderWidth: 2,
-            type: "line",
-        },
-    ],
-};
-
-const SUPPLIER_DONUT = {
-    labels: ["Musk Metals", "Ammarun Foundries", "Ansari CNC", "Aquasub Engg", "Sri Vinayaga", "Vishal DTP"],
-    datasets: [{ data: [42, 30, 20, 4, 2, 1], backgroundColor: ["#2d6de8", "#10b981", "#f5a623", "#ef4444", "#8b5cf6", "#94a3b8"], borderColor: "#fff", borderWidth: 2.5 }],
-};
-
-const CATEGORY_DONUT = {
-    labels: ["Raw Material", "Castings", "Tooling/Inserts", "Packing", "Consumables"],
-    datasets: [{ data: [42, 30, 20, 5, 3], backgroundColor: ["#1a54d4", "#2d6de8", "#f5a623", "#8b5cf6", "#94a3b8"], borderColor: "#fff", borderWidth: 2.5 }],
-};
 
 // ─────────────────────────────────────────────
 //  Sub-Components
@@ -1754,7 +1665,7 @@ function AdvancedPurchaseAnalyticsSection({
                     </div>
                 ) : catalogData.length === 0 ? (
                     <div style={{ padding: "3.5rem 1.5rem", textAlign: "center" }}>
-                        <PaNoData icon={<Sparkles size={24} style={{ color: "#2563eb" }} />} message="No purchase records found for the selected period." />
+                        <PaNoData icon={<Sparkles size={24} style={{ color: "#2563eb" }} />} message="No data found on this period" />
                     </div>
                 ) : hero ? (
                     <div className="apa-chart-card">
@@ -1929,7 +1840,7 @@ function AdvancedPurchaseAnalyticsSection({
                     </div>
                 ) : (
                     <div style={{ padding: "3rem 1.5rem", textAlign: "center" }}>
-                        <PaNoData icon={<SlidersHorizontal size={22} style={{ color: apaMode === "raw" ? "#2563eb" : "#7c3aed" }} />} message="No materials found matching the selected category or group filter." />
+                        <PaNoData icon={<SlidersHorizontal size={22} style={{ color: apaMode === "raw" ? "#2563eb" : "#7c3aed" }} />} message="No data found on this period" />
                     </div>
                 )}
 
@@ -2275,6 +2186,142 @@ function AdvancedPurchaseAnalyticsSection({
     );
 }
 
+// ── Ultra-Smooth Fluid Organic Progress Status Card (Exact Sales Analysis Parity) ──
+function PurchaseStatusBar({ isGlobalLoading, loadingProgress }) {
+    const [displayProgress, setDisplayProgress] = useState(0);
+    const [statusVisible, setStatusVisible] = useState(true);
+
+    useEffect(() => {
+        let animId = null;
+        let finishTimer = null;
+        let lastStamp = performance.now();
+
+        if (isGlobalLoading) {
+            setStatusVisible(true);
+
+            const stepProgress = (timestamp) => {
+                const dt = Math.min((timestamp - lastStamp) / 1000, 0.08);
+                lastStamp = timestamp;
+
+                setDisplayProgress((prev) => {
+                    const target = Math.max(loadingProgress, 14);
+
+                    if (prev < target) {
+                        const gap = target - prev;
+                        const speed = Math.max(gap * 4.2, 10);
+                        const next = prev + speed * dt;
+                        return Math.min(next, target);
+                    } else if (prev < 96) {
+                        let rate = 2.4;
+                        if (prev > 35) rate = 1.5;
+                        if (prev > 65) rate = 0.75;
+                        if (prev > 85) rate = 0.3;
+                        return Math.min(prev + rate * dt, 96);
+                    }
+                    return prev;
+                });
+
+                animId = requestAnimationFrame(stepProgress);
+            };
+
+            animId = requestAnimationFrame(stepProgress);
+        } else {
+            let isDone = false;
+            const glideToComplete = (timestamp) => {
+                const dt = Math.min((timestamp - lastStamp) / 1000, 0.08);
+                lastStamp = timestamp;
+
+                setDisplayProgress((prev) => {
+                    if (prev >= 100) {
+                        isDone = true;
+                        return 100;
+                    }
+                    const speed = Math.max((100 - prev) * 10, 60);
+                    const next = prev + speed * dt;
+                    if (next >= 99.5) {
+                        isDone = true;
+                        return 100;
+                    }
+                    return next;
+                });
+
+                if (!isDone) {
+                    animId = requestAnimationFrame(glideToComplete);
+                }
+            };
+
+            animId = requestAnimationFrame(glideToComplete);
+
+            finishTimer = setTimeout(() => {
+                setStatusVisible(false);
+                setDisplayProgress(0);
+            }, 750);
+        }
+
+        return () => {
+            if (animId) cancelAnimationFrame(animId);
+            if (finishTimer) clearTimeout(finishTimer);
+        };
+    }, [isGlobalLoading, loadingProgress]);
+
+    const showStatusBar = isGlobalLoading || statusVisible;
+
+    return (
+        <div className={`pa2-status-card-container ${showStatusBar ? "pa2-status-card--active" : "pa2-status-card--hidden"}`}>
+            <div className="pa2-status-card">
+                <div className="pa2-status-card__glow-bg" />
+                <div className="pa2-status-card__body">
+                    <div className="pa2-status-card__left">
+                        <div className={`pa2-status-card__icon-box ${displayProgress >= 99.5 ? "pa2-status-card__icon-box--done" : ""}`}>
+                            {displayProgress >= 99.5 ? (
+                                <CheckCircle2 size={18} className="pa2-status-card__icon-check" />
+                            ) : (
+                                <Loader2 size={18} className="pa2-status-card__icon-spin" />
+                            )}
+                        </div>
+                        <div className="pa2-status-card__text-wrap">
+                            <div className="pa2-status-card__title-row">
+                                <span className="pa2-status-card__title">
+                                    {displayProgress >= 99.5 ? "Purchase Analytics Synchronized" : "Updating Purchase Analytics"}
+                                </span>
+                                <span className={`pa2-status-card__badge ${displayProgress >= 99.5 ? "pa2-status-card__badge--done" : ""}`}>
+                                    <span className="pa2-status-card__badge-dot" />
+                                    {displayProgress >= 99.5 ? "Ready" : "Live Sync"}
+                                </span>
+                            </div>
+                            <div className="pa2-status-card__subtitle">
+                                {displayProgress >= 99.5
+                                    ? "All purchase orders, GRN compliance & procurement metrics are up to date"
+                                    : displayProgress < 35
+                                        ? "Fetching purchase orders and supplier telemetry..."
+                                        : displayProgress < 75
+                                            ? "Aggregating spend analytics, GRN receipts & schedules..."
+                                            : "Finalizing procurement KPIs and supplier ratings..."}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="pa2-status-card__right">
+                        <div className={`pa2-status-pill ${displayProgress >= 99.5 ? "pa2-status-pill--done" : ""}`}>
+                            <span className="pa2-status-pill__percent">{Math.round(displayProgress)}%</span>
+                            <span className="pa2-status-pill__label">{displayProgress >= 99.5 ? "Complete" : "Loaded"}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="pa2-status-card__track">
+                    <div
+                        className={`pa2-status-card__fill ${displayProgress >= 99.5 ? "pa2-status-card__fill--done" : ""}`}
+                        style={{ width: `${Math.min(100, Math.max(0, displayProgress))}%` }}
+                    >
+                        <div className="pa2-status-card__fill-shimmer" />
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 export default function PurchaseAnalysis() {
     const today = new Date();
     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
@@ -2355,7 +2402,7 @@ export default function PurchaseAnalysis() {
         return () => clearTimeout(handler);
     }, [searchQuery]);
     const [poSummary, setPoSummary] = useState(null);
-    const [poLoading, setPoLoading] = useState(false);
+    const [poLoading, setPoLoading] = useState(true);
     const [amendedPoRows, setAmendedPoRows] = useState([]);
     const [amendedPoLoading, setAmendedPoLoading] = useState(false);
     const [shortCloseRows, setShortCloseRows] = useState([]);
@@ -2384,11 +2431,11 @@ export default function PurchaseAnalysis() {
     const [alertsData, setAlertsData] = useState(null);
     const [alertsLoading, setAlertsLoading] = useState(false);
     const [summaryData, setSummaryData] = useState(null);
-    const [summaryLoading, setSummaryLoading] = useState(false);
+    const [summaryLoading, setSummaryLoading] = useState(true);
     const [supplierRatingData, setSupplierRatingData] = useState(null);
     const [supplierRatingLoading, setSupplierRatingLoading] = useState(false);
     const [trendLoading, setTrendLoading] = useState(false);
-    const [chartsLoading, setChartsLoading] = useState(false);
+    const [chartsLoading, setChartsLoading] = useState(true);
     const [traceSearch, setTraceSearch] = useState("");
     const [traceRows, setTraceRows] = useState([]);
     const [traceLoading, setTraceLoading] = useState(false);
@@ -3473,27 +3520,25 @@ export default function PurchaseAnalysis() {
     }, [poRows]);
 
     const rmStockVal = useMemo(() => {
-        if (filteredPoRows.length === 0) return "—";
-        const rawSum = filteredPoRows
-            .filter(r => {
-                const t = (r.po_type || "").toLowerCase();
-                return t.includes("raw") || t.includes("rm");
-            })
-            .reduce((acc, r) => acc + Number(r.value || 0), 0) / 100000;
-        const val = rawSum * 0.18;
-        return `₹${val.toFixed(2)}L`;
+        if (filteredPoRows.length === 0) return { valStr: "—", sub: "No POs" };
+        const rawRows = filteredPoRows.filter(r => {
+            const t = (r.po_type || "").toLowerCase();
+            return t.includes("raw") || t.includes("rm");
+        });
+        if (rawRows.length === 0) return { valStr: "—", sub: "No POs" };
+        const rawSum = rawRows.reduce((acc, r) => acc + Number(r.value || 0), 0) / 100000;
+        return { valStr: `₹${rawSum.toFixed(2)}L`, sub: `${rawRows.length} POs placed` };
     }, [filteredPoRows]);
 
     const storeStockVal = useMemo(() => {
-        if (filteredPoRows.length === 0) return "—";
-        const storeSum = filteredPoRows
-            .filter(r => {
-                const t = (r.po_type || "").toLowerCase();
-                return !(t.includes("raw") || t.includes("rm"));
-            })
-            .reduce((acc, r) => acc + Number(r.value || 0), 0) / 100000;
-        const val = storeSum * 0.14;
-        return `₹${val.toFixed(2)}L`;
+        if (filteredPoRows.length === 0) return { valStr: "—", sub: "No POs" };
+        const storeRows = filteredPoRows.filter(r => {
+            const t = (r.po_type || "").toLowerCase();
+            return !(t.includes("raw") || t.includes("rm"));
+        });
+        if (storeRows.length === 0) return { valStr: "—", sub: "No POs" };
+        const storeSum = storeRows.reduce((acc, r) => acc + Number(r.value || 0), 0) / 100000;
+        return { valStr: `₹${storeSum.toFixed(2)}L`, sub: `${storeRows.length} POs placed` };
     }, [filteredPoRows]);
 
     const filteredShortCloseRows = useMemo(() => {
@@ -4269,9 +4314,10 @@ export default function PurchaseAnalysis() {
 
     // ── Redraw donut charts (supplier + category) ─────────────────
     useEffect(() => {
-        if (!supRef.current || !catRef.current) return;
         supChart.current?.destroy();
         catChart.current?.destroy();
+
+        if (chartsLoading) return;
 
         const donutOpts = {
             responsive: true,
@@ -4297,99 +4343,103 @@ export default function PurchaseAnalysis() {
         };
 
         const ranking = chartsData?.supplier_ranking ?? [];
-        const supLabels = ranking.map(x => x.name.replace("Pvt Ltd", "").replace("Enterprises", "").trim());
-        const supVals = ranking.map(x => x.spend_lakhs);
+        const supLabels = ranking.map(x => (x.name || "").replace("Pvt Ltd", "").replace("Enterprises", "").trim());
+        const supVals = ranking.map(x => Number(x.spend_lakhs != null ? x.spend_lakhs : (x.spend ? x.spend / 100000 : 0)));
         const catLabels = chartsData?.category_labels ?? [];
         const catVals = chartsData?.category_data ?? [];
 
         const supColors = ["#2d6de8", "#10b981", "#f5a623", "#ef4444", "#8b5cf6", "#94a3b8", "#a855f7", "#ec4899"];
         const catColors = ["#1a54d4", "#2d6de8", "#f5a623", "#8b5cf6", "#94a3b8", "#10b981", "#ef4444", "#6366f1"];
 
-        supChart.current = new Chart(supRef.current, {
-            type: "bar",
-            data: {
-                labels: supLabels.length ? supLabels : ["No Data"],
-                datasets: [{
-                    label: "Purchase Value (L)",
-                    data: supVals.length ? supVals : [0],
-                    backgroundColor: supVals.length ? supLabels.map((_, i) => supColors[i % supColors.length] + "22") : ["#e2e8f0"],
-                    borderColor: supVals.length ? supLabels.map((_, i) => supColors[i % supColors.length]) : ["#cbd5e1"],
-                    borderWidth: 1.5,
-                    borderRadius: 5
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                indexAxis: "y",
-                devicePixelRatio: window.devicePixelRatio || 2,
-                animation: {
-                    duration: 1200,
-                    easing: "easeOutQuart"
+        if (supRef.current && supLabels.length > 0 && supVals.some(v => Number(v) > 0)) {
+            supChart.current = new Chart(supRef.current, {
+                type: "bar",
+                data: {
+                    labels: supLabels,
+                    datasets: [{
+                        label: "Purchase Value (L)",
+                        data: supVals,
+                        backgroundColor: supLabels.map((_, i) => supColors[i % supColors.length] + "22"),
+                        borderColor: supLabels.map((_, i) => supColors[i % supColors.length]),
+                        borderWidth: 1.5,
+                        borderRadius: 5
+                    }]
                 },
-                layout: { padding: { right: 35 } },
-                plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                        backgroundColor: "rgba(15,23,42,0.9)",
-                        padding: 10,
-                        cornerRadius: 6,
-                        callbacks: {
-                            label: ctx => ` Purchase Value: ₹${ctx.parsed.x.toFixed(2)}L`
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: "y",
+                    devicePixelRatio: window.devicePixelRatio || 2,
+                    animation: {
+                        duration: 1200,
+                        easing: "easeOutQuart"
+                    },
+                    layout: { padding: { right: 35 } },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: "rgba(15,23,42,0.9)",
+                            padding: 10,
+                            cornerRadius: 6,
+                            callbacks: {
+                                label: ctx => ` Purchase Value: ₹${ctx.parsed.x.toFixed(2)}L`
+                            }
+                        },
+                        datalabels: {
+                            display: true,
+                            anchor: "end",
+                            align: "right",
+                            offset: 4,
+                            formatter: (v) => (v > 0 ? `₹${v.toFixed(2)}L` : ""),
+                            font: { size: 9.5, weight: "700", family: "Poppins" },
+                            color: "#1e293b"
                         }
                     },
-                    datalabels: {
-                        display: true,
-                        anchor: "end",
-                        align: "right",
-                        offset: 4,
-                        formatter: (v) => (v > 0 ? `₹${v.toFixed(2)}L` : ""),
-                        font: { size: 9.5, weight: "700", family: "Poppins" },
-                        color: "#1e293b"
-                    }
-                },
-                scales: {
-                    x: {
-                        beginAtZero: true,
-                        grid: { color: "rgba(26,84,212,0.06)", drawTicks: false },
-                        ticks: {
-                            font: { size: 9, family: "Poppins" },
-                            color: "#5a6a9a",
-                            callback: v => `₹${v}L`
+                    scales: {
+                        x: {
+                            beginAtZero: true,
+                            grid: { color: "rgba(26,84,212,0.06)", drawTicks: false },
+                            ticks: {
+                                font: { size: 9, family: "Poppins" },
+                                color: "#5a6a9a",
+                                callback: v => `₹${v}L`
+                            },
+                            border: { display: false }
                         },
-                        border: { display: false }
-                    },
-                    y: {
-                        grid: { display: false },
-                        ticks: {
-                            font: { size: 9, family: "Poppins", weight: 600 },
-                            color: "#1a2a5e"
-                        },
-                        border: { display: false }
+                        y: {
+                            grid: { display: false },
+                            ticks: {
+                                font: { size: 9, family: "Poppins", weight: 600 },
+                                color: "#1a2a5e"
+                            },
+                            border: { display: false }
+                        }
                     }
                 }
-            }
-        });
+            });
+        }
 
-        catChart.current = new Chart(catRef.current, {
-            type: "doughnut",
-            data: {
-                labels: catLabels.length ? catLabels : ["No Data"],
-                datasets: [{
-                    data: catVals.length ? catVals : [100],
-                    backgroundColor: catVals.length ? catColors.slice(0, catLabels.length) : ["#e2e8f0"],
-                    borderColor: "#fff",
-                    borderWidth: 2.5
-                }]
-            },
-            options: donutOpts
-        });
+        if (catRef.current && catLabels.length > 0 && catVals.some(v => Number(v) > 0)) {
+            catChart.current = new Chart(catRef.current, {
+                type: "doughnut",
+                data: {
+                    labels: catLabels,
+                    datasets: [{
+                        data: catVals,
+                        backgroundColor: catColors.slice(0, catLabels.length),
+                        borderColor: "#fff",
+                        borderWidth: 2.5
+                    }]
+                },
+                options: donutOpts
+            });
+        }
 
         return () => {
             supChart.current?.destroy();
             catChart.current?.destroy();
         };
-    }, [chartsData]);
+    }, [chartsData, chartsLoading]);
 
     // ── Fetch weekly trend + redraw chart ─────────────────────────
     useEffect(() => {
@@ -4495,45 +4545,47 @@ export default function PurchaseAnalysis() {
 
         const getRatingColor = (val) => val >= 90 ? "#10b981" : val >= 75 ? "#2d6de8" : val >= 60 ? "#f5a623" : "#ef4444";
 
-        ratingChart.current = new Chart(ratingRef.current, {
-            type: "bar",
-            data: {
-                labels: labels.length ? labels : ["No Data"],
-                datasets: [{
-                    label: "Supplier Score",
-                    data: scores.length ? scores : [0],
-                    backgroundColor: scores.length ? scores.map(v => getRatingColor(v)) : ["#cbd5e1"],
-                    borderRadius: 5
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                devicePixelRatio: window.devicePixelRatio || 2,
-                indexAxis: "y",
-                plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                        callbacks: {
-                            label: ctx => ` Score: ${ctx.parsed.x} / 100`
-                        }
-                    },
-                    datalabels: { display: false }
+        if (ratingRef.current && labels.length > 0 && scores.some(v => Number(v) > 0)) {
+            ratingChart.current = new Chart(ratingRef.current, {
+                type: "bar",
+                data: {
+                    labels,
+                    datasets: [{
+                        label: "Supplier Score",
+                        data: scores,
+                        backgroundColor: scores.map(v => getRatingColor(v)),
+                        borderRadius: 5
+                    }]
                 },
-                scales: {
-                    x: {
-                        min: 0,
-                        max: 100,
-                        grid: { color: "rgba(26,84,212,0.06)" },
-                        ticks: { font: { size: 9, family: "Poppins" }, color: "#5a6a9a" }
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    devicePixelRatio: window.devicePixelRatio || 2,
+                    indexAxis: "y",
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: ctx => ` Score: ${ctx.parsed.x} / 100`
+                            }
+                        },
+                        datalabels: { display: false }
                     },
-                    y: {
-                        grid: { display: false },
-                        ticks: { font: { size: 9, family: "Poppins", weight: 600 }, color: "#1a2a5e" }
+                    scales: {
+                        x: {
+                            min: 0,
+                            max: 100,
+                            grid: { color: "rgba(26,84,212,0.06)" },
+                            ticks: { font: { size: 9, family: "Poppins" }, color: "#5a6a9a" }
+                        },
+                        y: {
+                            grid: { display: false },
+                            ticks: { font: { size: 9, family: "Poppins", weight: 600 }, color: "#1a2a5e" }
+                        }
                     }
                 }
-            }
-        });
+            });
+        }
         return () => ratingChart.current?.destroy();
     }, [supplierRatingData]);
 
@@ -5417,6 +5469,38 @@ export default function PurchaseAnalysis() {
     };
 
     const isGlobalLoading = poLoading || supplierRatingLoading || summaryLoading || trendLoading || chartsLoading || amendedPoLoading || shortCloseLoading || priceTrendLoading || alertsLoading || traceLoading || fsLoading;
+
+    const loadingProgress = useMemo(() => {
+        const totalFetchers = 11;
+        const activeLoadingCount = (summaryLoading ? 1 : 0) +
+            (poLoading ? 1 : 0) +
+            (trendLoading ? 1 : 0) +
+            (chartsLoading ? 1 : 0) +
+            (amendedPoLoading ? 1 : 0) +
+            (shortCloseLoading ? 1 : 0) +
+            (priceTrendLoading ? 1 : 0) +
+            (alertsLoading ? 1 : 0) +
+            (traceLoading ? 1 : 0) +
+            (fsLoading ? 1 : 0) +
+            (supplierRatingLoading ? 1 : 0);
+
+        if (!isGlobalLoading) return 100;
+        const completedFetchers = totalFetchers - activeLoadingCount;
+        return Math.max(14, Math.round((completedFetchers / totalFetchers) * 100));
+    }, [
+        isGlobalLoading,
+        summaryLoading,
+        poLoading,
+        trendLoading,
+        chartsLoading,
+        amendedPoLoading,
+        shortCloseLoading,
+        priceTrendLoading,
+        alertsLoading,
+        traceLoading,
+        fsLoading,
+        supplierRatingLoading
+    ]);
 
     useEffect(() => {
         if (isGlobalLoading) {
@@ -6377,13 +6461,8 @@ export default function PurchaseAnalysis() {
 
     return (
         <div className={`pa2-root ${animated ? "pa2-root--visible" : ""}`}>
-            {/* ── Global YouTube-Style Loading Top Bar ── */}
-            <div className={`pa2-global-progress-bar ${isGlobalLoading ? "pa2-global-progress-bar--active" : ""}`} />
-
-            {/* ── Page Hero ── */}
-            <div className="pa2-page-hero">
-                {/* Optional Hero Pills and Titles if needed */}
-            </div>
+            {/* ── Modern Glassmorphism Status Loading Card (Exact Sales Analysis Parity) ── */}
+            <PurchaseStatusBar isGlobalLoading={isGlobalLoading} loadingProgress={loadingProgress} />
 
             {/* ── Filters ── */}
             <div className={`pa2-card pa2-filter-card pa2-animate pa2-delay-1 ${isGlobalLoading ? "pa2-filter-card--loading" : ""}`}>
@@ -6745,16 +6824,16 @@ export default function PurchaseAnalysis() {
                         },
                         {
                             label: "RM Stock Value",
-                            value: rmStockVal,
-                            sub: "85% utilization",
-                            trend: "Stock Value",
+                            value: rmStockVal.valStr,
+                            sub: rmStockVal.sub,
+                            trend: "Raw Material",
                             cls: "pa2-trend-up"
                         },
                         {
                             label: "Store Stock Value",
-                            value: storeStockVal,
-                            sub: "Normal turnover",
-                            trend: "Stock Value",
+                            value: storeStockVal.valStr,
+                            sub: storeStockVal.sub,
+                            trend: "Store Material",
                             cls: "pa2-trend-neutral"
                         },
                         {
@@ -6820,13 +6899,17 @@ export default function PurchaseAnalysis() {
                                 ))}
                             </div>
                         </div>
+                    ) : (!weeklyTrend?.labels?.length || (weeklyTrend.po_value?.every(v => Number(v) === 0) && weeklyTrend.grn_received?.every(v => Number(v) === 0))) ? (
+                        <div style={{ height: "280px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            <PaNoData icon={<TrendingUp size={24} style={{ color: "#2d6de8" }} />} message="No data found on this period" />
+                        </div>
                     ) : (
                         <div className="pa2-trend-chart-full-wrap">
                             <canvas ref={trendRef} />
                         </div>
                     )}
                     {/* Mini summary strip below chart */}
-                    {!trendLoading && weeklyTrend && (() => {
+                    {!trendLoading && weeklyTrend && (weeklyTrend.po_value?.some(v => Number(v) > 0) || weeklyTrend.grn_received?.some(v => Number(v) > 0)) && (() => {
                         const poVals = weeklyTrend?.po_value ?? [];
                         const grnVals = weeklyTrend?.grn_received ?? [];
                         const totalPO = poVals.reduce((a, b) => a + Number(b), 0);
@@ -6927,6 +7010,10 @@ export default function PurchaseAnalysis() {
                                 </div>
                             ))}
                         </div>
+                    ) : (!chartsData?.supplier_ranking?.length || !chartsData.supplier_ranking.some(s => Number(s.spend_lakhs || s.spend || s.amount || s.raw || 0) > 0)) ? (
+                        <div style={{ height: "250px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            <PaNoData icon={<Factory size={22} style={{ color: "#2d6de8" }} />} message="No data found on this period" />
+                        </div>
                     ) : (
                         <div className="pa2-chart-wrap pa2-chart-wrap--donut"><canvas ref={supRef} /></div>
                     )}
@@ -6937,6 +7024,10 @@ export default function PurchaseAnalysis() {
                     {chartsLoading ? (
                         <div className="pa2-skeleton-chart pa2-pulse-loader" style={{ justifyContent: "center", alignItems: "center", height: "250px" }}>
                             <div className="pa2-skeleton pa2-shimmer pa2-skeleton-circle" style={{ width: "110px", height: "110px", border: "10px solid #f1f5f9" }} />
+                        </div>
+                    ) : (!chartsData?.category_labels?.length || !chartsData.category_data?.some(v => Number(v) > 0)) ? (
+                        <div style={{ height: "250px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            <PaNoData icon={<FolderOpen size={22} style={{ color: "#2d6de8" }} />} message="No data found on this period" />
                         </div>
                     ) : (
                         <div className="pa2-chart-wrap pa2-chart-wrap--donut"><canvas ref={catRef} /></div>
@@ -7454,7 +7545,7 @@ export default function PurchaseAnalysis() {
                             <div className="pa2-skeleton-chart pa2-pulse-loader" style={{ height: "200px" }} />
                         ) : apvCategoryMonthlyData.labels.length === 0 ? (
                             <div style={{ height: "200px", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                                <PaNoData icon={<BarChart2 size={20} style={{ color: "#2d6de8" }} />} message="No data for selected period or filter" compact />
+                                <PaNoData icon={<BarChart2 size={20} style={{ color: "#2d6de8" }} />} message="No data found on this period" compact />
                             </div>
                         ) : (
                             <div className="pa2-apv-chart-wrap" style={{ height: "240px" }}>
@@ -7569,7 +7660,7 @@ export default function PurchaseAnalysis() {
                                 ) : filteredApvTableRows.length === 0 ? (
                                     <tr>
                                         <td colSpan={13} className="pa2-nodata-td-wrap">
-                                            <PaNoData icon={<Search size={16} style={{ color: "#64748b" }} />} message="No PO records found matching criteria" compact />
+                                            <PaNoData icon={<Search size={16} style={{ color: "#64748b" }} />} message="No data found on this period" compact />
                                         </td>
                                     </tr>
                                 ) : (
@@ -7814,7 +7905,7 @@ export default function PurchaseAnalysis() {
                                 const rankColors = ["#2d6de8", "#10b981", "#f5a623", "#ef4444", "#8b5cf6", "#94a3b8", "#a855f7", "#ec4899"];
                                 const ranking = chartsData?.supplier_ranking ?? [];
                                 if (!ranking.length) {
-                                    return <PaNoData icon={<IndianRupee size={16} style={{ color: "#10b981" }} />} message="No spend records for this period" compact />;
+                                    return <PaNoData icon={<IndianRupee size={16} style={{ color: "#10b981" }} />} message="No data found on this period" compact />;
                                 }
                                 const maxPct = Math.max(...ranking.map(x => x.pct), 1);
                                 return ranking.map((s, i) => {
@@ -8962,9 +9053,15 @@ export default function PurchaseAnalysis() {
                                 </div>
                             </div>
                             {fsShowChart && (
-                                <div className="pa2-fs-chart-wrapper">
-                                    <canvas ref={fsChartCanvasRef} />
-                                </div>
+                                sortedFsRows.length === 0 ? (
+                                    <div className="pa2-fs-chart-wrapper" style={{ height: "180px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                        <PaNoData icon={<CalendarRange size={20} style={{ color: "#2563eb" }} />} message="No data found on this period" compact />
+                                    </div>
+                                ) : (
+                                    <div className="pa2-fs-chart-wrapper">
+                                        <canvas ref={fsChartCanvasRef} />
+                                    </div>
+                                )
                             )}
                         </div>
 
@@ -9010,7 +9107,7 @@ export default function PurchaseAnalysis() {
                                         {!fsLoading && sortedFsRows.length === 0 && (
                                             <tr>
                                                 <td colSpan={12} className="pa2-nodata-td-wrap">
-                                                    <PaNoData icon={<CalendarRange size={16} style={{ color: "#2563eb" }} />} compact message="No fulfillment schedules found" />
+                                                    <PaNoData icon={<CalendarRange size={16} style={{ color: "#2563eb" }} />} compact message="No data found on this period" />
                                                 </td>
                                             </tr>
                                         )}
@@ -9236,9 +9333,15 @@ export default function PurchaseAnalysis() {
                                 </div>
                             </div>
                             {futuristicShowChart && (
-                                <div className="pa2-fs-chart-wrapper">
-                                    <canvas ref={futuristicChartCanvasRef} />
-                                </div>
+                                sortedFuturisticRows.length === 0 ? (
+                                    <div className="pa2-fs-chart-wrapper" style={{ height: "180px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                        <PaNoData icon={<Sparkles size={20} style={{ color: "#8b5cf6" }} />} message="No data found on this period" compact />
+                                    </div>
+                                ) : (
+                                    <div className="pa2-fs-chart-wrapper">
+                                        <canvas ref={futuristicChartCanvasRef} />
+                                    </div>
+                                )
                             )}
                         </div>
 
@@ -9264,7 +9367,7 @@ export default function PurchaseAnalysis() {
                                         {sortedFuturisticRows.length === 0 ? (
                                             <tr>
                                                 <td colSpan={10} className="pa2-nodata-td-wrap">
-                                                    <PaNoData icon={<Sparkles size={16} style={{ color: "#8b5cf6" }} />} compact message="No futuristic schedule records found for this selection" />
+                                                    <PaNoData icon={<Sparkles size={16} style={{ color: "#8b5cf6" }} />} compact message="No data found on this period" />
                                                 </td>
                                             </tr>
                                         ) : (
@@ -9475,7 +9578,7 @@ export default function PurchaseAnalysis() {
                             )}
                             {!traceLoading && filteredTraceData.length === 0 && (
                                 <tr>
-                                    <td colSpan={19} className="pa2-nodata-td-wrap"><PaNoData icon={<Search size={16} style={{ color: "#64748b" }} />} message="No traceability records found" compact /></td>
+                                    <td colSpan={19} className="pa2-nodata-td-wrap"><PaNoData icon={<Search size={16} style={{ color: "#64748b" }} />} message="No data found on this period" compact /></td>
                                 </tr>
                             )}
                             {!traceLoading && filteredTraceData.map((row, i) => (
@@ -10075,6 +10178,10 @@ export default function PurchaseAnalysis() {
                                 ))}
                             </div>
                         </div>
+                    ) : (!supplierRatingData?.labels?.length || supplierRatingData.data?.every(v => Number(v) === 0)) ? (
+                        <div style={{ height: "250px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            <PaNoData icon={<Trophy size={22} style={{ color: "#f5a623" }} />} message="No data found on this period" />
+                        </div>
                     ) : (
                         <div className="pa2-chart-wrap" style={{ height: "250px", padding: "12px" }}>
                             <canvas ref={ratingRef} />
@@ -10114,7 +10221,7 @@ export default function PurchaseAnalysis() {
                             </div>
                         ))}
                         {!alertsLoading && (!alertsData?.alerts || alertsData.alerts.length === 0) && (
-                            <div style={{ padding: "2rem", textAlign: "center", color: "#64748b" }}>No alerts found for this period</div>
+                            <PaNoData icon={<AlertTriangle size={20} style={{ color: "#ef4444" }} />} message="No data found on this period" compact />
                         )}
                     </div>
                     {!alertsLoading && alertsData?.key_action && (
