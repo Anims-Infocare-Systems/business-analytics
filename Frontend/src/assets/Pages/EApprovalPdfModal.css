@@ -706,6 +706,11 @@
     text-align: center;
 }
 
+.eap-doc-table th.text-left,
+.eap-doc-table td.text-left {
+    text-align: left;
+}
+
 .eap-doc-table tbody {
     display: flex;
     flex-direction: column;

@@ -1411,7 +1411,7 @@
 /* ── Table ── */
 .eap-prev__table {
     width: 100%;
-    min-width: 700px;
+    min-width: 780px;
     border-collapse: separate;
     border-spacing: 0;
     font-family: 'DM Sans', 'Outfit', -apple-system, sans-serif;
@@ -1511,6 +1511,14 @@
     border-radius: 5px;
     font-size: .72rem;
     font-weight: 700;
+    white-space: nowrap;
+}
+
+.eap-prev__dia {
+    display: inline-block;
+    color: #334155;
+    font-size: .82rem;
+    font-weight: 600;
     white-space: nowrap;
 }
 

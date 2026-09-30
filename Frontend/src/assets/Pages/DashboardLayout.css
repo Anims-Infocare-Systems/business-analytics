@@ -302,9 +302,9 @@
     margin: 12px 0 12px 12px;
     box-shadow: 4px 0 28px rgba(26, 84, 212, .24), 0 0 0 1px rgba(255, 255, 255, .08) inset;
     transition:
-        width .18s cubic-bezier(.2, 0, 0, 1),
-        min-width .18s cubic-bezier(.2, 0, 0, 1),
-        transform .18s cubic-bezier(.2, 0, 0, 1),
+        width 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+        min-width 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+        transform 0.28s cubic-bezier(0.4, 0, 0.2, 1),
         opacity .25s ease;
     will-change: width, min-width;
     position: relative;
@@ -320,9 +320,9 @@
     opacity: 1;
     transform: translateX(0);
     transition:
-        width .18s cubic-bezier(.2, 0, 0, 1),
-        min-width .18s cubic-bezier(.2, 0, 0, 1),
-        transform .18s cubic-bezier(.2, 0, 0, 1),
+        width 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+        min-width 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+        transform 0.28s cubic-bezier(0.4, 0, 0.2, 1),
         opacity .3s ease;
 }
 
@@ -340,7 +340,7 @@
 
 .dl-sidebar--collapsed .dl-sidebar__nav {
     overflow: visible;
-    padding: 0 4px;
+    padding: 0 8px;
 }
 
 /* ── Glowing vertical shimmer stripe ─────────────────────── */
@@ -394,8 +394,8 @@
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 20px 16px 14px;
-    transition: padding .3s;
+    padding: 20px 14px 14px;
+    transition: padding 0.28s cubic-bezier(0.4, 0, 0.2, 1);
     flex-shrink: 0;
     position: relative;
     z-index: 1;
@@ -410,8 +410,7 @@
 }
 
 .dl-sidebar--collapsed .dl-sidebar__logo {
-    padding: 20px 0 14px;
-    justify-content: center;
+    padding: 20px 14px 14px;
 }
 
 .dl-sidebar__logo-box {
@@ -444,7 +443,22 @@
     font-size: 17px;
     font-weight: 700;
     white-space: nowrap;
-    animation: dl-slide-in-left .14s ease both;
+    overflow: hidden;
+    opacity: 1;
+    transform: translateX(0);
+    max-width: 160px;
+    transition:
+        opacity 0.20s cubic-bezier(0.4, 0, 0.2, 1),
+        transform 0.20s cubic-bezier(0.4, 0, 0.2, 1),
+        max-width 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.dl-sidebar--collapsed .dl-sidebar__logo-name {
+    opacity: 0;
+    transform: translateX(-10px);
+    max-width: 0;
+    pointer-events: none;
+    margin: 0;
 }
 
 /* ── Section labels ───────────────────────────────────────── */
@@ -453,8 +467,11 @@
     font-size: 11px;
     font-weight: 700;
     letter-spacing: 1.5px;
-    padding: 4px 20px 8px;
-    transition: padding .3s;
+    padding: 4px 16px 8px;
+    transition:
+        padding 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+        letter-spacing 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+        font-size 0.28s cubic-bezier(0.4, 0, 0.2, 1);
     white-space: nowrap;
     overflow: hidden;
     position: relative;
@@ -464,6 +481,8 @@
 .dl-sidebar--collapsed .dl-sidebar__section-label {
     padding: 4px 0 8px;
     text-align: center;
+    font-size: 10px;
+    letter-spacing: 1px;
 }
 
 /* ── Nav ──────────────────────────────────────────────────── */
@@ -499,7 +518,7 @@
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 10px 12px;
+    padding: 10px 14px;
     border-radius: 10px;
     cursor: pointer;
     margin-bottom: 2px;
@@ -508,7 +527,8 @@
         background .12s ease,
         border-color .12s ease,
         transform .12s ease,
-        box-shadow .12s ease;
+        box-shadow .12s ease,
+        padding 0.28s cubic-bezier(0.4, 0, 0.2, 1);
     white-space: nowrap;
     user-select: none;
     position: relative;
@@ -523,8 +543,7 @@
 }
 
 .dl-sidebar--collapsed .dl-sidebar__item {
-    padding: 10px 0;
-    justify-content: center;
+    padding: 10px calc((100% - 24px) / 2);
 }
 
 .dl-sidebar__item:hover {
@@ -575,8 +594,11 @@
 .dl-sidebar__item-icon {
     color: #fff;
     flex-shrink: 0;
+    width: 24px;
+    height: 24px;
     display: flex;
     align-items: center;
+    justify-content: center;
     transition: transform .2s ease;
 }
 
@@ -595,8 +617,23 @@
     flex: 1;
     overflow: hidden;
     text-overflow: ellipsis;
-    transition: font-weight .12s;
-    animation: dl-fade-in .12s ease both;
+    white-space: nowrap;
+    opacity: 1;
+    transform: translateX(0);
+    max-width: 170px;
+    transition:
+        opacity 0.20s cubic-bezier(0.4, 0, 0.2, 1),
+        transform 0.20s cubic-bezier(0.4, 0, 0.2, 1),
+        max-width 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+        font-weight .12s;
+}
+
+.dl-sidebar--collapsed .dl-sidebar__item-label {
+    opacity: 0;
+    transform: translateX(-8px);
+    max-width: 0;
+    pointer-events: none;
+    margin: 0;
 }
 
 .dl-sidebar__item--active .dl-sidebar__item-label {
@@ -608,7 +645,17 @@
     display: flex;
     align-items: center;
     margin-left: auto;
-    animation: dl-fade-in .12s ease both;
+    opacity: 1;
+    transform: scale(1);
+    transition:
+        opacity 0.18s cubic-bezier(0.4, 0, 0.2, 1),
+        transform 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.dl-sidebar--collapsed .dl-sidebar__item-chevron {
+    opacity: 0;
+    transform: scale(0.6);
+    pointer-events: none;
 }
 
 .dl-sidebar__item--logout:hover {
@@ -831,7 +878,14 @@
     flex-shrink: 0;
     position: relative;
     z-index: 1;
-    transition: background .12s ease, color .12s ease, border-color .12s ease, transform .12s ease;
+    transition:
+        background .15s ease,
+        color .15s ease,
+        border-color .15s ease,
+        transform .15s ease,
+        width 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+        margin 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+        padding 0.28s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .dl-sidebar__collapse-btn:hover {
@@ -845,22 +899,45 @@
     transform: translateY(0) scale(0.97);
 }
 
-/* collapsed state — icon only, centred */
+.dl-sidebar__collapse-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    flex-shrink: 0;
+    transition: transform 0.22s ease;
+}
+
+/* collapsed state — icon smoothly centered, no snapping */
 .dl-sidebar--collapsed .dl-sidebar__collapse-btn {
     width: calc(100% - 16px);
     margin: 8px 8px 14px;
-    padding: 10px 0;
-    justify-content: center;
+    padding: 10px calc((100% - 22px) / 2);
     border-radius: 10px;
 }
 
 .dl-sidebar__collapse-label {
     flex: 1;
     text-align: left;
-    animation: dl-slide-in-left .14s ease both;
+    white-space: nowrap;
+    overflow: hidden;
+    opacity: 1;
+    transform: translateX(0);
+    max-width: 140px;
+    transition:
+        opacity 0.20s cubic-bezier(0.4, 0, 0.2, 1),
+        transform 0.20s cubic-bezier(0.4, 0, 0.2, 1),
+        max-width 0.28s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-
+.dl-sidebar--collapsed .dl-sidebar__collapse-label {
+    opacity: 0;
+    transform: translateX(-8px);
+    max-width: 0;
+    pointer-events: none;
+    margin: 0;
+}
 
 /* ══════════════════════════════════════════════════════════
    MAIN AREA
@@ -871,6 +948,7 @@
     flex-direction: column;
     overflow: hidden;
     min-width: 0;
+    contain: layout style;
 }
 
 /* ── Header ───────────────────────────────────────────────── */

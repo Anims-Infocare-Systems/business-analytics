@@ -147,7 +147,7 @@ const TYPE_ORDER = [
     "Vendor Master",
     "Product Route Card",
     "Vendor Rate Master",
-    "Commercial Master",
+    "Product Commercial Master",
     "Alternate Raw Material",
     "Material - Maintenance",
     "Material - Capital Work",
@@ -194,6 +194,12 @@ const TYPE_ICONS = {
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <line x1="12" y1="1" x2="12" y2="23" />
             <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+        </svg>
+    ),
+    "Product Commercial Master": (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
+            <line x1="7" y1="7" x2="7.01" y2="7" strokeWidth="3" />
         </svg>
     ),
     "Commercial Master": (
@@ -411,11 +417,11 @@ function docLabels(card) {
             approveLabel: "Approve Vendor Rate",
         };
     }
-    if (k === "commercial") {
+    if (k === "commercial" || card?.type === "Product Commercial Master" || card?.type === "Commercial Master") {
         return {
             docNoLabel: "RATE SLIP NO",
             docDateLabel: "TRANS DATE",
-            docTitle: "Commercial Master",
+            docTitle: "Product Commercial Master",
             approveLabel: "Approve Commercial",
         };
     }
@@ -449,12 +455,14 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
 
     useEffect(() => {
         if (!card) return;
-        if (card.type === "Commercial Master") {
+        if (card.type === "Product Commercial Master" || card.type === "Commercial Master") {
             setActiveTab("comm_rates");
         } else if (card.type === "Alternate Raw Material") {
             setActiveTab("alt_comparison");
         } else if (card.type === "Customer PO" || card.type === "Purchase Indent Approval") {
             setActiveTab("po_items");
+        } else if (card.type === "Vendor Master" || card.docKind === "vendor_master") {
+            setActiveTab("vendor_profile");
         } else {
             setActiveTab("items");
         }
@@ -498,7 +506,10 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
 
     if (isLoading || (card && card._loading)) {
         const typeName = card?.type || "Document";
-        const docNo = card ? (card.docKind === "customer_po" ? (card.poNo || card.apoNo || "") : card.poNo) : "";
+        const rawDocNo = card ? (card.docKind === "customer_po" ? (card.poNo || card.apoNo || "") : card.poNo) : "";
+        const docNo = (card && (card.type === "Alternate Raw Material" || card.docKind === "alt_rm"))
+            ? (card.partNo && card.altRmName ? `${card.partNo}|${card.altRmName}` : (rawDocNo && rawDocNo.includes("|") ? rawDocNo.split("|").filter((_, idx) => idx !== 1).join("|") : rawDocNo))
+            : rawDocNo;
         return createPortal(
             <div className="map-modal map-modal--preview" onClick={e => e.target === e.currentTarget && onClose()}>
                 <div className="map-preview-box">
@@ -608,6 +619,9 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
 
     const summaryRows = formatSummaryRows(fin, fmt);
     const docNo = card.poNo;
+    const displayDocNo = (card.type === "Alternate Raw Material" || card.docKind === "alt_rm")
+        ? (card.partNo && card.altRmName ? `${card.partNo}|${card.altRmName}` : (card.poNo && card.poNo.includes("|") ? card.poNo.split("|").filter((_, idx) => idx !== 1).join("|") : card.poNo))
+        : card.poNo;
     const labels = docLabels(card);
     const approvedBy = card.approvedBy || "—";
     const approvedDateTime = card.approvedDateTime || "—";
@@ -629,7 +643,7 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                                 {card.type === "Vendor Rate Master" ? (
                                     labels.docTitle
                                 ) : (
-                                    <>{labels.docTitle} — <span className="map-prev__hd-docno">{docNo}</span></>
+                                    <>{labels.docTitle} — <span className="map-prev__hd-docno">{displayDocNo}</span></>
                                 )}
                             </div>
                         </div>
@@ -651,13 +665,13 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                     )}
                     <div className="map-prev__meta-item map-prev__meta-item--vendor">
                         <span className="map-prev__meta-label">
-                            {card.type === "Commercial Master" ? "Part No" : card.type === "Purchase Indent Approval" ? "Department" : "Vendor / Customer"}
+                            {(card.type === "Product Commercial Master" || card.type === "Commercial Master") ? "Part No" : card.type === "Purchase Indent Approval" ? "Department" : "Vendor / Customer"}
                         </span>
                         <span
                             className="map-prev__meta-val map-prev__meta-val--vendor"
-                            title={card.type === "Commercial Master" ? card.partNo : card.type === "Purchase Indent Approval" ? card.department : card.vendor}
+                            title={(card.type === "Product Commercial Master" || card.type === "Commercial Master") ? card.partNo : card.type === "Purchase Indent Approval" ? card.department : card.vendor}
                         >
-                            {card.type === "Commercial Master" ? card.partNo : card.type === "Purchase Indent Approval" ? card.department : card.vendor}
+                            {(card.type === "Product Commercial Master" || card.type === "Commercial Master") ? card.partNo : card.type === "Purchase Indent Approval" ? card.department : card.vendor}
                         </span>
                     </div>
                     <div className="map-prev__meta-item">
@@ -710,7 +724,7 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                 </div>
 
                 <div className="map-prev__body">
-                    {card.type === "Vendor Master" || card.type === "Alternate Raw Material" ? null : card.type === "Commercial Master" ? (
+                    {card.type === "Vendor Master" || card.type === "Alternate Raw Material" ? null : (card.type === "Product Commercial Master" || card.type === "Commercial Master") ? (
                         <div className="map-prev__tabs">
                             <button
                                 type="button"
@@ -1063,8 +1077,8 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
 
 
                     {/* TAB 1: Line Items & Process Operations OR Rate Details */}
-                    {activeTab === "items" && (
-                        card.type === "Vendor Rate Master" || card.type === "Commercial Master" ? (
+                    {activeTab === "items" && card.type !== "Vendor Master" && card.docKind !== "vendor_master" && (
+                        card.type === "Vendor Rate Master" || card.type === "Product Commercial Master" || card.type === "Commercial Master" ? (
                             <div className="map-prev__rate-details-modern">
                                 <div className="map-modern-layout">
                                     {/* Left Side: Technical Specs */}
@@ -1118,14 +1132,29 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                                             </div>
 
                                             <div className="map-summary-price-box">
-                                                <div className="map-price-row">
-                                                    <span className="map-price-lbl">Approved Unit Rate</span>
-                                                    <span className="map-price-val">₹ {Number(card.currentRate?.rate || 0).toFixed(3)}</span>
-                                                </div>
-                                                <div className="map-price-row map-price-row--sub">
-                                                    <span className="map-price-lbl">Rate per KGS</span>
-                                                    <span className="map-price-val">₹ {Number(card.currentRate?.ratePerKgs || 0).toFixed(3)}</span>
-                                                </div>
+                                                {Number(card.currentRate?.rate || 0) === 0 && Number(card.currentRate?.ratePerKgs || 0) > 0 ? (
+                                                    <>
+                                                        <div className="map-price-row">
+                                                            <span className="map-price-lbl">Rate per KGS</span>
+                                                            <span className="map-price-val">₹ {Number(card.currentRate?.ratePerKgs || 0).toFixed(3)}</span>
+                                                        </div>
+                                                        <div className="map-price-row map-price-row--sub">
+                                                            <span className="map-price-lbl">Unit Rate</span>
+                                                            <span className="map-price-val">₹ {Number(card.currentRate?.rate || 0).toFixed(3)}</span>
+                                                        </div>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <div className="map-price-row">
+                                                            <span className="map-price-lbl">Approved Unit Rate</span>
+                                                            <span className="map-price-val">₹ {Number(card.currentRate?.rate || 0).toFixed(3)}</span>
+                                                        </div>
+                                                        <div className="map-price-row map-price-row--sub">
+                                                            <span className="map-price-lbl">Rate per KGS</span>
+                                                            <span className="map-price-val">₹ {Number(card.currentRate?.ratePerKgs || 0).toFixed(3)}</span>
+                                                        </div>
+                                                    </>
+                                                )}
                                             </div>
 
                                             <div className="map-summary-logistics">
@@ -1194,7 +1223,7 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                                                 <td><span className="map-prev__process">{row.process || "PRE MACHINING & CNC"}</span></td>
                                                 <td className="map-prev__td--center">{row.uom}</td>
                                                 <td className="map-prev__td--num" style={{ fontWeight: 700 }}>
-                                                    {card.type === "Vendor Rate Master" || card.type === "Commercial Master"
+                                                    {card.type === "Vendor Rate Master" || card.type === "Product Commercial Master" || card.type === "Commercial Master"
                                                         ? `₹ ${fmtRate(row.rate)}`
                                                         : Number(row.qty || 0).toLocaleString("en-IN")
                                                     }
@@ -1209,7 +1238,7 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
 
                     {/* TAB 2: Raw Material & Supplier Details OR Rate Revision History */}
                     {activeTab === "raw_material" && (
-                        card.type === "Vendor Rate Master" || card.type === "Commercial Master" ? (
+                        card.type === "Vendor Rate Master" || card.type === "Product Commercial Master" || card.type === "Commercial Master" ? (
                             <div className="map-prev__table-wrap">
                                 <table className="map-prev__table">
                                     <thead>
@@ -1239,7 +1268,7 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                                 </table>
                             </div>
                         ) : (
-                            <div className="map-prev__table-wrap">
+                            <div className="map-prev__table-wrap map-prev__table-wrap--raw-scroll">
                                 <table className="map-prev__table map-prev__table--raw">
                                     <thead>
                                         <tr>
@@ -1321,25 +1350,6 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                                         <span className="map-comm-val">{card.hsnHeading || "—"}</span>
                                     </div>
                                 </div>
-
-                                <div className="map-comm-flags">
-                                    <span className="map-comm-flag-badge map-comm-flag-badge--inactive">
-                                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12" /></svg>
-                                        HSN Code Modified
-                                    </span>
-                                    <span className="map-comm-flag-badge map-comm-flag-badge--inactive">
-                                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12" /></svg>
-                                        Base Rate Modified
-                                    </span>
-                                    <span className="map-comm-flag-badge map-comm-flag-badge--active">
-                                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12" /></svg>
-                                        Tax Details Modified
-                                    </span>
-                                    <span className="map-comm-flag-badge map-comm-flag-badge--inactive">
-                                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12" /></svg>
-                                        Supplier Rate Modified
-                                    </span>
-                                </div>
                             </div>
 
                             <div className="map-comm-tables-grid">
@@ -1352,11 +1362,10 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                                         <table className="map-comm-table">
                                             <thead>
                                                 <tr>
-                                                    <th>INR Selling</th>
-                                                    <th className="map-prev__td--center">Currency</th>
-                                                    <th className="map-prev__td--num">Ex. Rate</th>
-                                                    <th className="map-prev__td--num">INR Net Rate</th>
-                                                    <th className="map-prev__td--center">Eff. Date</th>
+                                                    <th style={{ width: '30%' }}>INR Selling</th>
+                                                    <th className="map-prev__td--center" style={{ width: '18%' }}>Currency</th>
+                                                    <th className="map-prev__td--num" style={{ width: '28%' }}>INR Net Rate</th>
+                                                    <th className="map-prev__td--center" style={{ width: '24%' }}>Eff. Date</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
@@ -1364,7 +1373,6 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                                                     <tr key={index}>
                                                         <td style={{ fontWeight: 700 }}>₹ {Number(br.baseRate).toLocaleString("en-IN", { minimumFractionDigits: 3 })}</td>
                                                         <td className="map-prev__td--center"><span className="map-prev__code">{br.currPref}</span></td>
-                                                        <td className="map-prev__td--num">{Number(br.brCurrRate).toFixed(3)}</td>
                                                         <td className="map-prev__td--num" style={{ fontWeight: 700, color: "#e11d48" }}>₹ {Number(br.netRate).toLocaleString("en-IN", { minimumFractionDigits: 3 })}</td>
                                                         <td className="map-prev__td--center">{br.brEffDt}</td>
                                                     </tr>
@@ -1383,25 +1391,33 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                                         <table className="map-comm-table">
                                             <thead>
                                                 <tr>
-                                                    <th>Tax Type</th>
-                                                    <th className="map-prev__td--num">Tax %</th>
-                                                    <th>Surcharge Type</th>
-                                                    <th className="map-prev__td--num">Sur %</th>
-                                                    <th className="map-prev__td--num">Addl Chg</th>
-                                                    <th className="map-prev__td--center">Eff. Date</th>
+                                                    <th style={{ width: '18%' }}>Tax Type</th>
+                                                    <th className="map-prev__td--num" style={{ width: '14%' }}>Tax %</th>
+                                                    <th style={{ width: '20%' }}>Surcharge Type</th>
+                                                    <th className="map-prev__td--num" style={{ width: '14%' }}>Sur %</th>
+                                                    <th className="map-prev__td--num" style={{ width: '16%' }}>Addl Chg</th>
+                                                    <th className="map-prev__td--center" style={{ width: '18%' }}>Eff. Date</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {(card.taxes || []).map((t, index) => (
-                                                    <tr key={index}>
-                                                        <td>{t.taxType}</td>
-                                                        <td className="map-prev__td--num">{Number(t.taxPer).toFixed(2)}%</td>
-                                                        <td>{t.surType || "—"}</td>
-                                                        <td className="map-prev__td--num">{Number(t.surPer).toFixed(2)}%</td>
-                                                        <td className="map-prev__td--num">₹ {Number(t.addlChg).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
-                                                        <td className="map-prev__td--center">{t.txEffDt}</td>
+                                                {(card.taxes || []).length > 0 ? (
+                                                    (card.taxes || []).map((t, index) => (
+                                                        <tr key={index}>
+                                                            <td style={{ fontWeight: 700, color: '#1e293b' }}>{t.taxType}</td>
+                                                            <td className="map-prev__td--num" style={{ fontWeight: 600 }}>{Number(t.taxPer).toFixed(2)}%</td>
+                                                            <td style={{ fontWeight: t.surType ? 600 : 400, color: t.surType ? '#1e293b' : '#94a3b8' }}>{t.surType || "—"}</td>
+                                                            <td className="map-prev__td--num" style={{ fontWeight: 600 }}>{Number(t.surPer).toFixed(2)}%</td>
+                                                            <td className="map-prev__td--num" style={{ fontWeight: 700 }}>₹ {Number(t.addlChg).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                                                            <td className="map-prev__td--center">{t.txEffDt}</td>
+                                                        </tr>
+                                                    ))
+                                                ) : (
+                                                    <tr>
+                                                        <td colSpan={6} style={{ textAlign: 'center', color: '#94a3b8', padding: '1.25rem' }}>
+                                                            No tax records available
+                                                        </td>
                                                     </tr>
-                                                ))}
+                                                )}
                                             </tbody>
                                         </table>
                                     </div>
@@ -1677,16 +1693,27 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                 <div className="map-prev__footer" data-spotlight="map-action-buttons">
                     <button type="button" className="map-prev-btn map-prev-btn--ghost" onClick={onClose}>Close</button>
                     {card.status === "Approved" ? (
-                        <button
-                            type="button"
-                            className="map-prev-btn map-prev-btn--modify"
-                            disabled={!!actionLoading}
-                            onClick={() => onModify(card)}
-                        >
-                            {actionLoading?.pono === docNo && actionLoading?.type === "modify"
-                                ? <><BtnSpinner /> Modifying…</>
-                                : "Modify Open"}
-                        </button>
+                        (card.type === "Customer PO" || card.docKind === "customer_po" || card.type === "Vendor Rate Master" || card.docKind === "vendor_rate" || card.type === "Product Route Card" || card.docKind === "route_card") ? (
+                            <button
+                                type="button"
+                                className="map-prev-btn map-prev-btn--modify map-prev-btn--inactive"
+                                disabled
+                                title={`Modify Open is disabled for ${card.type || "this document"}`}
+                            >
+                                Modify Open
+                            </button>
+                        ) : (
+                            <button
+                                type="button"
+                                className="map-prev-btn map-prev-btn--modify"
+                                disabled={!!actionLoading}
+                                onClick={() => onModify(card)}
+                            >
+                                {actionLoading?.pono === docNo && actionLoading?.type === "modify"
+                                    ? <><BtnSpinner /> Modifying…</>
+                                    : "Modify Open"}
+                            </button>
+                        )
                     ) : (
                         <button
                             type="button"
@@ -1806,7 +1833,7 @@ function TypeGroup({ type, cards, collapsed, onToggle, onPreview, onApprove, onM
                                     <span className="map-card__type">{card.type}</span>
                                     <span className={`map-card__status map-card__status--${status.toLowerCase()}`}>{status}</span>
                                 </div>
-                                {card.type === "Commercial Master" ? (
+                                {(card.type === "Product Commercial Master" || card.type === "Commercial Master") ? (
                                     <div className="map-card__vendor">{card.subType || "Customer Product"}</div>
                                 ) : card.type === "Purchase Indent Approval" ? null : (
                                     <div className="map-card__vendor">{card.vendor || "BICELLI GECO HYDRAULICS INDIA PVT LTD"}</div>
@@ -1828,7 +1855,7 @@ function TypeGroup({ type, cards, collapsed, onToggle, onPreview, onApprove, onM
                                             <span className="map-info-label">PART NO</span>
                                             <span className="map-info-val map-info-val--part">{card.partNo}</span>
                                         </div>
-                                    ) : card.type === "Commercial Master" ? (
+                                    ) : (card.type === "Product Commercial Master" || card.type === "Commercial Master") ? (
                                         <>
                                             <div className="map-info-row">
                                                 <span className="map-info-label">TRANS NO</span>
@@ -1837,6 +1864,24 @@ function TypeGroup({ type, cards, collapsed, onToggle, onPreview, onApprove, onM
                                             <div className="map-info-row">
                                                 <span className="map-info-label">TRANS DATE</span>
                                                 <span className="map-info-val">{card.poDate}</span>
+                                            </div>
+                                            <div className="map-info-row">
+                                                <span className="map-info-label">PART NO</span>
+                                                <span
+                                                    className="map-info-val"
+                                                    style={{
+                                                        fontWeight: 700,
+                                                        color: "#be123c",
+                                                        maxWidth: "60%",
+                                                        overflow: "hidden",
+                                                        textOverflow: "ellipsis",
+                                                        whiteSpace: "nowrap",
+                                                        textAlign: "right"
+                                                    }}
+                                                    title={card.partNo}
+                                                >
+                                                    {card.partNo || "—"}
+                                                </span>
                                             </div>
                                         </>
                                     ) : (
@@ -1855,7 +1900,13 @@ function TypeGroup({ type, cards, collapsed, onToggle, onPreview, onApprove, onM
                                 <div className="map-card__count">
                                     <div className="map-count-row">
                                         <span className="map-count-label">
-                                            {card.type === "Alternate Raw Material" ? "Proposed RM:" : card.type === "Product Route Card" ? "Batch Qty:" : (card.countLabel ? `${card.countLabel}:` : "Amount:")}
+                                            {card.type === "Alternate Raw Material"
+                                                ? "Proposed RM:"
+                                                : card.type === "Product Route Card"
+                                                    ? "Batch Qty:"
+                                                    : (card.type === "Vendor Rate Master" && Number(card.countVal || 0) === 0 && Number(card.currentRate?.ratePerKgs || 0) > 0)
+                                                        ? "Rate per KGS:"
+                                                        : (card.countLabel ? `${card.countLabel}:` : "Amount:")}
                                         </span>
                                         <span className="map-count-val" style={card.type === "Alternate Raw Material" ? { color: "#be123c", fontWeight: 700 } : {}}>
                                             {card.type === "Alternate Raw Material"
@@ -1864,7 +1915,9 @@ function TypeGroup({ type, cards, collapsed, onToggle, onPreview, onApprove, onM
                                                     ? `${card.countVal} Nos`
                                                     : ["Customer PO", "Vendor Master", "Purchase Indent Approval"].includes(card.type)
                                                         ? card.countVal
-                                                        : `₹ ${Number(card.countVal || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                                        : (card.type === "Vendor Rate Master" && Number(card.countVal || 0) === 0 && Number(card.currentRate?.ratePerKgs || 0) > 0)
+                                                            ? `₹ ${Number(card.currentRate.ratePerKgs).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                                                            : `₹ ${Number(card.countVal || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                                         </span>
                                     </div>
                                 </div>
@@ -1874,13 +1927,25 @@ function TypeGroup({ type, cards, collapsed, onToggle, onPreview, onApprove, onM
                                         Preview
                                     </button>
                                     {status === "Approved" ? (
-                                        <button type="button" className="map-action-btn map-action-btn--modify"
-                                            disabled={!!actionLoading}
-                                            onClick={e => { e.stopPropagation(); onModify(card); }}>
-                                            {actionLoading?.pono === card.poNo && actionLoading?.type === "modify"
-                                                ? <><BtnSpinner /> Modifying…</>
-                                                : "Modify Open"}
-                                        </button>
+                                        (card.type === "Customer PO" || card.docKind === "customer_po" || card.type === "Vendor Rate Master" || card.docKind === "vendor_rate" || card.type === "Product Route Card" || card.docKind === "route_card") ? (
+                                            <button
+                                                type="button"
+                                                className="map-action-btn map-action-btn--modify map-action-btn--inactive"
+                                                disabled
+                                                title={`Modify Open is disabled for ${card.type || "this document"}`}
+                                                onClick={e => e.stopPropagation()}
+                                            >
+                                                Modify Open
+                                            </button>
+                                        ) : (
+                                            <button type="button" className="map-action-btn map-action-btn--modify"
+                                                disabled={!!actionLoading}
+                                                onClick={e => { e.stopPropagation(); onModify(card); }}>
+                                                {actionLoading?.pono === card.poNo && actionLoading?.type === "modify"
+                                                    ? <><BtnSpinner /> Modifying…</>
+                                                    : "Modify Open"}
+                                            </button>
+                                        )
                                     ) : (
                                         <button type="button" className="map-action-btn map-action-btn--primary"
                                             disabled={!!actionLoading}
@@ -2122,16 +2187,23 @@ export default function MApproval() {
         }
 
         if (listCard.items && listCard.items.length > 0) {
-            detailCache.current[cacheKey] = { ...listCard };
-            setSelected({ ...listCard });
-            setPreviewLoading(false);
-            return;
+            const needsVendorRateDetail = (docKind === "vendor_rate" || listCard.type === "Vendor Rate Master") && (!listCard.revisions || listCard.revisions.length === 0);
+            if (!needsVendorRateDetail) {
+                detailCache.current[cacheKey] = { ...listCard };
+                setSelected({ ...listCard });
+                setPreviewLoading(false);
+                return;
+            }
         }
 
         if (detailCache.current[cacheKey] && detailCache.current[cacheKey].items && detailCache.current[cacheKey].items.length > 0) {
-            setSelected({ ...detailCache.current[cacheKey] });
-            setPreviewLoading(false);
-            return;
+            const cached = detailCache.current[cacheKey];
+            const needsVendorRateDetail = (docKind === "vendor_rate" || listCard.type === "Vendor Rate Master") && (!cached.revisions || cached.revisions.length === 0);
+            if (!needsVendorRateDetail) {
+                setSelected({ ...cached });
+                setPreviewLoading(false);
+                return;
+            }
         }
 
         const qs = new URLSearchParams({
@@ -2165,7 +2237,7 @@ export default function MApproval() {
         const invno = card.docKind === "customer_po" ? card.apoNo : card.poNo;
         const docKind = (card.docKind || "invoice").toLowerCase();
         const cacheKey = card.id || `${docKind}:${invno}`;
-        const docLabel = docKind === "dc" ? "DC" : docKind === "ret_dc" ? "Returnable DC" : docKind === "vendor_rate" ? "Vendor Rate" : docKind === "commercial" ? "Commercial Master" : docKind === "customer_po" ? "Customer PO" : docKind === "alt_rm" ? "Alternate RM Request" : "Document";
+        const docLabel = docKind === "dc" ? "DC" : docKind === "ret_dc" ? "Returnable DC" : docKind === "vendor_rate" ? "Vendor Rate" : docKind === "commercial" ? "Product Commercial Master" : docKind === "customer_po" ? "Customer PO" : docKind === "alt_rm" ? "Alternate RM Request" : "Document";
         if (!invno || actionLoading) return;
         setActionLoading({ pono: card.poNo, type: "approve" });
 
@@ -2256,8 +2328,13 @@ export default function MApproval() {
     const handleModify = useCallback(async (card) => {
         const invno = card.docKind === "customer_po" ? card.apoNo : card.poNo;
         const docKind = (card.docKind || "invoice").toLowerCase();
+        if (card.type === "Customer PO" || docKind === "customer_po" || card.type === "Vendor Rate Master" || docKind === "vendor_rate") {
+            const typeTitle = (card.type === "Vendor Rate Master" || docKind === "vendor_rate") ? "Vendor Rate Master" : "Customer PO";
+            addToast(`Modify Open is disabled for ${typeTitle}`, "error");
+            return;
+        }
         const cacheKey = card.id || `${docKind}:${invno}`;
-        const docLabel = docKind === "dc" ? "DC" : docKind === "ret_dc" ? "Returnable DC" : docKind === "vendor_rate" ? "Vendor Rate" : docKind === "commercial" ? "Commercial Master" : docKind === "customer_po" ? "Customer PO" : docKind === "alt_rm" ? "Alternate RM Request" : "Document";
+        const docLabel = docKind === "dc" ? "DC" : docKind === "ret_dc" ? "Returnable DC" : docKind === "vendor_rate" ? "Vendor Rate" : docKind === "commercial" ? "Product Commercial Master" : docKind === "customer_po" ? "Customer PO" : docKind === "alt_rm" ? "Alternate RM Request" : "Document";
         if (!invno || actionLoading) return;
         setActionLoading({ pono: card.poNo, type: "modify" });
 
@@ -2361,7 +2438,7 @@ export default function MApproval() {
                     <input
                         className="map-filter__search"
                         type="text"
-                        placeholder="Search material documents…"
+                        placeholder="Search Code No…"
                         value={search}
                         onChange={e => setSearch(e.target.value)}
                         disabled={isLoading}

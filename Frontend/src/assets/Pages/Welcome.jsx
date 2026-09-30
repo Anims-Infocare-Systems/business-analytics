@@ -187,7 +187,11 @@ export default function Welcome({
     const initials = (userName?.slice(0, 2) || "US").toUpperCase();
 
     const openShortcut = (target) => {
-        if (typeof onNavigate === "function") onNavigate(target);
+        let effTarget = target;
+        if (target === "E-Approval" && userRights && userRights["E-Approval"] === false) {
+            effTarget = (userRights["T-Approval"] !== false) ? "T-Approval" : ((userRights["M-Approval"] !== false) ? "M-Approval" : "Approvals");
+        }
+        if (typeof onNavigate === "function") onNavigate(effTarget);
     };
 
     return (

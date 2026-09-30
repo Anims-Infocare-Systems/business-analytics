@@ -266,6 +266,34 @@ def _parse_customers(request):
     return [c for c in items if c.lower() not in ("all", "all customers", "all customer")]
 
 
+def _parse_parts(request):
+    raw = (
+        request.GET.get("partno")
+        or request.GET.get("part")
+        or request.GET.get("parts")
+        or request.GET.get("part_no")
+        or ""
+    )
+    if not raw:
+        return []
+    items = [p.strip() for p in raw.split(",") if p.strip()]
+    return [p for p in items if p.lower() not in ("all", "all parts", "all part")]
+
+
+def _parse_operators(request):
+    raw = (
+        request.GET.get("operator")
+        or request.GET.get("operators")
+        or request.GET.get("oprname")
+        or request.GET.get("operator_name")
+        or ""
+    )
+    if not raw:
+        return []
+    items = [o.strip() for o in raw.split(",") if o.strip()]
+    return [o for o in items if o.lower() not in ("all", "all operators", "all operator")]
+
+
 def _build_customer_filter_injob(customers, mas_alias="m", det_alias="d"):
     if not customers:
         return "", []
@@ -862,7 +890,7 @@ def quality_analysis_summary(request):
                                 break
 
             if db_pending_success:
-                pending_inspections = int(round(pending_qty_sum))
+                pending_inspections = round(pending_qty_sum)
             elif q:
                 pending_inspections = 0
         except Exception as e_pending:
@@ -1196,160 +1224,182 @@ def quality_analysis_charts(request):
                     "comp": company_col
                 }
 
-        for yr, mn, wk in keys:
-            _bounds = _week_bounds(yr, mn, wk)
-            if _bounds is None:
-                continue
-            w_start, w_end = _bounds
-            w_inspected = 0
-            w_rejected = 0
-            w_rework = 0
+        # Fast weekly aggregation in a single query pass (replaces 39 separate queries)
+        def _date_to_key(dt_obj):
+            if not dt_obj:
+                return None
+            try:
+                d = dt_obj if isinstance(dt_obj, (date, datetime)) else datetime.strptime(str(dt_obj)[:10], "%Y-%m-%d").date()
+                if isinstance(d, datetime):
+                    d = d.date()
+                wn = 1 if d.day <= 7 else 2 if d.day <= 14 else 3 if d.day <= 21 else 4 if d.day <= 28 else 5
+                return (d.year, d.month, wn)
+            except Exception:
+                return None
 
-            # 1. InJob
-            if injob_meta:
-                where_clauses = ["CAST(m.[{}] AS DATE) BETWEEN ? AND ?".format(injob_meta["inspdate"])]
-                params: list = [w_start, w_end]
-                if injob_meta["del_mas"]:
-                    where_clauses.append("ISNULL(m.[{}], 0) = 0".format(injob_meta["del_mas"]))
-                if injob_meta["del_det"]:
-                    where_clauses.append("ISNULL(d.[{}], 0) = 0".format(injob_meta["del_det"]))
-                if injob_meta["comp_mas"] and company_code:
-                    where_clauses.append("m.[{}] = ?".format(injob_meta["comp_mas"]))
-                    params.append(company_code)
-                if injob_meta.get("dtype_mas"):
-                    where_clauses.append("ISNULL(m.[{}], '') != 'Without Process'".format(injob_meta["dtype_mas"]))
-                if like_term:
-                    where_clauses.append("(d.partno LIKE ? OR d.description LIKE ?)")
-                    params.extend([like_term, like_term])
-                if customers:
-                    cust_sql_ij, cust_params_ij = _build_customer_filter_injob(customers, "m", "d")
-                    if cust_sql_ij:
-                        where_clauses.append(cust_sql_ij[4:])
-                        params.extend(cust_params_ij)
+        weekly_map = {k: [0, 0, 0] for k in keys}  # [inspected, rejected, rework]
 
-                sql = f"""
-                    SELECT 
-                        ISNULL(SUM(CAST(ISNULL(d.[{injob_meta["qty_col"]}], 0) AS INT)), 0),
-                        ISNULL(SUM(CAST(ISNULL(d.[{injob_meta["matrej_col"]}], 0) + ISNULL(d.[{injob_meta["macrej_col"]}], 0) AS INT)), 0),
-                        ISNULL(SUM(CAST(ISNULL(d.[{injob_meta["rwk_col"]}], 0) AS INT)), 0)
-                    FROM InJob_Mas m
-                    INNER JOIN InJob_Det d ON m.[{injob_meta["inspno"]}] = d.[{injob_meta["inspno"]}]
+        # 1. InJob (single query across start_date to end_date)
+        if injob_meta:
+            where_clauses = ["CAST(m.[{}] AS DATE) BETWEEN ? AND ?".format(injob_meta["inspdate"])]
+            params: list = [start_date, end_date]
+            if injob_meta["del_mas"]:
+                where_clauses.append("ISNULL(m.[{}], 0) = 0".format(injob_meta["del_mas"]))
+            if injob_meta["del_det"]:
+                where_clauses.append("ISNULL(d.[{}], 0) = 0".format(injob_meta["del_det"]))
+            if injob_meta["comp_mas"] and company_code:
+                where_clauses.append("m.[{}] = ?".format(injob_meta["comp_mas"]))
+                params.append(company_code)
+            if injob_meta.get("dtype_mas"):
+                where_clauses.append("ISNULL(m.[{}], '') != 'Without Process'".format(injob_meta["dtype_mas"]))
+            if like_term:
+                where_clauses.append("(d.partno LIKE ? OR d.description LIKE ?)")
+                params.extend([like_term, like_term])
+            if customers:
+                cust_sql_ij, cust_params_ij = _build_customer_filter_injob(customers, "m", "d")
+                if cust_sql_ij:
+                    where_clauses.append(cust_sql_ij[4:])
+                    params.extend(cust_params_ij)
+
+            sql = f"""
+                SELECT 
+                    CAST(m.[{injob_meta["inspdate"]}] AS DATE) AS Dt,
+                    ISNULL(SUM(CAST(ISNULL(d.[{injob_meta["qty_col"]}], 0) AS INT)), 0),
+                    ISNULL(SUM(CAST(ISNULL(d.[{injob_meta["matrej_col"]}], 0) + ISNULL(d.[{injob_meta["macrej_col"]}], 0) AS INT)), 0),
+                    ISNULL(SUM(CAST(ISNULL(d.[{injob_meta["rwk_col"]}], 0) AS INT)), 0)
+                FROM InJob_Mas m
+                INNER JOIN InJob_Det d ON m.[{injob_meta["inspno"]}] = d.[{injob_meta["inspno"]}]
+                WHERE {" AND ".join(where_clauses)}
+                GROUP BY CAST(m.[{injob_meta["inspdate"]}] AS DATE)
+            """
+
+            cursor.execute(sql, params)
+            for row in cursor.fetchall():
+                if row and row[0] is not None:
+                    k = _date_to_key(row[0])
+                    if k in weekly_map:
+                        weekly_map[k][0] += int(row[1] or 0)
+                        weekly_map[k][1] += int(row[2] or 0)
+                        weekly_map[k][2] += int(row[3] or 0)
+                        db_success = True
+
+        # 2. Final (single query across start_date to end_date)
+        if final_meta:
+            where_clauses = ["CAST(f.[{}] AS DATE) BETWEEN ? AND ?".format(final_meta["finspdate"])]
+            params: list = [start_date, end_date]
+            if final_meta["del"]:
+                where_clauses.append("ISNULL(f.[{}], 0) = 0".format(final_meta["del"]))
+            if final_meta["comp"] and company_code:
+                where_clauses.append("f.[{}] = ?".format(final_meta["comp"]))
+                params.append(company_code)
+            if like_term:
+                where_clauses.append("(f.partno LIKE ? OR f.description LIKE ?)")
+                params.extend([like_term, like_term])
+            if customers:
+                cust_sql_fi, cust_params_fi = _build_customer_filter_part(customers, "f.partno")
+                if cust_sql_fi:
+                    where_clauses.append(cust_sql_fi[4:])
+                    params.extend(cust_params_fi)
+
+            has_rej_tbl = table_exists(cursor, "FinalInspRejectionEntryOrg")
+            has_rwk_tbl = table_exists(cursor, "FinalInspReworkEntryOrg")
+
+            rej_sub = """CAST(ISNULL((
+                SELECT SUM(ISNULL(fr.qty, 0))
+                FROM FinalInspRejectionEntryOrg fr
+                WHERE fr.finspno = f.finspno AND fr.partno = f.partno AND ISNULL(fr.deleted, 0) = 0
+            ), 0) AS INT)""" if has_rej_tbl else "0"
+
+            rwk_sub = """CAST(ISNULL((
+                SELECT SUM(ISNULL(frw.qty, 0))
+                FROM FinalInspReworkEntryOrg frw
+                WHERE frw.finspno = f.finspno AND frw.partno = f.partno AND ISNULL(frw.deleted, 0) = 0
+            ), 0) AS INT)""" if has_rwk_tbl else (f"CAST(ISNULL(f.[{final_meta['rwk_col']}], 0) AS INT)" if final_meta.get("rwk_col") else "0")
+
+            sql = f"""
+                SELECT
+                    FinalWeekly.Dt,
+                    ISNULL(SUM(FinalWeekly.InspQty), 0),
+                    ISNULL(SUM(FinalWeekly.RejQty), 0),
+                    ISNULL(SUM(FinalWeekly.RwkQty), 0)
+                FROM (
+                    SELECT
+                        CAST(f.[{final_meta["finspdate"]}] AS DATE) AS Dt,
+                        {final_meta["qty_expr"]} AS InspQty,
+                        {rej_sub} AS RejQty,
+                        {rwk_sub} AS RwkQty
+                    FROM FinalInspectionEntry f
                     WHERE {" AND ".join(where_clauses)}
-                """
+                ) AS FinalWeekly
+                GROUP BY FinalWeekly.Dt
+            """
 
-                cursor.execute(sql, params)
-                row = cursor.fetchone()
+            cursor.execute(sql, params)
+            for row in cursor.fetchall():
                 if row and row[0] is not None:
-                    w_inspected += int(row[0] or 0)
-                    w_rejected += int(row[1] or 0)
-                    w_rework += int(row[2] or 0)
-                    db_success = True
+                    k = _date_to_key(row[0])
+                    if k in weekly_map:
+                        weekly_map[k][0] += int(row[1] or 0)
+                        weekly_map[k][1] += int(row[2] or 0)
+                        weekly_map[k][2] += int(row[3] or 0)
+                        db_success = True
 
-            # 2. Final
-            if final_meta:
-                where_clauses = ["CAST(f.[{}] AS DATE) BETWEEN ? AND ?".format(final_meta["finspdate"])]
-                params: list = [w_start, w_end]
-                if final_meta["del"]:
-                    where_clauses.append("ISNULL(f.[{}], 0) = 0".format(final_meta["del"]))
-                if final_meta["comp"] and company_code:
-                    where_clauses.append("f.[{}] = ?".format(final_meta["comp"]))
-                    params.append(company_code)
-                if like_term:
-                    where_clauses.append("(f.partno LIKE ? OR f.description LIKE ?)")
-                    params.extend([like_term, like_term])
-                if customers:
-                    cust_sql_fi, cust_params_fi = _build_customer_filter_part(customers, "f.partno")
-                    if cust_sql_fi:
-                        where_clauses.append(cust_sql_fi[4:])
-                        params.extend(cust_params_fi)
+        # 3. Inter (single query across start_date to end_date)
+        if inter_meta:
+            where_clauses = ["CAST(i.[{}] AS DATE) BETWEEN ? AND ?".format(inter_meta["inspdate"])]
+            params: list = [start_date, end_date]
+            if inter_meta["del"]:
+                where_clauses.append("ISNULL(i.[{}], 0) = 0".format(inter_meta["del"]))
+            if inter_meta["comp"] and company_code:
+                where_clauses.append("i.[{}] = ?".format(inter_meta["comp"]))
+                params.append(company_code)
+            if like_term:
+                where_clauses.append("(i.partno LIKE ? OR i.description LIKE ?)")
+                params.extend([like_term, like_term])
+            if customers:
+                cust_sql_it, cust_params_it = _build_customer_filter_part(customers, "i.partno")
+                if cust_sql_it:
+                    where_clauses.append(cust_sql_it[4:])
+                    params.extend(cust_params_it)
 
-                has_rej_tbl = table_exists(cursor, "FinalInspRejectionEntryOrg")
-                has_rwk_tbl = table_exists(cursor, "FinalInspReworkEntryOrg")
+            mat_col_i = inter_meta.get("matrej_col")
+            rej_col_i = inter_meta.get("rej_col")
+            rw_col_i = inter_meta.get("rwk_col")
 
-                rej_sub = """CAST(ISNULL((
-                    SELECT SUM(ISNULL(fr.qty, 0))
-                    FROM FinalInspRejectionEntryOrg fr
-                    WHERE fr.finspno = f.finspno AND fr.partno = f.partno AND ISNULL(fr.deleted, 0) = 0
-                ), 0) AS INT)""" if has_rej_tbl else "0"
+            rej_cols_list = [c for c in [mat_col_i, rej_col_i] if c]
+            rej_expr_i = " + ".join([f"ISNULL(i.[{c}], 0)" for c in rej_cols_list]) if rej_cols_list else "0"
+            rwk_expr_i = f"ISNULL(i.[{rw_col_i}], 0)" if rw_col_i else "0"
 
-                rwk_sub = """CAST(ISNULL((
-                    SELECT SUM(ISNULL(frw.qty, 0))
-                    FROM FinalInspReworkEntryOrg frw
-                    WHERE frw.finspno = f.finspno AND frw.partno = f.partno AND ISNULL(frw.deleted, 0) = 0
-                ), 0) AS INT)""" if has_rwk_tbl else (f"CAST(ISNULL(f.[{final_meta['rwk_col']}], 0) AS INT)" if final_meta.get("rwk_col") else "0")
-
-                sql = f"""
+            sql = f"""
+                SELECT
+                    InterWeekly.Dt,
+                    ISNULL(SUM(InterWeekly.InspQty), 0),
+                    ISNULL(SUM(InterWeekly.RejQty), 0),
+                    ISNULL(SUM(InterWeekly.RwkQty), 0)
+                FROM (
                     SELECT
-                        ISNULL(SUM(FinalWeekly.InspQty), 0),
-                        ISNULL(SUM(FinalWeekly.RejQty), 0),
-                        ISNULL(SUM(FinalWeekly.RwkQty), 0)
-                    FROM (
-                        SELECT
-                            {final_meta["qty_expr"]} AS InspQty,
-                            {rej_sub} AS RejQty,
-                            {rwk_sub} AS RwkQty
-                        FROM FinalInspectionEntry f
-                        WHERE {" AND ".join(where_clauses)}
-                    ) AS FinalWeekly
-                """
+                        CAST(i.[{inter_meta["inspdate"]}] AS DATE) AS Dt,
+                        CAST(ISNULL(i.[{inter_meta["qty_col"]}], 0) AS INT) AS InspQty,
+                        CAST({rej_expr_i} AS INT) AS RejQty,
+                        CAST({rwk_expr_i} AS INT) AS RwkQty
+                    FROM InterInspectionEntry i
+                    WHERE {" AND ".join(where_clauses)}
+                ) AS InterWeekly
+                GROUP BY InterWeekly.Dt
+            """
 
-                cursor.execute(sql, params)
-                row = cursor.fetchone()
+            cursor.execute(sql, params)
+            for row in cursor.fetchall():
                 if row and row[0] is not None:
-                    w_inspected += int(row[0] or 0)
-                    w_rejected += int(row[1] or 0)
-                    w_rework += int(row[2] or 0)
-                    db_success = True
+                    k = _date_to_key(row[0])
+                    if k in weekly_map:
+                        weekly_map[k][0] += int(row[1] or 0)
+                        weekly_map[k][1] += int(row[2] or 0)
+                        weekly_map[k][2] += int(row[3] or 0)
+                        db_success = True
 
-            # 3. Inter
-            if inter_meta:
-                where_clauses = ["CAST(i.[{}] AS DATE) BETWEEN ? AND ?".format(inter_meta["inspdate"])]
-                params: list = [w_start, w_end]
-                if inter_meta["del"]:
-                    where_clauses.append("ISNULL(i.[{}], 0) = 0".format(inter_meta["del"]))
-                if inter_meta["comp"] and company_code:
-                    where_clauses.append("i.[{}] = ?".format(inter_meta["comp"]))
-                    params.append(company_code)
-                if like_term:
-                    where_clauses.append("(i.partno LIKE ? OR i.description LIKE ?)")
-                    params.extend([like_term, like_term])
-                if customers:
-                    cust_sql_it, cust_params_it = _build_customer_filter_part(customers, "i.partno")
-                    if cust_sql_it:
-                        where_clauses.append(cust_sql_it[4:])
-                        params.extend(cust_params_it)
-
-                mat_col_i = inter_meta.get("matrej_col")
-                rej_col_i = inter_meta.get("rej_col")
-                rw_col_i = inter_meta.get("rwk_col")
-
-                rej_cols_list = [c for c in [mat_col_i, rej_col_i] if c]
-                rej_expr_i = " + ".join([f"ISNULL(i.[{c}], 0)" for c in rej_cols_list]) if rej_cols_list else "0"
-                rwk_expr_i = f"ISNULL(i.[{rw_col_i}], 0)" if rw_col_i else "0"
-
-                sql = f"""
-                    SELECT
-                        ISNULL(SUM(InterWeekly.InspQty), 0),
-                        ISNULL(SUM(InterWeekly.RejQty), 0),
-                        ISNULL(SUM(InterWeekly.RwkQty), 0)
-                    FROM (
-                        SELECT
-                            CAST(ISNULL(i.[{inter_meta["qty_col"]}], 0) AS INT) AS InspQty,
-                            CAST({rej_expr_i} AS INT) AS RejQty,
-                            CAST({rwk_expr_i} AS INT) AS RwkQty
-                        FROM InterInspectionEntry i
-                        WHERE {" AND ".join(where_clauses)}
-                    ) AS InterWeekly
-                """
-
-                cursor.execute(sql, params)
-                row = cursor.fetchone()
-                if row and row[0] is not None:
-                    w_inspected += int(row[0] or 0)
-                    w_rejected += int(row[1] or 0)
-                    w_rework += int(row[2] or 0)
-                    db_success = True
-
+        for k in keys:
+            w_inspected, w_rejected, w_rework = weekly_map.get(k, [0, 0, 0])
             w_passed = max(0, w_inspected - w_rejected - w_rework)
             pass_data.append(w_passed)
             rework_data.append(w_rework)
@@ -2295,11 +2345,17 @@ def quality_analysis_product_performance(request):
                     else:
                         bar_color = "#ef4444"
 
+                rwk_rate = (rework_qty / insp_qty * 100.0) if insp_qty > 0 else 0.0
+                rwk_rate_rounded = round(rwk_rate, 1)
+
                 db_products.append({
                     "name": name,
                     "insp": f"{insp_qty:,}",
                     "pass": f"{ok_qty:,}",
                     "rej": f"{(mat_rej_qty + mac_rej_qty):,}",
+                    "rework": f"{rework_qty:,}",
+                    "reworkNum": rework_qty,
+                    "reworkRate": f"{rwk_rate_rounded:.1f}%",
                     "barW": bar_w,
                     "barColor": bar_color,
                     "rateVal": rate_val,
@@ -2836,6 +2892,8 @@ def quality_analysis_records(request):
     q = (request.GET.get("q") or "").strip()
     like_term = f"%{q}%" if q else None
     customers = _parse_customers(request)
+    parts = _parse_parts(request)
+    operators = _parse_operators(request)
 
     db_success = False
     records = []
@@ -2993,9 +3051,9 @@ def quality_analysis_records(request):
                         (SELECT TOP 1 CAM_PRM.CorpName FROM ProdMast PRM_P INNER JOIN CustAliasMast CAM_PRM ON PRM_P.CId = CAM_PRM.Id WHERE PRM_P.Partno = d.partno AND ISNULL(PRM_P.Deleted, 0) = 0 AND ISNULL(CAM_PRM.deleted, 0) = 0),
                         NULL
                     ) AS PartyName,
-                    NULL AS MachineNo,
+                    'Vendor Rej' AS MachineNo,
                     NULL AS Shift,
-                    NULL AS OperatorName,
+                    'Vendor Rej' AS OperatorName,
                     {job_rc_select} AS RouteCardDetails
                 FROM InJob_Mas m
                 INNER JOIN InJob_Det d ON m.inspno = d.inspno
@@ -3154,6 +3212,98 @@ def quality_analysis_records(request):
             cursor.execute(sql, rec_params)
             rows = cursor.fetchall()
             
+            # ── Fast Machine & Operator Lookup Resolution ──
+            rc_mac_lookup = {}
+            part_mac_lookup = {}
+            part_proc_mac_lookup = {}
+
+            needed_rcs = set()
+            needed_parts = set()
+            for r in rows:
+                if len(r) > 14 and r[14]:
+                    for rc_item in str(r[14]).replace(",", " ").split():
+                        rc_c = rc_item.strip().upper()
+                        if rc_c and rc_c not in ("—", "NONE", "NULL"):
+                            needed_rcs.add(rc_c)
+                if len(r) > 3 and r[3]:
+                    p_c = str(r[3]).strip().upper()
+                    if p_c:
+                        needed_parts.add(p_c)
+
+            # 1. From RouteCard Production Tables (targeted only to active route cards)
+            if needed_rcs:
+                rc_list = list(needed_rcs)[:500]
+                placeholders = ",".join("?" for _ in rc_list)
+                for _rc_tbl, _extra_w in [
+                    ("ConvProdEntryRouteCard", "AND ISNULL(deleted, 0) = 0"),
+                    ("ConvProdEntryRodRouteCard", ""),
+                    ("DayPrdPlan_LoadRouCardDet", ""),
+                ]:
+                    try:
+                        cursor.execute(f"SELECT RouCardNo, macno FROM {_rc_tbl} WHERE macno IS NOT NULL AND LTRIM(RTRIM(macno)) <> '' AND UPPER(LTRIM(RTRIM(RouCardNo))) IN ({placeholders}) {_extra_w}", rc_list)
+                        for _rc, _m in cursor.fetchall():
+                            if _rc and _m and str(_rc).strip() and str(_m).strip():
+                                rc_mac_lookup[str(_rc).strip().upper()] = str(_m).strip()
+                    except Exception:
+                        pass
+
+                try:
+                    cursor.execute(f"SELECT irc.RouCardNo, i.macno FROM InterInspEntryRouteCard irc INNER JOIN InterInspectionEntry i ON irc.inter_inspno = i.inter_inspno WHERE i.macno IS NOT NULL AND LTRIM(RTRIM(i.macno)) <> '' AND ISNULL(irc.deleted, 0) = 0 AND ISNULL(i.deleted, 0) = 0 AND UPPER(LTRIM(RTRIM(irc.RouCardNo))) IN ({placeholders})", rc_list)
+                    for _rc, _m in cursor.fetchall():
+                        if _rc and _m and str(_rc).strip() and str(_m).strip():
+                            rc_mac_lookup[str(_rc).strip().upper()] = str(_m).strip()
+                except Exception:
+                    pass
+
+            # 2. From ProgramNo & InterInspectionEntry (targeted only to needed parts)
+            if needed_parts:
+                part_list = list(needed_parts)[:500]
+                p_placeholders = ",".join("?" for _ in part_list)
+                try:
+                    cursor.execute(f"SELECT partno, process, macno FROM ProgramNo WHERE macno IS NOT NULL AND LTRIM(RTRIM(macno)) <> '' AND ISNULL(deleted, 0) = 0 AND UPPER(LTRIM(RTRIM(partno))) IN ({p_placeholders})", part_list)
+                    for _p, _pr, _m in cursor.fetchall():
+                        if _p and _m:
+                            _p_u = str(_p).strip().upper()
+                            _m_s = str(_m).strip()
+                            if _pr:
+                                part_proc_mac_lookup[f"{_p_u}___{str(_pr).strip().upper()}"] = _m_s
+                            if _p_u not in part_mac_lookup:
+                                part_mac_lookup[_p_u] = _m_s
+                except Exception:
+                    pass
+
+                try:
+                    cursor.execute(f"SELECT partno, process, macno FROM InterInspectionEntry WHERE macno IS NOT NULL AND LTRIM(RTRIM(macno)) <> '' AND ISNULL(deleted, 0) = 0 AND UPPER(LTRIM(RTRIM(partno))) IN ({p_placeholders}) ORDER BY inter_inspdate DESC", part_list)
+                    for _p, _pr, _m in cursor.fetchall():
+                        if _p and _m:
+                            _p_u = str(_p).strip().upper()
+                            _m_s = str(_m).strip()
+                            if _pr and f"{_p_u}___{str(_pr).strip().upper()}" not in part_proc_mac_lookup:
+                                part_proc_mac_lookup[f"{_p_u}___{str(_pr).strip().upper()}"] = _m_s
+                            if _p_u not in part_mac_lookup:
+                                part_mac_lookup[_p_u] = _m_s
+                except Exception:
+                    pass
+
+            def _resolve_mac(rc_str, p_str, proc_str=None):
+                if rc_str and str(rc_str).strip() not in ("", "—", "None", "null"):
+                    for rc_item in str(rc_str).replace(",", " ").split():
+                        rc_clean = rc_item.strip().upper()
+                        if rc_clean in rc_mac_lookup:
+                            return rc_mac_lookup[rc_clean]
+                if p_str and proc_str:
+                    pp_key = f"{str(p_str).strip().upper()}___{str(proc_str).strip().upper()}"
+                    if pp_key in part_proc_mac_lookup:
+                        return part_proc_mac_lookup[pp_key]
+                if p_str:
+                    p_clean = str(p_str).strip().upper()
+                    if p_clean in part_mac_lookup:
+                        return part_mac_lookup[p_clean]
+                    for k, v in part_mac_lookup.items():
+                        if p_clean in k or k in p_clean:
+                            return v
+                return "—"
+
             db_records = []
             for row in rows:
                 insp_type = row[0]
@@ -3196,7 +3346,15 @@ def quality_analysis_records(request):
                         formatted_date = parsed_dt.strftime("%d-%b-%Y")
                     except:
                         formatted_date = str(date_val)
-                
+
+                is_job_order = (insp_type == "Job Order") or (id_val and str(id_val).upper().startswith("JIR")) or ("Job" in type_label)
+                if is_job_order:
+                    resolved_mac = "Vendor Rej"
+                    resolved_opr = "Vendor Rej"
+                else:
+                    resolved_mac = machine_no if (machine_no and str(machine_no).strip() not in ("", "—", "None", "null")) else _resolve_mac(routecard_details, part_no, process_val)
+                    resolved_opr = operator_name if (operator_name and str(operator_name).strip() not in ("", "—", "None", "null")) else (insp_by or "—")
+
                 db_records.append({
                     "id": id_val or "—",
                     "date": formatted_date,
@@ -3215,12 +3373,25 @@ def quality_analysis_records(request):
                     "inspBy": insp_by or "—",
                     "partyName": party_name or "",
                     "result": "PASS" if insp_qty == ok_qty else "FAIL" if (mat_rej_qty > 0 or mac_rej_qty > 0) else "REWORK" if rework_qty > 0 else "PASS",
-                    "machineNo": machine_no or "—",
+                    "machineNo": resolved_mac or "—",
                     "shift": shift_val or "—",
-                    "operatorName": operator_name or "—",
+                    "operatorName": resolved_opr or "—",
                     "routecardDetails": routecard_details or "—"
                 })
             
+            if parts:
+                lower_parts = [p.lower() for p in parts]
+                db_records = [
+                    r for r in db_records
+                    if any((r.get("partNo") or "").lower() == p or (r.get("partNo") or "").lower().startswith(p) or p in (r.get("partNoDesc") or "").lower() for p in lower_parts)
+                ]
+            if operators:
+                lower_ops = [o.lower() for o in operators]
+                db_records = [
+                    r for r in db_records
+                    if any(o in (r.get("operatorName") or "").lower() or o in (r.get("inspBy") or "").lower() for o in lower_ops)
+                ]
+
             if len(db_records) > 0:
                 records = db_records
                 db_success = True
@@ -3655,6 +3826,19 @@ def quality_analysis_records(request):
                                 mat_rej_qty = match_rec.get("matRejQty") or 0
                                 mac_rej_qty = match_rec.get("macRejQty") or 0
 
+                        is_job_order = (insp_type_label == "Job Order") or (insp_no and str(insp_no).upper().startswith("JIR")) or (match_rec and "Job" in match_rec.get("typeLabel", ""))
+                        if is_job_order:
+                            rej_mac = "Vendor Rej"
+                            rej_opr = "Vendor Rej"
+                        else:
+                            rej_mac = match_rec.get("machineNo") if match_rec else None
+                            if not rej_mac or str(rej_mac).strip() in ("", "—", "None", "null", "Unassigned"):
+                                rej_mac = _resolve_mac(match_rec.get("routecardDetails") if match_rec else None, part_no_val)
+
+                            rej_opr = match_rec.get("operatorName") if match_rec else None
+                            if not rej_opr or str(rej_opr).strip() in ("", "—", "None", "null"):
+                                rej_opr = match_rec.get("inspBy") if match_rec else "—"
+
                         if type_val == "Rejection":
                             defect = "Critical"
                             defect_cls = "qa2-tag-critical"
@@ -3676,8 +3860,9 @@ def quality_analysis_records(request):
                                 "disp": "Rejection",
                                 "date": formatted_date,
                                 "inspType": insp_type_label,
-                                "machineNo": match_rec.get("machineNo", "—") if match_rec else "—",
-                                "process": match_rec.get("process", "—") if match_rec else "—"
+                                "machineNo": rej_mac or "—",
+                                "process": match_rec.get("process", "—") if match_rec else "—",
+                                "operatorName": rej_opr or "—"
                             })
                         elif type_val == "Rework":
                             defect = "Minor"
@@ -3700,8 +3885,9 @@ def quality_analysis_records(request):
                                 "disp": "Rework",
                                 "date": formatted_date,
                                 "inspType": insp_type_label,
-                                "machineNo": match_rec.get("machineNo", "—") if match_rec else "—",
-                                "process": match_rec.get("process", "—") if match_rec else "—"
+                                "machineNo": rej_mac or "—",
+                                "process": match_rec.get("process", "—") if match_rec else "—",
+                                "operatorName": rej_opr or "—"
                             })
                             
                             db_rework.append({
@@ -3761,7 +3947,8 @@ def quality_analysis_records(request):
                                 "date": date_val,
                                 "inspType": insp_type_label,
                                 "machineNo": r.get("machineNo", "—"),
-                                "process": r.get("process", "—")
+                                "process": r.get("process", "—"),
+                                "operatorName": r.get("operatorName", "—")
                             })
 
                         if rw_qty > 0:
@@ -3782,7 +3969,8 @@ def quality_analysis_records(request):
                                 "date": date_val,
                                 "inspType": insp_type_label,
                                 "machineNo": r.get("machineNo", "—"),
-                                "process": r.get("process", "—")
+                                "process": r.get("process", "—"),
+                                "operatorName": r.get("operatorName", "—")
                             })
 
                             db_rework.append({

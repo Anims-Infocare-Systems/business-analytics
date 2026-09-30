@@ -233,6 +233,7 @@
 .sa-po-code,
 .sa-po-apo-code,
 .sa-po-dc-code,
+.sa-po-inv-code,
 .pwh-rate-tag,
 .pwh-badge-val,
 .pwh-history-rate-new,
@@ -3044,7 +3045,8 @@
 }
 
 .sa-po-table .sa-po-apo-code,
-.sa-po-table .sa-po-dc-code {
+.sa-po-table .sa-po-dc-code,
+.sa-po-table .sa-po-inv-code {
   font-family: 'JetBrains Mono', 'Roboto Mono', monospace;
   font-size: 0.75rem;
   white-space: nowrap;
@@ -4420,6 +4422,11 @@
   color: #0d9488;
 }
 
+.sa-po-inv-code {
+  font-weight: 600;
+  color: #4f46e5;
+}
+
 .sa-po-inv-details {
   font-weight: 500;
   color: #4f46e5;
@@ -5006,7 +5013,7 @@
 
 .sa-despatch-table {
   width: 100%;
-  min-width: 1150px;
+  min-width: 1280px;
 }
 
 /* ── High-End Glassmorphism Loading Status Bar ── */
@@ -5505,6 +5512,7 @@
   color: #334155;
   line-height: 1.35;
   word-break: break-word;
+  min-width: 240px;
 }
 
 /* Invoice tag */
@@ -5535,6 +5543,18 @@
   padding: 3px 8px;
   border-radius: 6px;
   display: inline-block;
+}
+
+.sa-plan-date-tag {
+  background: #f8fafc;
+  color: #334155;
+  border: 1px solid #cbd5e1;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 6px;
+  display: inline-block;
+  white-space: nowrap;
 }
 
 /* ── Despatch Planning Status Collapsible Group Headers & Badges ── */
@@ -5736,12 +5756,14 @@
   animation: sa-fade-in-blur 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
-/* Explicit column widths & alignments for Despatch Planning Status Table */
+/* Explicit column widths & alignments for Despatch Planning Status Table (11 columns) */
 .sa-despatch-table th:nth-child(1),
 .sa-despatch-table td:nth-child(1) {
-  width: 9%;
+  width: 8%;
+  min-width: 90px;
   text-align: left;
   padding-left: 16px;
+  white-space: nowrap;
 }
 
 .sa-despatch-table tbody td:first-child {
@@ -5750,25 +5772,28 @@
 
 .sa-despatch-table th:nth-child(2),
 .sa-despatch-table td:nth-child(2) {
-  width: 35%;
+  width: 12%;
+  min-width: 120px;
   text-align: left;
-  padding-left: 12px;
-  padding-right: 12px;
-  line-height: 1.35;
+  padding-left: 8px;
+  padding-right: 8px;
+  white-space: nowrap;
 }
 
 .sa-despatch-table th:nth-child(3),
 .sa-despatch-table td:nth-child(3) {
-  width: 6.5%;
-  text-align: center;
-  padding-left: 4px;
-  padding-right: 4px;
+  width: 27%;
+  min-width: 240px;
+  text-align: left;
+  padding-left: 10px;
+  padding-right: 12px;
+  line-height: 1.35;
 }
 
 .sa-despatch-table th:nth-child(4),
 .sa-despatch-table td:nth-child(4) {
-  width: 5.5%;
-  text-align: center;
+  width: 6.5%;
+  text-align: right;
   padding-left: 4px;
   padding-right: 4px;
 }
@@ -5776,7 +5801,7 @@
 .sa-despatch-table th:nth-child(5),
 .sa-despatch-table td:nth-child(5) {
   width: 5.5%;
-  text-align: center;
+  text-align: right;
   padding-left: 4px;
   padding-right: 4px;
 }
@@ -5784,22 +5809,22 @@
 .sa-despatch-table th:nth-child(6),
 .sa-despatch-table td:nth-child(6) {
   width: 5.5%;
-  text-align: center;
+  text-align: right;
   padding-left: 4px;
   padding-right: 4px;
 }
 
 .sa-despatch-table th:nth-child(7),
 .sa-despatch-table td:nth-child(7) {
-  width: 6.5%;
-  text-align: center;
+  width: 5.5%;
+  text-align: right;
   padding-left: 4px;
   padding-right: 4px;
 }
 
 .sa-despatch-table th:nth-child(8),
 .sa-despatch-table td:nth-child(8) {
-  width: 6.5%;
+  width: 6%;
   text-align: center;
   padding-left: 4px;
   padding-right: 4px;
@@ -5807,15 +5832,23 @@
 
 .sa-despatch-table th:nth-child(9),
 .sa-despatch-table td:nth-child(9) {
+  width: 6.5%;
+  text-align: center;
+  padding-left: 4px;
+  padding-right: 4px;
+}
+
+.sa-despatch-table th:nth-child(10),
+.sa-despatch-table td:nth-child(10) {
   width: 8%;
   text-align: right;
   padding-left: 6px;
   padding-right: 8px;
 }
 
-.sa-despatch-table th:nth-child(10),
-.sa-despatch-table td:nth-child(10) {
-  width: 12%;
+.sa-despatch-table th:nth-child(11),
+.sa-despatch-table td:nth-child(11) {
+  width: 10%;
   text-align: center;
   padding-left: 6px;
   padding-right: 16px;

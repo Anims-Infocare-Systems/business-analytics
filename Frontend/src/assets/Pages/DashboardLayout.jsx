@@ -276,7 +276,16 @@ function renderModuleByKey(key, props) {
     }
     if (key === "Top Management Dashboard") return <Dashboard1 />;
     if (key === "Plant Performance Dashboard") return <PlantPerformance1 />;
-    if (key === "E-Approval") return <EApproval />;
+    if (key === "E-Approval") {
+        if (userRights && userRights["E-Approval"] === false) {
+            return (
+                <div className="dl-content__placeholder dl-content__placeholder--labeled">
+                    <p className="dl-placeholder-title">E-Approval is disabled in Company Settings</p>
+                </div>
+            );
+        }
+        return <EApproval />;
+    }
     if (key === "T-Approval") return <TApproval />;
     if (key === "M-Approval") return <MApproval />;
     if (key === "Sales Analysis") return <SalesAnalysis />;
@@ -558,21 +567,17 @@ const SidebarItem = memo(function SidebarItem({ item, isActive, isOpen, isExpand
             >
                 <span className="dl-ripple-wrap" key={rippleKey}><span className="dl-ripple" /></span>
                 <span className="dl-sidebar__item-icon"><IconComp /></span>
-                {isExpanded && (
-                    <>
-                        <span className="dl-sidebar__item-label">{item.key}</span>
-                        {hasChildren && (
-                            <span className="dl-sidebar__item-chevron">
-                                <Icons.Chevron open={showMenu} />
-                            </span>
-                        )}
-                    </>
+                <span className="dl-sidebar__item-label">{item.key}</span>
+                {hasChildren && (
+                    <span className="dl-sidebar__item-chevron">
+                        <Icons.Chevron open={showMenu} />
+                    </span>
                 )}
             </div>
 
             {/* Expanded inline submenu */}
-            {isExpanded && hasChildren && (
-                <div className={`dl-submenu ${showMenu ? "dl-submenu--open" : ""}`}>
+            {hasChildren && (
+                <div className={`dl-submenu ${isExpanded && showMenu ? "dl-submenu--open" : ""}`}>
                     {item.children.map((sub, si) => (
                         <div
                             key={sub}
@@ -705,6 +710,9 @@ export default function DashboardLayout() {
                 }
                 if (sub === "M-Approval") {
                     return !!userRights["M-Approval"];
+                }
+                if (sub === "E-Approval") {
+                    return !!userRights["E-Approval"];
                 }
                 if (isSuperAdmin) return true;
                 return !!userRights[sub];
@@ -1641,7 +1649,7 @@ export default function DashboardLayout() {
                     <div className="dl-sidebar__logo-box">
                         <img src="/Images/logo.png" alt="Anims ERP Logo" className="dl-sidebar__logo-img" />
                     </div>
-                    {showExpanded && <span className="dl-sidebar__logo-name">Anims ERP</span>}
+                    <span className="dl-sidebar__logo-name">Anims ERP</span>
                 </div>
 
                 <div className="dl-sidebar__section-label">MENU</div>
@@ -1694,7 +1702,7 @@ export default function DashboardLayout() {
 
                     <div className="dl-sidebar__item dl-sidebar__item--logout" onClick={handleLogout}>
                         <span className="dl-sidebar__item-icon"><Icons.Logout /></span>
-                        {showExpanded && <span className="dl-sidebar__item-label">Logout</span>}
+                        <span className="dl-sidebar__item-label">Logout</span>
                     </div>
                 </nav>
 
@@ -1706,9 +1714,10 @@ export default function DashboardLayout() {
                         onClick={() => { setExpanded(e => !e); setOpenMenu(null); }}
                         title={expanded ? "Collapse sidebar" : "Expand sidebar"}
                     >
-                        {expanded
-                            ? <><Icons.SidebarCollapse /><span className="dl-sidebar__collapse-label">Collapse</span></>
-                            : <Icons.SidebarExpand />}
+                        <span className="dl-sidebar__collapse-icon">
+                            {expanded ? <Icons.SidebarCollapse /> : <Icons.SidebarExpand />}
+                        </span>
+                        <span className="dl-sidebar__collapse-label">Collapse</span>
                     </button>
                 )}
             </aside>

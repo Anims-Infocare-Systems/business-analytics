@@ -211,6 +211,7 @@ export default function EApprovalPdfModal({ card, onClose }) {
 
     const fmt = n => Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const amountInWords = useMemo(() => numberToWordsIndian(grandTotal), [grandTotal]);
+    const showDia = String(card?.type || "").trim().toLowerCase() !== "store material";
 
     // ── Drag & Drop Handlers ──
     const handleDragStart = (e, itemKey) => {
@@ -951,21 +952,22 @@ export default function EApprovalPdfModal({ card, onClose }) {
                                 <table className="eap-doc-table">
                                     <thead>
                                         <tr>
-                                            <th style={{ width: "44px" }} className="text-center">S.No</th>
-                                            <th className="text-center">Item Description</th>
-                                            <th style={{ width: "80px" }} className="text-center">HSN Code</th>
-                                            <th style={{ width: "55px" }} className="text-center">UOM</th>
-                                            <th style={{ width: "65px" }} className="text-center">Qty</th>
-                                            <th style={{ width: "70px" }} className="text-center">Qty Kgs</th>
-                                            <th style={{ width: "75px" }} className="text-center">Rate</th>
-                                            <th style={{ width: "95px" }} className="text-center">Amount</th>
+                                            <th style={{ width: "42px" }} className="text-center">S.No</th>
+                                            <th className="text-left">Item Description</th>
+                                            {showDia && <th style={{ width: "52px" }} className="text-center">Dia</th>}
+                                            <th style={{ width: showDia ? "70px" : "78px" }} className="text-center">HSN Code</th>
+                                            <th style={{ width: showDia ? "48px" : "52px" }} className="text-center">UOM</th>
+                                            <th style={{ width: showDia ? "58px" : "64px" }} className="text-right">Qty</th>
+                                            <th style={{ width: showDia ? "74px" : "80px" }} className="text-right">Qty Others</th>
+                                            <th style={{ width: "75px" }} className="text-right">Rate</th>
+                                            <th style={{ width: showDia ? "90px" : "95px" }} className="text-right">Amount</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {items.map((row, i) => (
                                             <tr key={i} className="eap-doc-row">
-                                                <td style={{ width: "44px" }} className="text-center">{row.sNo || i + 1}</td>
-                                                <td className="eap-doc-item-combined-cell">
+                                                <td style={{ width: "42px" }} className="text-center">{row.sNo || i + 1}</td>
+                                                <td className="eap-doc-item-combined-cell text-left">
                                                     <div className="eap-doc-item-combo">
                                                         {row.codeNo && row.codeNo !== "—" && (
                                                             <span className="eap-doc-item-code">{row.codeNo}</span>
@@ -973,31 +975,37 @@ export default function EApprovalPdfModal({ card, onClose }) {
                                                         <span className="eap-doc-item-desc">{row.description || "—"}</span>
                                                     </div>
                                                 </td>
-                                                <td style={{ width: "80px" }} className="text-center">
+                                                {showDia && (
+                                                    <td style={{ width: "52px" }} className="text-center">
+                                                        {row.dia && row.dia !== "0" && row.dia !== 0 ? row.dia : "—"}
+                                                    </td>
+                                                )}
+                                                <td style={{ width: showDia ? "70px" : "78px" }} className="text-center">
                                                     {row.hsnCode || row.hsn || row.hsn_code || row.tarrifHeadingNo || row.tariffHeadingNo || "—"}
                                                 </td>
-                                                <td style={{ width: "55px" }} className="text-center">{row.uom || "NOS"}</td>
-                                                <td style={{ width: "65px" }} className="text-right">{Number(row.qty || 0).toLocaleString("en-IN")}</td>
-                                                <td style={{ width: "70px" }} className="text-right">
-                                                    {row.qtyKgs !== undefined && row.qtyKgs !== null && row.qtyKgs !== ""
-                                                        ? Number(row.qtyKgs).toLocaleString("en-IN")
-                                                        : row.qtyOthers !== undefined && row.qtyOthers !== null && row.qtyOthers !== ""
-                                                            ? Number(row.qtyOthers).toLocaleString("en-IN")
+                                                <td style={{ width: showDia ? "48px" : "52px" }} className="text-center">{row.uom || "NOS"}</td>
+                                                <td style={{ width: showDia ? "58px" : "64px" }} className="text-right">{Number(row.qty || 0).toLocaleString("en-IN")}</td>
+                                                <td style={{ width: showDia ? "74px" : "80px" }} className="text-right">
+                                                    {row.qtyOthers !== undefined && row.qtyOthers !== null && row.qtyOthers !== ""
+                                                        ? Number(row.qtyOthers).toLocaleString("en-IN", { minimumFractionDigits: 3, maximumFractionDigits: 3 })
+                                                        : row.qtyKgs !== undefined && row.qtyKgs !== null && row.qtyKgs !== ""
+                                                            ? Number(row.qtyKgs).toLocaleString("en-IN", { minimumFractionDigits: 3, maximumFractionDigits: 3 })
                                                             : "—"}
                                                 </td>
                                                 <td style={{ width: "75px" }} className="text-right">{Number(row.rate || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                                                <td style={{ width: "95px" }} className="text-right eap-doc-item-amt">{fmt(row.amount)}</td>
+                                                <td style={{ width: showDia ? "90px" : "95px" }} className="text-right eap-doc-item-amt">{fmt(row.amount)}</td>
                                             </tr>
                                         ))}
                                         <tr className="eap-doc-filler-row" aria-hidden="true">
-                                            <td style={{ width: "44px" }}></td>
+                                            <td style={{ width: "42px" }}></td>
                                             <td></td>
-                                            <td style={{ width: "80px" }}></td>
-                                            <td style={{ width: "55px" }}></td>
-                                            <td style={{ width: "65px" }}></td>
-                                            <td style={{ width: "70px" }}></td>
+                                            {showDia && <td style={{ width: "52px" }}></td>}
+                                            <td style={{ width: showDia ? "70px" : "78px" }}></td>
+                                            <td style={{ width: showDia ? "48px" : "52px" }}></td>
+                                            <td style={{ width: showDia ? "58px" : "64px" }}></td>
+                                            <td style={{ width: showDia ? "74px" : "80px" }}></td>
                                             <td style={{ width: "75px" }}></td>
-                                            <td style={{ width: "95px" }}></td>
+                                            <td style={{ width: showDia ? "90px" : "95px" }}></td>
                                         </tr>
                                     </tbody>
                                 </table>
@@ -1044,7 +1052,7 @@ export default function EApprovalPdfModal({ card, onClose }) {
                                                 <div key={r.label} className={`eap-doc-fin-row${r.sub ? " eap-doc-fin-row--sub" : ""}${r.grand ? " eap-doc-fin-row--grand" : ""}`}>
                                                     <span className="eap-doc-fin-label">{r.label}</span>
                                                     <span className="eap-doc-fin-val">
-                                                        {r.grand ? `₹ ${fmt(r.value)}` : r.neg && r.value > 0 ? `- ${fmt(r.value)}` : fmt(r.value)}
+                                                        {r.grand ? `₹ ${fmt(r.value)}` : r.neg && r.value > 0 ? `- ${fmt(r.value)}` : (r.label === "Round Off" && r.value > 0 ? `+ ${fmt(r.value)}` : fmt(r.value))}
                                                     </span>
                                                 </div>
                                             ))
@@ -1062,10 +1070,6 @@ export default function EApprovalPdfModal({ card, onClose }) {
                                                     <span className="eap-doc-fin-label">Before Tax P & F</span>
                                                     <span className="eap-doc-fin-val">{fmt(bfTaxPF)}</span>
                                                 </div>
-                                                <div className="eap-doc-fin-row eap-doc-fin-row--sub">
-                                                    <span className="eap-doc-fin-label">After Tax P & F</span>
-                                                    <span className="eap-doc-fin-val">{fmt(afTaxPF)}</span>
-                                                </div>
                                                 <div className="eap-doc-fin-row">
                                                     <span className="eap-doc-fin-label">Tax CGST @ {cgstPct} %</span>
                                                     <span className="eap-doc-fin-val">{fmt(cgstAmt)}</span>
@@ -1075,8 +1079,12 @@ export default function EApprovalPdfModal({ card, onClose }) {
                                                     <span className="eap-doc-fin-val">{fmt(sgstAmt)}</span>
                                                 </div>
                                                 <div className="eap-doc-fin-row eap-doc-fin-row--sub">
+                                                    <span className="eap-doc-fin-label">After Tax P & F</span>
+                                                    <span className="eap-doc-fin-val">{fmt(afTaxPF)}</span>
+                                                </div>
+                                                <div className="eap-doc-fin-row eap-doc-fin-row--sub">
                                                     <span className="eap-doc-fin-label">Round Off</span>
-                                                    <span className="eap-doc-fin-val">{fmt(roundOff)}</span>
+                                                    <span className="eap-doc-fin-val">{roundOff > 0 ? `+ ${fmt(roundOff)}` : fmt(roundOff)}</span>
                                                 </div>
                                                 <div className="eap-doc-fin-row eap-doc-fin-row--grand">
                                                     <span className="eap-doc-fin-label">GRAND TOTAL</span>

@@ -21,12 +21,12 @@ function toYMD(d) {
 
 const TYPE_ORDER = ["Raw Material", "Store Material", "PO Amendment", "Job Order", "Service Po", "General"];
 const TYPE_ICONS = {
-    "Raw Material":   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>,
-    "Store Material": <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="1" y="3" width="15" height="13"/><polygon points="16,8 20,8 23,11 23,16 16,16 16,8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>,
-    "PO Amendment":  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>,
-    "Job Order":      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>,
-    "Service Po":     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/></svg>,
-    "General":        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>,
+    "Raw Material": <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" /><line x1="7" y1="7" x2="7.01" y2="7" /></svg>,
+    "Store Material": <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="1" y="3" width="15" height="13" /><polygon points="16,8 20,8 23,11 23,16 16,16 16,8" /><circle cx="5.5" cy="18.5" r="2.5" /><circle cx="18.5" cy="18.5" r="2.5" /></svg>,
+    "PO Amendment": <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>,
+    "Job Order": <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /><polyline points="10 9 9 9 8 9" /></svg>,
+    "Service Po": <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="22,12 18,12 15,21 9,3 6,12 2,12" /></svg>,
+    "General": <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="16" /><line x1="8" y1="12" x2="16" y2="12" /></svg>,
 };
 
 const DEFAULT_STATS = [
@@ -38,8 +38,8 @@ const DEFAULT_STATS = [
 // ─── Inline spinner SVG ─────────────────────────────────
 const BtnSpinner = () => (
     <svg className="eap-btn-spin" viewBox="0 0 24 24" fill="none">
-        <circle cx="12" cy="12" r="9" stroke="currentColor" strokeOpacity=".25" strokeWidth="3"/>
-        <path d="M12 3a9 9 0 0 1 9 9" stroke="currentColor" strokeWidth="3" strokeLinecap="round"/>
+        <circle cx="12" cy="12" r="9" stroke="currentColor" strokeOpacity=".25" strokeWidth="3" />
+        <path d="M12 3a9 9 0 0 1 9 9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
     </svg>
 );
 
@@ -51,13 +51,13 @@ function Toast({ toasts }) {
                 <div key={t.id} className={`eap-toast eap-toast--${t.type}`}>
                     <span className="eap-toast__icon">
                         {t.type === "success-approve" && (
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20,6 9,17 4,12"/></svg>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20,6 9,17 4,12" /></svg>
                         )}
                         {t.type === "success-modify" && (
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
                         )}
                         {t.type === "error" && (
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="9" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
                         )}
                     </span>
                     <span className="eap-toast__msg">{t.msg}</span>
@@ -165,8 +165,8 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                     <div className="eap-prev__hd-left">
                         <div className="eap-prev__hd-icon">
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                                <polyline points="14,2 14,8 20,8"/>
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                <polyline points="14,2 14,8 20,8" />
                             </svg>
                         </div>
                         <div>
@@ -176,7 +176,7 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                     </div>
                     <div className="eap-prev__hd-right">
                         <button type="button" className="eap-prev__close" onClick={onClose}>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
                         </button>
                     </div>
                 </div>
@@ -186,20 +186,20 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                     <div className="eap-pvl__center">
                         <div className="eap-pvl__arc-wrap">
                             <svg className="eap-pvl__arc" viewBox="0 0 64 64" fill="none">
-                                <circle cx="32" cy="32" r="26" stroke="rgba(99,102,241,.1)" strokeWidth="5"/>
+                                <circle cx="32" cy="32" r="26" stroke="rgba(99,102,241,.1)" strokeWidth="5" />
                                 <circle className="eap-pvl__arc-ring" cx="32" cy="32" r="26"
                                     stroke="url(#pvl-grad)" strokeWidth="5"
                                     strokeLinecap="round" strokeDasharray="60 103"
                                 />
                                 <defs>
                                     <linearGradient id="pvl-grad" x1="0" y1="0" x2="1" y2="1">
-                                        <stop offset="0%"  stopColor="#6366f1"/>
-                                        <stop offset="100%" stopColor="#06b6d4"/>
+                                        <stop offset="0%" stopColor="#6366f1" />
+                                        <stop offset="100%" stopColor="#06b6d4" />
                                     </linearGradient>
                                 </defs>
                             </svg>
                             <div className="eap-pvl__dots">
-                                <span/><span/><span/>
+                                <span /><span /><span />
                             </div>
                         </div>
                         <p className="eap-pvl__label">Fetching purchase order…</p>
@@ -216,7 +216,7 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                 </div>
                 <div className="eap-prev__footer">
                     <button type="button" className="eap-prev-btn eap-prev-btn--ghost" onClick={onClose}>
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
                         Close
                     </button>
                 </div>
@@ -241,9 +241,11 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
 
     const fmt = n => Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const fmtRate = n => Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const fmtQty3 = n => Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
     const items = card.items || [];
     const approvedBy = card.approvedBy || "—";
     const approvedDateTime = card.approvedDateTime || "—";
+    const showDia = String(card?.type || "").trim().toLowerCase() !== "store material";
 
     const handleSend = async () => {
         if (!commentText.trim() || isSending || isDeleting || (card?.pocomment && commentText.trim() === card.pocomment.trim())) return;
@@ -287,11 +289,11 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                     <div className="eap-prev__hd-left">
                         <div className="eap-prev__hd-icon">
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                                <polyline points="14,2 14,8 20,8"/>
-                                <line x1="16" y1="13" x2="8" y2="13"/>
-                                <line x1="16" y1="17" x2="8" y2="17"/>
-                                <line x1="10" y1="9"  x2="8" y2="9"/>
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                <polyline points="14,2 14,8 20,8" />
+                                <line x1="16" y1="13" x2="8" y2="13" />
+                                <line x1="16" y1="17" x2="8" y2="17" />
+                                <line x1="10" y1="9" x2="8" y2="9" />
                             </svg>
                         </div>
                         <div>
@@ -304,12 +306,12 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                     <div className="eap-prev__hd-right">
                         <span className={`eap-prev__badge eap-prev__badge--${card.status.toLowerCase()}`}>
                             {card.status === "Approved"
-                                ? <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20,6 9,17 4,12"/></svg> Approved</>
-                                : <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> Pending</>
+                                ? <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20,6 9,17 4,12" /></svg> Approved</>
+                                : <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><circle cx="12" cy="12" r="9" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg> Pending</>
                             }
                         </span>
                         <button type="button" className="eap-prev__close" onClick={onClose}>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
                         </button>
                     </div>
                 </div>
@@ -318,28 +320,28 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                 <div className="eap-prev__meta">
                     <div className="eap-prev__meta-item">
                         <span className="eap-prev__meta-label">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
                             {card.docKind === "po_amnd" || card.amdNo ? "Amendment Date" : "PO Date"}
                         </span>
                         <span className="eap-prev__meta-val">{card.poDate}</span>
                     </div>
                     <div className="eap-prev__meta-item">
                         <span className="eap-prev__meta-label">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                            Vendor
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
+                            Supplier/Vendor
                         </span>
                         <span className="eap-prev__meta-val eap-prev__meta-val--vendor">{card.vendor}</span>
                     </div>
                     <div className="eap-prev__meta-item">
                         <span className="eap-prev__meta-label">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" /><line x1="7" y1="7" x2="7.01" y2="7" /></svg>
                             Type
                         </span>
                         <span className="eap-prev__meta-val">{card.type}</span>
                     </div>
                     <div className="eap-prev__meta-item">
                         <span className="eap-prev__meta-label">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
                             Approved By
                         </span>
                         <span className={`eap-prev__meta-val-badge eap-prev__meta-val-badge--${card.approvedBy ? "approved" : "pending"}`}>
@@ -348,7 +350,7 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                     </div>
                     <div className="eap-prev__meta-item">
                         <span className="eap-prev__meta-label">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12,6 12,12 16,14"/></svg>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><polyline points="12,6 12,12 16,14" /></svg>
                             Date-Time
                         </span>
                         <span className={`eap-prev__meta-val-badge eap-prev__meta-val-badge--${card.approvedBy ? "approved" : "pending"}`}>
@@ -361,17 +363,18 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                 <div className="eap-prev__body">
 
                     <div className="eap-prev__section-label">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" /><line x1="3" y1="9" x2="21" y2="9" /><line x1="3" y1="15" x2="21" y2="15" /><line x1="9" y1="3" x2="9" y2="21" /></svg>
                         Line Items
                     </div>
 
                     <div className="eap-prev__table-wrap">
-                        <table className="eap-prev__table">
+                        <table className="eap-prev__table" style={{ minWidth: showDia ? "780px" : "700px" }}>
                             <thead>
                                 <tr>
                                     <th>S.No</th>
                                     <th>Code No</th>
                                     <th className="eap-prev__td--desc">Description</th>
+                                    {showDia && <th className="eap-prev__td--center">Dia</th>}
                                     <th>UOM</th>
                                     <th className="eap-prev__td--num">Qty</th>
                                     <th className="eap-prev__td--num">Qty Others</th>
@@ -385,9 +388,14 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                                         <td className="eap-prev__td--center">{row.sNo}</td>
                                         <td><span className="eap-prev__code">{row.codeNo}</span></td>
                                         <td className="eap-prev__td--desc">{row.description}</td>
+                                        {showDia && (
+                                            <td className="eap-prev__td--center">
+                                                <span className="eap-prev__dia">{row.dia && row.dia !== "0" && row.dia !== 0 ? row.dia : "—"}</span>
+                                            </td>
+                                        )}
                                         <td className="eap-prev__td--center"><span className="eap-prev__uom">{row.uom}</span></td>
                                         <td className="eap-prev__td--num">{Number(row.qty || 0).toLocaleString("en-IN")}</td>
-                                        <td className="eap-prev__td--num">{Number(row.qtyOthers || 0).toLocaleString("en-IN")}</td>
+                                        <td className="eap-prev__td--num">{fmtQty3(row.qtyOthers)}</td>
                                         <td className="eap-prev__td--num">{fmtRate(row.rate)}</td>
                                         <td className="eap-prev__td--num eap-prev__td--amt">{fmt(row.amount)}</td>
                                     </tr>
@@ -403,7 +411,7 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                         <div className="eap-prev__comments-wrap" data-spotlight="eap-remarks-section">
                             <div className="eap-prev__section-label">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
                                 </svg>
                                 Approval Remarks & Notes
                             </div>
@@ -438,10 +446,10 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                                                     <BtnSpinner />
                                                 ) : (
                                                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                                                        <polyline points="3 6 5 6 21 6"/>
-                                                        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-                                                        <line x1="10" y1="11" x2="10" y2="17"/>
-                                                        <line x1="14" y1="11" x2="14" y2="17"/>
+                                                        <polyline points="3 6 5 6 21 6" />
+                                                        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                                                        <line x1="10" y1="11" x2="10" y2="17" />
+                                                        <line x1="14" y1="11" x2="14" y2="17" />
                                                     </svg>
                                                 )}
                                                 {isDeleting ? "Deleting…" : "Delete"}
@@ -465,7 +473,7 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                                             {isSending ? (
                                                 <BtnSpinner />
                                             ) : (
-                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" /></svg>
                                             )}
                                             {isSending ? "Sending…" : "Send"}
                                         </button>
@@ -477,7 +485,7 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                         {/* ── Right Column: Financial Summary ── */}
                         <div className="eap-prev__summary-wrap" data-spotlight="eap-financial-breakdown">
                             <div className="eap-prev__section-label">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></svg>
                                 Financial Summary
                             </div>
                             <div className="eap-prev__summary">
@@ -486,7 +494,7 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                                         <div key={r.label} className={`eap-prev__sum-row${r.sub ? " eap-prev__sum-row--sub" : ""}${r.grand ? " eap-prev__sum-row--grand" : ""}`}>
                                             <span className="eap-prev__sum-label">{r.label}</span>
                                             <span className="eap-prev__sum-val">
-                                                {r.grand ? `₹ ${fmt(r.value)}` : r.neg && r.value > 0 ? `- ${fmt(r.value)}` : fmt(r.value)}
+                                                {r.grand ? `₹ ${fmt(r.value)}` : r.neg && r.value > 0 ? `- ${fmt(r.value)}` : (r.label === "Round Off" && r.value > 0 ? `+ ${fmt(r.value)}` : fmt(r.value))}
                                             </span>
                                         </div>
                                     ))
@@ -496,10 +504,10 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                                             { label: "Total Amount", val: fmt(totalAmount), sub: false },
                                             { label: "Discount", val: `- ${fmt(discount)}`, sub: true },
                                             { label: "Before Tax P & F", val: fmt(bfTaxPF), sub: true },
-                                            { label: "After Tax P & F", val: fmt(afTaxPF), sub: true },
                                             { label: `Tax CGST @ ${cgstPct} %`, val: fmt(cgstAmt), sub: false },
                                             { label: `Tax SGST @ ${sgstPct} %`, val: fmt(sgstAmt), sub: false },
-                                            { label: "Round Off", val: fmt(0), sub: true },
+                                            { label: "After Tax P & F", val: fmt(afTaxPF), sub: true },
+                                            { label: "Round Off", val: (roundOff > 0 ? `+ ${fmt(roundOff)}` : fmt(roundOff)), sub: true },
                                         ].map(r => (
                                             <div key={r.label} className={`eap-prev__sum-row${r.sub ? " eap-prev__sum-row--sub" : ""}`}>
                                                 <span className="eap-prev__sum-label">{r.label}</span>
@@ -527,18 +535,18 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                             onClick={() => onShowPdf(card)}
                         >
                             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                                <polyline points="14,2 14,8 20,8"/>
-                                <line x1="16" y1="13" x2="8" y2="13"/>
-                                <line x1="16" y1="17" x2="8" y2="17"/>
-                                <line x1="10" y1="9" x2="8" y2="9"/>
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                <polyline points="14,2 14,8 20,8" />
+                                <line x1="16" y1="13" x2="8" y2="13" />
+                                <line x1="16" y1="17" x2="8" y2="17" />
+                                <line x1="10" y1="9" x2="8" y2="9" />
                             </svg>
                             Show as PDF
                         </button>
                     </div>
                     <div className="eap-prev__footer-right">
                         <button type="button" className="eap-prev-btn eap-prev-btn--ghost" onClick={onClose}>
-                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
                             Close
                         </button>
                         {card.status === "Approved" ? (
@@ -550,7 +558,7 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                             >
                                 {actionLoading?.cardId === card.id && actionLoading?.type === "modify"
                                     ? <><BtnSpinner /> Modifying…</>
-                                    : <><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Modify Open</>
+                                    : <><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg> Modify Open</>
                                 }
                             </button>
                         ) : (
@@ -562,7 +570,7 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                             >
                                 {actionLoading?.cardId === card.id && actionLoading?.type === "approve"
                                     ? <><BtnSpinner /> Approving…</>
-                                    : <><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20,6 9,17 4,12"/></svg> Approve Order</>
+                                    : <><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20,6 9,17 4,12" /></svg> Approve Order</>
                                 }
                             </button>
                         )}
@@ -614,7 +622,7 @@ function TypeGroup({ type, cards, collapsed, onToggle, onPreview, onApprove, onM
                 <div className="eap-group__hd-left">
                     <span className="eap-group__hd-icon">{TYPE_ICONS[type] ?? TYPE_ICONS.General}</span>
                     <span className="eap-group__hd-title">{type}</span>
-                    
+
                     <button
                         type="button"
                         className={`eap-group__pill eap-group__pill--all ${filterStatus === "All" ? "eap-group__pill--all-active" : ""}`}
@@ -643,7 +651,7 @@ function TypeGroup({ type, cards, collapsed, onToggle, onPreview, onApprove, onM
                         width="14" height="14" viewBox="0 0 24 24"
                         fill="none" stroke="currentColor" strokeWidth="2.5"
                     >
-                        <polyline points="18,15 12,9 6,15"/>
+                        <polyline points="18,15 12,9 6,15" />
                     </svg>
                     <span>{collapsed ? "Expand" : "Collapse"}</span>
                 </button>
@@ -742,7 +750,7 @@ function readFilterSession(key, defaults) {
     } catch { return defaults; }
 }
 function writeFilterSession(key, data) {
-    try { sessionStorage.setItem(key, JSON.stringify(data)); } catch {}
+    try { sessionStorage.setItem(key, JSON.stringify(data)); } catch { }
 }
 
 export default function EApproval() {
@@ -861,14 +869,14 @@ export default function EApproval() {
 
     const refreshBoard = useCallback(async () => {
         const from = toYMD(dateRange.from);
-        const to   = toYMD(dateRange.to || dateRange.from);
+        const to = toYMD(dateRange.to || dateRange.from);
         if (!from) return;
         detailCache.current = {}; // invalidate on date change
         setIsLoading(true);
         try {
-            const qsList  = new URLSearchParams({ from, to, page: "1", page_size: "2000" });
-            const resList = await fetch(`${API}/eapproval/list/?${qsList}`,  { credentials: "include" });
-            const dataList  = await resList.json();
+            const qsList = new URLSearchParams({ from, to, page: "1", page_size: "2000" });
+            const resList = await fetch(`${API}/eapproval/list/?${qsList}`, { credentials: "include" });
+            const dataList = await resList.json();
             if (resList.ok) setCards(dataList.cards || []);
             else { console.error(dataList.error || resList.statusText); setCards([]); }
         } catch (e) {
@@ -897,8 +905,8 @@ export default function EApproval() {
             if (!q) return true;
             return (
                 (c.vendor || "").toLowerCase().includes(q) ||
-                (c.poNo   || "").toLowerCase().includes(q) ||
-                (c.type   || "").toLowerCase().includes(q)
+                (c.poNo || "").toLowerCase().includes(q) ||
+                (c.type || "").toLowerCase().includes(q)
             );
         });
     }, [cards, search, typeFilter]);
@@ -919,7 +927,7 @@ export default function EApproval() {
         const seen = new Set();
         cards.forEach(c => { if (c.type) seen.add(c.type); });
         const ordered = TYPE_ORDER.filter(t => seen.has(t));
-        const extras  = [...seen].filter(t => !TYPE_ORDER.includes(t));
+        const extras = [...seen].filter(t => !TYPE_ORDER.includes(t));
         return [...ordered, ...extras];
     }, [cards]);
 
@@ -941,12 +949,12 @@ export default function EApproval() {
             doc_kind: listCard.docKind || "po",
             amdno: listCard.amdNo || "",
             from: toYMD(dateRange.from),
-            to:   toYMD(dateRange.to || dateRange.from),
+            to: toYMD(dateRange.to || dateRange.from),
         });
         setPreviewLoading(true);
         setSelected({ ...listCard, items: [], financial: null, _loading: true });
         try {
-            const res  = await fetch(`${API}/eapproval/detail/?${qs}`, { credentials: "include" });
+            const res = await fetch(`${API}/eapproval/detail/?${qs}`, { credentials: "include" });
             const data = await res.json();
             if (res.ok && data.success && data.card) {
                 const merged = {
@@ -1131,7 +1139,7 @@ export default function EApproval() {
                 />
                 <div className="eap-filter__search-wrap">
                     <svg className="eap-filter__search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                        <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
                     </svg>
                     <input
                         className="eap-filter__search"
@@ -1165,7 +1173,7 @@ export default function EApproval() {
                         <span className="eap-type-dd__trigger-icon">
                             {typeFilter ? TYPE_ICONS[typeFilter] : (
                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                    <line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/>
+                                    <line x1="4" y1="6" x2="20" y2="6" /><line x1="8" y1="12" x2="16" y2="12" /><line x1="11" y1="18" x2="13" y2="18" />
                                 </svg>
                             )}
                         </span>
@@ -1181,7 +1189,7 @@ export default function EApproval() {
                             className={`eap-type-dd__caret ${typeDropOpen ? "eap-type-dd__caret--up" : ""}`}
                             width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
                         >
-                            <polyline points="6,9 12,15 18,9"/>
+                            <polyline points="6,9 12,15 18,9" />
                         </svg>
                     </button>
 
@@ -1198,20 +1206,20 @@ export default function EApproval() {
                                 >
                                     <span className="eap-type-dd__item-icon">
                                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                            <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
-                                            <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+                                            <rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" />
+                                            <rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" />
                                         </svg>
                                     </span>
                                     <span className="eap-type-dd__item-label">All Types</span>
                                     <span className="eap-type-dd__item-badge">{cards.length}</span>
                                     {typeFilter === null && (
                                         <svg className="eap-type-dd__item-check" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-                                            <polyline points="20,6 9,17 4,12"/>
+                                            <polyline points="20,6 9,17 4,12" />
                                         </svg>
                                     )}
                                 </button>
 
-                                <div className="eap-type-dd__divider"/>
+                                <div className="eap-type-dd__divider" />
 
                                 {/* Per-type options */}
                                 {availableTypes.map(t => {
@@ -1221,7 +1229,7 @@ export default function EApproval() {
                                         <button
                                             key={t}
                                             type="button"
-                                            className={`eap-type-dd__item eap-type-dd__item--${t.toLowerCase().replace(/\s+/g,"-")} ${isActive ? "eap-type-dd__item--active" : ""}`}
+                                            className={`eap-type-dd__item eap-type-dd__item--${t.toLowerCase().replace(/\s+/g, "-")} ${isActive ? "eap-type-dd__item--active" : ""}`}
                                             onClick={() => { setTypeFilter(isActive ? null : t); setTypeDropOpen(false); }}
                                         >
                                             <span className="eap-type-dd__item-icon">{TYPE_ICONS[t]}</span>
@@ -1229,7 +1237,7 @@ export default function EApproval() {
                                             <span className="eap-type-dd__item-badge">{cnt}</span>
                                             {isActive && (
                                                 <svg className="eap-type-dd__item-check" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-                                                    <polyline points="20,6 9,17 4,12"/>
+                                                    <polyline points="20,6 9,17 4,12" />
                                                 </svg>
                                             )}
                                         </button>
@@ -1244,16 +1252,16 @@ export default function EApproval() {
                 <div className="eap-filter__actions-wrap">
                     <button type="button" className="eap-filter__btn" onClick={() => !isLoading && refreshBoard()} disabled={isLoading}>
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                            <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
                         </svg>
                         Search
                     </button>
                     <button type="button" className="eap-filter__reset-btn" onClick={() => !isLoading && handleResetFilters()} disabled={isLoading}>
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                            <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
-                            <path d="M21 3v5h-5"/>
-                            <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
-                            <path d="M3 21v-5h5"/>
+                            <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+                            <path d="M21 3v5h-5" />
+                            <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+                            <path d="M3 21v-5h5" />
                         </svg>
                         Reset
                     </button>

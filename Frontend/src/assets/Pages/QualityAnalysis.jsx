@@ -26,6 +26,9 @@ import {
     ArrowUpRight,
     ArrowDownRight,
     ArrowRight,
+    ArrowUp,
+    ArrowDown,
+    ArrowUpDown,
     Pin,
     Search,
     X,
@@ -56,7 +59,9 @@ import {
     CheckSquare,
     CheckCheck,
     Loader2,
-    Filter
+    Filter,
+    UserCheck,
+    LayoutGrid
 } from "lucide-react";
 
 Chart.register(...registerables, ChartDataLabels);
@@ -912,25 +917,27 @@ function QualityTimelineSection({ isRouteCardProd: propIsRouteCardProd = null })
 
     const isRouteCardEnabled = isRouteCardProd !== 0;
 
-    // ── 2. Fetch Invoices List from Backend on Mount ──
+    // ── 2. Fetch Invoices List from Backend (Deferred to prioritize KPI dashboard load) ──
     useEffect(() => {
         let isMounted = true;
-        setLoadingInvoices(true);
-        fetch("/api/quality-timeline/invoices/?limit=100", { credentials: "include" })
-            .then((res) => res.json())
-            .then((data) => {
-                if (isMounted && data && data.success && Array.isArray(data.data) && data.data.length > 0) {
-                    setInvoicesList(data.data);
-                    setSelectedInvId((prev) => prev || data.data[0].invoice_no);
-                }
-            })
-            .catch((err) => {
-                console.error("[Quality Timeline] Invoices list fetch error:", err);
-            })
-            .finally(() => {
-                if (isMounted) setLoadingInvoices(false);
-            });
-        return () => { isMounted = false; };
+        const timer = setTimeout(() => {
+            setLoadingInvoices(true);
+            fetch("/api/quality-timeline/invoices/?limit=100", { credentials: "include" })
+                .then((res) => res.json())
+                .then((data) => {
+                    if (isMounted && data && data.success && Array.isArray(data.data) && data.data.length > 0) {
+                        setInvoicesList(data.data);
+                        setSelectedInvId((prev) => prev || data.data[0].invoice_no);
+                    }
+                })
+                .catch((err) => {
+                    console.error("[Quality Timeline] Invoices list fetch error:", err);
+                })
+                .finally(() => {
+                    if (isMounted) setLoadingInvoices(false);
+                });
+        }, 1200);
+        return () => { isMounted = false; clearTimeout(timer); };
     }, []);
 
     // ── 3. Search Invoices from Backend if search query changes ──
@@ -2313,12 +2320,26 @@ export default function QualityAnalysis() {
     const [processSearch, setProcessSearch] = useState("");
     const processRef = useRef(null);
 
+    // Part No Filter (Multi-Select)
+    const [selectedParts, setSelectedParts] = useState([]);
+    const [partDropdownOpen, setPartDropdownOpen] = useState(false);
+    const [partSearch, setPartSearch] = useState("");
+    const partRef = useRef(null);
+
+    // Operator Filter
+    const [selectedOperators, setSelectedOperators] = useState([]);
+    const [operatorDropdownOpen, setOperatorDropdownOpen] = useState(false);
+    const [operatorSearch, setOperatorSearch] = useState("");
+    const operatorRef = useRef(null);
+
     // ── Applied Filter States (Committed on clicking "Apply Filter") ──
     const [appliedDateRange, setAppliedDateRange] = useState({ from: _saved.from, to: _saved.to });
     const [appliedCustomers, setAppliedCustomers] = useState([]);
     const [appliedRejectionReasons, setAppliedRejectionReasons] = useState([]);
     const [appliedMachines, setAppliedMachines] = useState([]);
     const [appliedProcesses, setAppliedProcesses] = useState([]);
+    const [appliedParts, setAppliedParts] = useState([]);
+    const [appliedOperators, setAppliedOperators] = useState([]);
     const [appliedSearchQuery, setAppliedSearchQuery] = useState("");
 
     const [selectedType, setSelectedType] = useState("ALL");
@@ -2329,6 +2350,14 @@ export default function QualityAnalysis() {
     const tableCustomerRef = useRef(null);
     const [tablePartNoDescSearch, setTablePartNoDescSearch] = useState("");
     const [selectedDispFilter, setSelectedDispFilter] = useState("ALL");
+    const [rejSortConfig, setRejSortConfig] = useState({ key: "Date", direction: "desc" });
+    const [inspSortConfig, setInspSortConfig] = useState({ key: "Insp Date", direction: "desc" });
+    const [traceSortConfig, setTraceSortConfig] = useState({ key: "Insp Date", direction: "desc" });
+    const [summaryViewMode, setSummaryViewMode] = useState("grid"); // "grid" | "chart"
+    const summaryOriginChartRef = useRef(null);
+    const summaryOriginChartInstance = useRef(null);
+    const summaryReasonChartRef = useRef(null);
+    const summaryReasonChartInstance = useRef(null);
     const [selectedInspTypeFilter, setSelectedInspTypeFilter] = useState("ALL");
     const [inspTypeDropdownOpen, setInspTypeDropdownOpen] = useState(false);
     const typeDropdownRef = useRef(null);
@@ -2368,6 +2397,23 @@ export default function QualityAnalysis() {
     const [trendRwkPartSearch, setTrendRwkPartSearch] = useState("");
     const trendRwkPartRef = useRef(null);
 
+    // Operator & Machine Wise Rejection Card Views & Filters (Row 1.5)
+    const [operatorViewMode, setOperatorViewMode] = useState("grid"); // "grid" | "chart"
+    const [cardOperatorFilter, setCardOperatorFilter] = useState([]);
+    const [cardOperatorDropdownOpen, setCardOperatorDropdownOpen] = useState(false);
+    const [cardOperatorSearch, setCardOperatorSearch] = useState("");
+    const cardOperatorRef = useRef(null);
+    const operatorRejChartRef = useRef(null);
+    const operatorRejChartInstance = useRef(null);
+
+    const [machineViewMode, setMachineViewMode] = useState("grid"); // "grid" | "chart"
+    const [cardMachineFilter, setCardMachineFilter] = useState([]);
+    const [cardMachineDropdownOpen, setCardMachineDropdownOpen] = useState(false);
+    const [cardMachineSearch, setCardMachineSearch] = useState("");
+    const cardMachineRef = useRef(null);
+    const machineRejChartRef = useRef(null);
+    const machineRejChartInstance = useRef(null);
+
     // API state data
     const [summaryData, setSummaryData] = useState(null);
     const [chartsData, setChartsData] = useState(null);
@@ -2392,14 +2438,99 @@ export default function QualityAnalysis() {
 
     const isGlobalLoading = summaryLoading || chartsLoading || prodPerfLoading || defectCausesLoading || recordsLoading || calibrationLoading || insightsLoading || customerComplaintsLoading || supplierLoading;
 
+    const [loadingProgress, setLoadingProgress] = useState(0);
+    const [displayProgress, setDisplayProgress] = useState(0);
+    const [statusVisible, setStatusVisible] = useState(true);
+
+    // ── Ultra-Smooth Fluid Organic Progress Interpolation (60fps, identical to Sales Analysis) ──
+    useEffect(() => {
+        let animId = null;
+        let finishTimer = null;
+        let lastStamp = performance.now();
+
+        if (isGlobalLoading) {
+            setStatusVisible(true);
+
+            const stepProgress = (timestamp) => {
+                const dt = Math.min((timestamp - lastStamp) / 1000, 0.08);
+                lastStamp = timestamp;
+
+                setDisplayProgress((prev) => {
+                    const target = Math.max(loadingProgress, 14);
+
+                    if (prev < target) {
+                        // Smoothly ease towards the target with natural deceleration
+                        const gap = target - prev;
+                        const speed = Math.max(gap * 4.2, 10);
+                        const next = prev + speed * dt;
+                        return Math.min(next, target);
+                    } else if (prev < 96) {
+                        // Continuous organic trickle so progress glides smoothly and never freezes
+                        let rate = 2.4;
+                        if (prev > 35) rate = 1.5;
+                        if (prev > 65) rate = 0.75;
+                        if (prev > 85) rate = 0.3;
+                        return Math.min(prev + rate * dt, 96);
+                    }
+                    return prev;
+                });
+
+                animId = requestAnimationFrame(stepProgress);
+            };
+
+            animId = requestAnimationFrame(stepProgress);
+        } else {
+            // Completed: glide to 100%, hold briefly, then cleanly hide
+            let isDone = false;
+            const glideToComplete = (timestamp) => {
+                const dt = Math.min((timestamp - lastStamp) / 1000, 0.08);
+                lastStamp = timestamp;
+
+                setDisplayProgress((prev) => {
+                    if (prev >= 100) {
+                        isDone = true;
+                        return 100;
+                    }
+                    const speed = Math.max((100 - prev) * 10, 60);
+                    const next = prev + speed * dt;
+                    if (next >= 99.5) {
+                        isDone = true;
+                        return 100;
+                    }
+                    return next;
+                });
+
+                if (!isDone) {
+                    animId = requestAnimationFrame(glideToComplete);
+                }
+            };
+
+            animId = requestAnimationFrame(glideToComplete);
+
+            // Once synchronized at 100%, show the success state for 750ms then hide completely
+            finishTimer = setTimeout(() => {
+                setStatusVisible(false);
+                setDisplayProgress(0);
+                setLoadingProgress(0);
+            }, 750);
+        }
+
+        return () => {
+            if (animId) cancelAnimationFrame(animId);
+            if (finishTimer) clearTimeout(finishTimer);
+        };
+    }, [isGlobalLoading, loadingProgress]);
+
+    const showStatusBar = isGlobalLoading || statusVisible;
+
     const trendRef = useRef(null); const trendChart = useRef(null);
-    const resultRef = useRef(null); const resultChart = useRef(null);
-    const defectRef = useRef(null); const defectChart = useRef(null);
     const ppmRef = useRef(null); const ppmChart = useRef(null);
     const paretoRef = useRef(null); const paretoChart = useRef(null);
     const reworkParetoRef = useRef(null); const reworkParetoChart = useRef(null);
     const [topDefectMode, setTopDefectMode] = useState("rejection");
     const toggleTopDefectMode = () => setTopDefectMode(prev => prev === "rejection" ? "rework" : "rejection");
+    const [productAnalysisMode, setProductAnalysisMode] = useState("rejection");
+    const toggleProductAnalysisMode = () => setProductAnalysisMode(prev => prev === "rejection" ? "rework" : "rejection");
     const [defectAnalysisMode, setDefectAnalysisMode] = useState("rejection");
     const toggleDefectAnalysisMode = () => setDefectAnalysisMode(prev => prev === "rejection" ? "rework" : "rejection");
     const [vendorAnalysisMode, setVendorAnalysisMode] = useState("rejection");
@@ -2970,6 +3101,95 @@ export default function QualityAnalysis() {
         setSelectedProcesses([]);
     };
 
+    // ── Part No Filter (Multi-Select) Lists & Helpers ──
+    const filteredDropdownParts = useMemo(() => {
+        if (!partSearch.trim()) return uniquePartOptions;
+        const q = partSearch.toLowerCase().trim();
+        return uniquePartOptions.filter(p => p.toLowerCase().includes(q));
+    }, [uniquePartOptions, partSearch]);
+
+    const partCountMap = useMemo(() => {
+        const map = {};
+        (recordsData?.inspection_records || []).forEach(r => {
+            const p = (r.partNo || "").trim();
+            if (p && p !== "—" && p !== "-") {
+                map[p] = (map[p] || 0) + 1;
+            }
+        });
+        return map;
+    }, [recordsData]);
+
+    const handlePartToggle = (part) => {
+        setSelectedParts(prev =>
+            prev.includes(part) ? prev.filter(p => p !== part) : [...prev, part]
+        );
+    };
+
+    const handleSelectAllParts = () => {
+        setSelectedParts([...uniquePartOptions]);
+    };
+
+    const handleClearAllParts = () => {
+        setSelectedParts([]);
+    };
+
+    // ── Operator Filter Lists & Helpers ──
+    const DEFAULT_OPERATORS = [
+        "Operator John", "Operator Sam", "Operator Sarah", "Operator Alex",
+        "Operator Chris", "Operator Mike", "Operator Lisa"
+    ];
+
+    const uniqueOperatorNames = useMemo(() => {
+        const set = new Set();
+        (recordsData?.inspection_records || []).forEach(r => {
+            const op = (r.operatorName || r.inspBy || "").trim();
+            if (op && op !== "—" && op !== "-" && op !== "null" && op !== "None") {
+                set.add(op);
+            }
+        });
+        (recordsData?.rejection_rows || []).forEach(r => {
+            const op = (r.operatorName || "").trim();
+            if (op && op !== "—" && op !== "-" && op !== "null" && op !== "None") {
+                set.add(op);
+            }
+        });
+        if (set.size === 0) {
+            DEFAULT_OPERATORS.forEach(o => set.add(o));
+        }
+        return Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+    }, [recordsData]);
+
+    const filteredDropdownOperators = useMemo(() => {
+        if (!operatorSearch.trim()) return uniqueOperatorNames;
+        const q = operatorSearch.toLowerCase().trim();
+        return uniqueOperatorNames.filter(o => o.toLowerCase().includes(q));
+    }, [uniqueOperatorNames, operatorSearch]);
+
+    const operatorCountMap = useMemo(() => {
+        const map = {};
+        (recordsData?.inspection_records || []).forEach(r => {
+            const op = (r.operatorName || r.inspBy || "").trim();
+            if (op && op !== "—" && op !== "-") {
+                map[op] = (map[op] || 0) + 1;
+            }
+        });
+        return map;
+    }, [recordsData]);
+
+    const handleOperatorToggle = (op) => {
+        setSelectedOperators(prev =>
+            prev.includes(op) ? prev.filter(o => o !== op) : [...prev, op]
+        );
+    };
+
+    const handleSelectAllOperators = () => {
+        setSelectedOperators([...uniqueOperatorNames]);
+    };
+
+    const handleClearAllOperators = () => {
+        setSelectedOperators([]);
+    };
+
     const activeReasonList = useMemo(() => {
         if (appliedRejectionReasons && appliedRejectionReasons.length > 0) return appliedRejectionReasons;
         if (selectedRejectionReasons && selectedRejectionReasons.length > 0) return selectedRejectionReasons;
@@ -2992,6 +3212,8 @@ export default function QualityAnalysis() {
         (appliedCustomers && appliedCustomers.length > 0) ||
         (appliedMachines && appliedMachines.length > 0) ||
         (appliedProcesses && appliedProcesses.length > 0) ||
+        (appliedParts && appliedParts.length > 0) ||
+        (appliedOperators && appliedOperators.length > 0) ||
         hasActiveReasonFilter ||
         !!appliedSearchQuery
     );
@@ -3027,6 +3249,23 @@ export default function QualityAnalysis() {
             raw = raw.filter(r => {
                 const proc = (r.process || "").toLowerCase().trim();
                 return proc && lowerProcesses.includes(proc);
+            });
+        }
+
+        if (appliedParts.length > 0) {
+            const cleanParts = appliedParts.map(p => getCleanPartNo(p).toLowerCase().trim());
+            raw = raw.filter(r => {
+                const rPart = (r.partNo || "").toLowerCase().trim();
+                const rDesc = (r.partNoDesc || r.product || r.description || "").toLowerCase().trim();
+                return cleanParts.some(p => (rPart && (rPart === p || rPart.startsWith(p))) || (rDesc && rDesc.includes(p)));
+            });
+        }
+
+        if (appliedOperators.length > 0) {
+            const lowerOps = appliedOperators.map(o => o.toLowerCase().trim());
+            raw = raw.filter(r => {
+                const op = (r.operatorName || r.inspBy || "").toLowerCase().trim();
+                return op && lowerOps.includes(op);
             });
         }
 
@@ -3067,7 +3306,7 @@ export default function QualityAnalysis() {
             (r.result && r.result.toLowerCase().includes(q)) ||
             (r.typeLabel && r.typeLabel.toLowerCase().includes(q))
         );
-    }, [recordsData, hasNoData, appliedSearchQuery, appliedCustomers, appliedMachines, appliedProcesses, appliedRejectionReasons]);
+    }, [recordsData, hasNoData, appliedSearchQuery, appliedCustomers, appliedMachines, appliedProcesses, appliedParts, appliedOperators, appliedRejectionReasons]);
 
     const searchFilteredRejectionRows = useMemo(() => {
         if (hasNoData) return [];
@@ -3083,14 +3322,18 @@ export default function QualityAnalysis() {
         });
 
         let raw = (recordsData?.rejection_rows || []).map(r => {
+            const isJobOrder = (r.inspType && r.inspType.toLowerCase().includes("job")) ||
+                (r.typeLabel && r.typeLabel.toLowerCase().includes("job")) ||
+                (r.id && String(r.id).toUpperCase().startsWith("JIR"));
             const idKey = String(r.id || "").trim().toLowerCase();
             const partKey = `${idKey}__${String(r.partNo || "").trim().toLowerCase()}`;
             const matchedRec = traceMapByCombo.get(partKey) || traceMapById.get(idKey);
             return {
                 ...r,
-                machineNo: (r.machineNo && r.machineNo !== "—" ? r.machineNo : matchedRec?.machineNo || matchedRec?.machine || "—").trim(),
+                machineNo: isJobOrder ? "Vendor Rej" : (r.machineNo && r.machineNo !== "—" ? r.machineNo : matchedRec?.machineNo || matchedRec?.machine || "—").trim(),
                 process: (r.process && r.process !== "—" ? r.process : matchedRec?.process || "—").trim(),
-                cname: r.cname || matchedRec?.cname || matchedRec?.partyName || ""
+                cname: r.cname || matchedRec?.cname || matchedRec?.partyName || "",
+                operatorName: isJobOrder ? "Vendor Rej" : (r.operatorName && r.operatorName !== "—" ? r.operatorName : matchedRec?.operatorName || matchedRec?.inspBy || "—").trim()
             };
         });
 
@@ -3118,6 +3361,23 @@ export default function QualityAnalysis() {
             });
         }
 
+        if (appliedParts.length > 0) {
+            const cleanParts = appliedParts.map(p => getCleanPartNo(p).toLowerCase().trim());
+            raw = raw.filter(r => {
+                const rPart = (r.partNo || "").toLowerCase().trim();
+                const rDesc = (r.description || r.product || "").toLowerCase().trim();
+                return cleanParts.some(p => (rPart && (rPart === p || rPart.startsWith(p))) || (rDesc && rDesc.includes(p)));
+            });
+        }
+
+        if (appliedOperators.length > 0) {
+            const lowerOps = appliedOperators.map(o => o.toLowerCase().trim());
+            raw = raw.filter(r => {
+                const op = (r.operatorName || "").toLowerCase().trim();
+                return op && op !== "—" && lowerOps.includes(op);
+            });
+        }
+
         if (!appliedSearchQuery) return raw;
         const q = appliedSearchQuery.toLowerCase().trim();
         return raw.filter(r =>
@@ -3130,7 +3390,7 @@ export default function QualityAnalysis() {
             (r.machineNo && r.machineNo.toLowerCase().includes(q)) ||
             (r.process && r.process.toLowerCase().includes(q))
         );
-    }, [recordsData, hasNoData, appliedSearchQuery, appliedCustomers, appliedMachines, appliedProcesses]);
+    }, [recordsData, hasNoData, appliedSearchQuery, appliedCustomers, appliedMachines, appliedProcesses, appliedParts, appliedOperators]);
 
     const reasonFilteredRejectionRows = useMemo(() => {
         if (!activeReasonList || activeReasonList.length === 0) {
@@ -3687,12 +3947,15 @@ export default function QualityAnalysis() {
 
     const debounceRef = useRef(null);
 
-    const fetchQualityData = useCallback((from, to, q = "", customers = []) => {
+    const fetchQualityData = useCallback((from, to, q = "", customers = [], parts = [], operators = []) => {
         const fromStr = formatYmd(from);
         const toStr = formatYmd(to);
         const qParam = q ? `&q=${encodeURIComponent(q)}` : "";
         const custParam = customers && customers.length > 0 ? `&customer=${encodeURIComponent(customers.join(","))}` : "";
-        const buildUrl = (base) => `${base}?from=${fromStr}&to=${toStr}${qParam}${custParam}`;
+        const cleanParts = (parts || []).map(p => getCleanPartNo(p)).filter(Boolean);
+        const partParam = cleanParts.length > 0 ? `&partno=${encodeURIComponent(cleanParts.join(","))}` : "";
+        const opParam = operators && operators.length > 0 ? `&operator=${encodeURIComponent(operators.join(","))}` : "";
+        const buildUrl = (base) => `${base}?from=${fromStr}&to=${toStr}${qParam}${custParam}${partParam}${opParam}`;
         const buildDateOnlyUrl = (base) => `${base}?from=${fromStr}&to=${toStr}`;
 
         const fetchPanel = async (url, setData, setLoadingState) => {
@@ -3711,21 +3974,48 @@ export default function QualityAnalysis() {
             return false;
         };
 
-        const loadAllSequentially = async () => {
-            await fetchPanel(buildUrl("/api/quality-analysis/summary/"), setSummaryData, setSummaryLoading);
-            await fetchPanel(buildUrl("/api/quality-analysis/charts/"), setChartsData, setChartsLoading);
-            await fetchPanel(buildUrl("/api/quality-analysis/product-performance/"), setProdPerfData, setProdPerfLoading);
-            await fetchPanel(buildUrl("/api/quality-analysis/defect-causes/"), setDefectCausesData, setDefectCausesLoading);
-            await fetchPanel(buildUrl("/api/quality-analysis/records/"), setRecordsData, setRecordsLoading);
-            await fetchPanel(buildUrl("/api/quality-analysis/calibration/"), setCalibrationData, setCalibrationLoading);
-            await fetchPanel(buildUrl("/api/quality-analysis/insights/"), setInsightsData, setInsightsLoading);
-            await fetchPanel(buildUrl("/api/dashboard2/customer-complaints/"), setCustomerComplaintsData, setCustomerComplaintsLoading);
-            // Supplier Wise Rejection card is for suppliers only; not affected by global customer/part filters
-            await fetchPanel(buildDateOnlyUrl("/api/quality-analysis/supplier-rejections/"), setSupplierData, setSupplierLoading);
+        const loadAllConcurrent = async () => {
+            let completed = 0;
+            const totalPanels = 9;
+            const onStep = () => {
+                completed++;
+                setLoadingProgress(prev => Math.max(prev, Math.min(99, Math.round((completed / totalPanels) * 100))));
+            };
+
+            const fetchTracked = async (url, setData, setLoading) => {
+                try {
+                    await fetchPanel(url, setData, setLoading);
+                } finally {
+                    onStep();
+                }
+            };
+
+            setLoadingProgress(15);
+
+            // ── Tier 1: Summary KPIs + Charts in Parallel ──
+            // Immediately renders Top KPIs, Gauges, Rejection % and Weekly Trend Charts (~1-1.5s)!
+            await Promise.allSettled([
+                fetchTracked(buildUrl("/api/quality-analysis/summary/"), setSummaryData, setSummaryLoading),
+                fetchTracked(buildUrl("/api/quality-analysis/charts/"), setChartsData, setChartsLoading),
+            ]);
+
+            // ── Tier 2: Heavy Breakdown Data in Parallel ──
+            // Product Performance, Defect Causes, Records, Insights, Supplier Rejections, Complaints, Calibration
+            await Promise.allSettled([
+                fetchTracked(buildUrl("/api/quality-analysis/product-performance/"), setProdPerfData, setProdPerfLoading),
+                fetchTracked(buildUrl("/api/quality-analysis/defect-causes/"), setDefectCausesData, setDefectCausesLoading),
+                fetchTracked(buildUrl("/api/quality-analysis/records/"), setRecordsData, setRecordsLoading),
+                fetchTracked(buildUrl("/api/quality-analysis/insights/"), setInsightsData, setInsightsLoading),
+                fetchTracked(buildUrl("/api/quality-analysis/calibration/"), setCalibrationData, setCalibrationLoading),
+                fetchTracked(buildUrl("/api/dashboard2/customer-complaints/"), setCustomerComplaintsData, setCustomerComplaintsLoading),
+                fetchTracked(buildDateOnlyUrl("/api/quality-analysis/supplier-rejections/"), setSupplierData, setSupplierLoading),
+            ]);
+
+            setLoadingProgress(100);
         };
 
-        loadAllSequentially();
-    }, []);
+        loadAllConcurrent();
+    }, [getCleanPartNo]);
 
     useEffect(() => {
         const t = setTimeout(() => setAnimated(true), 60);
@@ -3736,10 +4026,14 @@ export default function QualityAnalysis() {
     useEffect(() => {
         if (isGlobalLoading) {
             setCustomerDropdownOpen(false);
+            setPartDropdownOpen(false);
+            setOperatorDropdownOpen(false);
             setTrendRejCustDropdownOpen(false);
             setTrendRejPartDropdownOpen(false);
             setTrendRwkCustDropdownOpen(false);
             setTrendRwkPartDropdownOpen(false);
+            setCardOperatorDropdownOpen(false);
+            setCardMachineDropdownOpen(false);
             setTableCustomerDropdownOpen(false);
             setInspTypeDropdownOpen(false);
             setTraceTypeDropdownOpen(false);
@@ -3757,6 +4051,12 @@ export default function QualityAnalysis() {
             }
             if (customerRef.current && !customerRef.current.contains(event.target)) {
                 setCustomerDropdownOpen(false);
+            }
+            if (partRef.current && !partRef.current.contains(event.target)) {
+                setPartDropdownOpen(false);
+            }
+            if (operatorRef.current && !operatorRef.current.contains(event.target)) {
+                setOperatorDropdownOpen(false);
             }
             if (rejectionReasonRef.current && !rejectionReasonRef.current.contains(event.target)) {
                 setRejectionReasonDropdownOpen(false);
@@ -3782,6 +4082,12 @@ export default function QualityAnalysis() {
             if (trendRwkPartRef.current && !trendRwkPartRef.current.contains(event.target)) {
                 setTrendRwkPartDropdownOpen(false);
             }
+            if (cardOperatorRef.current && !cardOperatorRef.current.contains(event.target)) {
+                setCardOperatorDropdownOpen(false);
+            }
+            if (cardMachineRef.current && !cardMachineRef.current.contains(event.target)) {
+                setCardMachineDropdownOpen(false);
+            }
             if (tableCustomerRef.current && !tableCustomerRef.current.contains(event.target)) {
                 setTableCustomerDropdownOpen(false);
             }
@@ -3794,6 +4100,8 @@ export default function QualityAnalysis() {
     useEffect(() => {
         if (isGlobalLoading) {
             setCustomerDropdownOpen(false);
+            setPartDropdownOpen(false);
+            setOperatorDropdownOpen(false);
             setRejectionReasonDropdownOpen(false);
             setRejectionReasonSectionOpen(false);
             setMachineDropdownOpen(false);
@@ -3814,10 +4122,10 @@ export default function QualityAnalysis() {
         if (!initialMountRef.current) {
             initialMountRef.current = true;
             if (appliedDateRange.from && appliedDateRange.to) {
-                fetchQualityData(appliedDateRange.from, appliedDateRange.to, appliedSearchQuery, appliedCustomers);
+                fetchQualityData(appliedDateRange.from, appliedDateRange.to, appliedSearchQuery, appliedCustomers, appliedParts, appliedOperators);
             }
         }
-    }, [fetchQualityData, appliedDateRange.from, appliedDateRange.to, appliedSearchQuery, appliedCustomers]);
+    }, [fetchQualityData, appliedDateRange.from, appliedDateRange.to, appliedSearchQuery, appliedCustomers, appliedParts, appliedOperators]);
 
     // Auto-apply debounced search for Search Records input so partno searches update cards smoothly
     useEffect(() => {
@@ -3827,11 +4135,11 @@ export default function QualityAnalysis() {
 
         const timer = setTimeout(() => {
             setAppliedSearchQuery(trimmed);
-            fetchQualityData(appliedDateRange.from, appliedDateRange.to, trimmed, appliedCustomers);
+            fetchQualityData(appliedDateRange.from, appliedDateRange.to, trimmed, appliedCustomers, appliedParts, appliedOperators);
         }, 400);
 
         return () => clearTimeout(timer);
-    }, [searchQuery, appliedSearchQuery, appliedDateRange.from, appliedDateRange.to, appliedCustomers, fetchQualityData]);
+    }, [searchQuery, appliedSearchQuery, appliedDateRange.from, appliedDateRange.to, appliedCustomers, appliedParts, appliedOperators, fetchQualityData]);
 
     const QA_CHART_FONT = "'Outfit', 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif";
     const QA_NUM_FONT = "'Plus Jakarta Sans', 'Outfit', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif";
@@ -4136,218 +4444,537 @@ export default function QualityAnalysis() {
         return () => trendChart.current?.destroy();
     }, [chartsData?.trend, weeklyChartType, hasActiveFilter, hasActiveReasonFilter, searchFilteredInspectionRows, reasonFilteredRejectionRows, getRejRowReworkQty, getRejRowMatRej, getRejRowMacRej]);
 
-    // ── 2. Inspection Results Split Donut Chart ──
-    useEffect(() => {
-        if (!resultRef.current) return;
-        resultChart.current?.destroy();
-
-        // ── Calculate Inspection Results Split directly from KPI card metrics ──
-        let okTotal = 0;
-        let rwkTotal = 0;
-        let rejTotal = 0;
-
-        if (hasActiveReasonFilter) {
-            reasonFilteredRejectionRows.forEach(r => {
-                rwkTotal += getRejRowReworkQty(r);
-                rejTotal += (getRejRowMatRej(r) + getRejRowMacRej(r));
-            });
-        } else if (hasActiveFilter && searchFilteredInspectionRows.length > 0) {
-            const rowsMat = searchFilteredInspectionRows.reduce((sum, r) => sum + (parseFloat(String(r.matRejQty || 0).replace(/[^0-9.]/g, "")) || 0), 0);
-            const rowsMac = searchFilteredInspectionRows.reduce((sum, r) => sum + (parseFloat(String(r.macRejQty || 0).replace(/[^0-9.]/g, "")) || 0), 0);
-            const rowsRwk = searchFilteredInspectionRows.reduce((sum, r) => sum + (parseFloat(String(r.reworkQty || "0").replace(/[^0-9.]/g, "")) || 0), 0);
-            const rowsInsp = searchFilteredInspectionRows.reduce((sum, r) => sum + (parseFloat(String(r.qty || 0).replace(/[^0-9.]/g, "")) || 0), 0);
-            const rowsOk = searchFilteredInspectionRows.reduce((sum, r) => sum + (parseFloat(String(r.okQty || (r.result === "PASS" ? r.qty : "0")).replace(/[^0-9.]/g, "")) || 0), 0);
-
-            rejTotal = rowsMat + rowsMac;
-            rwkTotal = rowsRwk;
-            const compOk = Math.max(0, rowsInsp - (rejTotal + rwkTotal));
-            okTotal = rowsOk > 0 ? Math.min(compOk, rowsOk) : compOk;
-        } else {
-            // As per KPI card of Total Inspected Ok Qty, rework, and rejection
-            const sMat = summaryData?.total_mat_rej !== undefined
-                ? parseFloat(summaryData.total_mat_rej)
-                : (parseFloat(String(summaryData?.kpis?.material_rej_card?.value || "0").replace(/[^0-9.]/g, "")) || 0);
-            const sMac = summaryData?.total_mac_rej !== undefined
-                ? parseFloat(summaryData.total_mac_rej)
-                : (parseFloat(String(summaryData?.kpis?.machine_rej_card?.value || "0").replace(/[^0-9.]/g, "")) || 0);
-            rejTotal = sMat + sMac;
-            rwkTotal = parseFloat(String(summaryData?.rework || 0).replace(/[^0-9.]/g, "")) || 0;
-            const sInsp = parseFloat(String(summaryData?.total_inspected || 0).replace(/[^0-9.]/g, "")) || 0;
-            const sCompOk = Math.max(0, sInsp - (rejTotal + rwkTotal));
-            okTotal = summaryData?.total_ok_raw !== undefined
-                ? parseFloat(summaryData.total_ok_raw)
-                : (summaryData?.total_ok_qty
-                    ? (parseFloat(String(summaryData.total_ok_qty).replace(/[^0-9.]/g, "")) || sCompOk)
-                    : sCompOk);
+    // ── 2. Operator wise Rejection Data & Helpers ──
+    const getRowOperator = useCallback((r) => {
+        if (!r) return "Unassigned";
+        const isJobOrder = (r.inspType && r.inspType.toLowerCase().includes("job")) ||
+            (r.typeLabel && r.typeLabel.toLowerCase().includes("job")) ||
+            (r.id && String(r.id).toUpperCase().startsWith("JIR"));
+        if (isJobOrder) {
+            return "Vendor Rej";
         }
+        const raw = (r.operatorName || r.operator || "").trim();
+        if (raw && raw !== "—" && raw !== "-" && raw !== "null" && raw !== "None" && raw !== "Unassigned") {
+            return raw;
+        }
+        if (r.inspBy && r.inspBy !== "—" && r.inspBy !== "-" && r.inspBy !== "null" && r.inspBy !== "None") {
+            return r.inspBy.trim();
+        }
+        return "Unassigned";
+    }, []);
 
-        const total = okTotal + rwkTotal + rejTotal;
-        const okPct = total > 0 ? ((okTotal / total) * 100).toFixed(1) : "0.0";
-        const rwkPct = total > 0 ? ((rwkTotal / total) * 100).toFixed(1) : "0.0";
-        const rejPct = total > 0 ? ((rejTotal / total) * 100).toFixed(1) : "0.0";
+    const allCardOperatorOptions = useMemo(() => {
+        const sourceRows = hasActiveReasonFilter ? reasonFilteredRejectionRows : searchFilteredInspectionRows;
+        const set = new Set();
+        sourceRows.forEach(r => {
+            const matRej = hasActiveReasonFilter ? getRejRowMatRej(r) : (parseFloat(String(r.matRejQty || 0).replace(/[^0-9.]/g, "")) || 0);
+            const macRej = hasActiveReasonFilter ? getRejRowMacRej(r) : (parseFloat(String(r.macRejQty || 0).replace(/[^0-9.]/g, "")) || 0);
+            if (matRej + macRej <= 0) return;
+            const op = getRowOperator(r);
+            if (op && op !== "—" && op !== "-" && op !== "null" && op !== "None" && op !== "Unassigned") {
+                set.add(op);
+            }
+        });
+        return Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+    }, [searchFilteredInspectionRows, reasonFilteredRejectionRows, hasActiveReasonFilter, getRejRowMatRej, getRejRowMacRej, getRowOperator]);
 
-        const resultDonut = {
-            labels: [`Pass (${okPct}%)`, `Rework (${rwkPct}%)`, `Reject (${rejPct}%)`],
-            datasets: [{
-                backgroundColor: ["#10b981", "#f5a623", "#ef4444"],
-                hoverBackgroundColor: ["#059669", "#d97706", "#dc2626"],
-                borderColor: ["#ffffff", "#ffffff", "#ffffff"],
-                borderWidth: 2,
-                data: [okTotal, rwkTotal, rejTotal]
-            }]
-        };
+    const filteredCardOperators = useMemo(() => {
+        if (!cardOperatorSearch.trim()) return allCardOperatorOptions;
+        const q = cardOperatorSearch.toLowerCase().trim();
+        return allCardOperatorOptions.filter(o => o.toLowerCase().includes(q));
+    }, [allCardOperatorOptions, cardOperatorSearch]);
 
-        resultChart.current = new Chart(resultRef.current, {
-            type: "doughnut",
-            data: resultDonut,
+    const cardOperatorCountMap = useMemo(() => {
+        const sourceRows = hasActiveReasonFilter ? reasonFilteredRejectionRows : searchFilteredInspectionRows;
+        const map = {};
+        sourceRows.forEach(r => {
+            const matRej = hasActiveReasonFilter ? getRejRowMatRej(r) : (parseFloat(String(r.matRejQty || 0).replace(/[^0-9.]/g, "")) || 0);
+            const macRej = hasActiveReasonFilter ? getRejRowMacRej(r) : (parseFloat(String(r.macRejQty || 0).replace(/[^0-9.]/g, "")) || 0);
+            const total = matRej + macRej;
+            if (total <= 0) return;
+            const op = getRowOperator(r);
+            map[op] = (map[op] || 0) + total;
+        });
+        return map;
+    }, [searchFilteredInspectionRows, reasonFilteredRejectionRows, hasActiveReasonFilter, getRejRowMatRej, getRejRowMacRej, getRowOperator]);
+
+    // Lookup map to get rejection reason from rejection_rows
+    const rejReasonLookupMap = useMemo(() => {
+        const map = new Map();
+        (recordsData?.rejection_rows || []).forEach(r => {
+            const reason = (r.reason || r.defect || "").trim();
+            if (!reason || reason === "—" || reason === "-") return;
+            const idKey = String(r.id || "").trim().toLowerCase();
+            const partKey = String(r.partNo || "").trim().toLowerCase();
+            if (idKey && partKey) {
+                map.set(`${idKey}__${partKey}`, reason);
+            }
+            if (idKey && !map.has(idKey)) {
+                map.set(idKey, reason);
+            }
+            if (partKey && !map.has(`part__${partKey}`)) {
+                map.set(`part__${partKey}`, reason);
+            }
+        });
+        return map;
+    }, [recordsData?.rejection_rows]);
+
+    const operatorRejectionsData = useMemo(() => {
+        const sourceRows = hasActiveReasonFilter ? reasonFilteredRejectionRows : searchFilteredInspectionRows;
+        const map = new Map();
+
+        sourceRows.forEach(r => {
+            const matRej = hasActiveReasonFilter ? getRejRowMatRej(r) : (parseFloat(String(r.matRejQty || 0).replace(/[^0-9.]/g, "")) || 0);
+            const macRej = hasActiveReasonFilter ? getRejRowMacRej(r) : (parseFloat(String(r.macRejQty || 0).replace(/[^0-9.]/g, "")) || 0);
+            const total = matRej + macRej;
+            if (total <= 0) return;
+
+            const partNo = getCleanPartNo(r.partNo || "—");
+            const desc = (r.description || r.product || (r.partNoDesc && r.partNoDesc.includes(" - ") ? r.partNoDesc.split(" - ").slice(1).join(" - ") : r.partNoDesc) || "—").trim();
+            const operator = getRowOperator(r);
+
+            const idKey = String(r.id || "").trim().toLowerCase();
+            const partKey = String(r.partNo || "").trim().toLowerCase();
+            const rawReason = (r.reason || r.defect || "").trim();
+            const resolvedReason = (rawReason && rawReason !== "—" && rawReason !== "-")
+                ? rawReason
+                : (idKey && partKey && rejReasonLookupMap.get(`${idKey}__${partKey}`)) ||
+                (idKey && rejReasonLookupMap.get(idKey)) ||
+                (partKey && rejReasonLookupMap.get(`part__${partKey}`)) ||
+                "Unspecified";
+
+            const key = `${partNo}___${operator}___${resolvedReason}`;
+            const existing = map.get(key);
+            if (!existing) {
+                map.set(key, { partNo, description: desc, operator, reason: resolvedReason, matRej, macRej, totalQty: total });
+            } else {
+                existing.matRej += matRej;
+                existing.macRej += macRej;
+                existing.totalQty += total;
+            }
+        });
+
+        let list = Array.from(map.values());
+        if (cardOperatorFilter.length > 0) {
+            list = list.filter(item => cardOperatorFilter.includes(item.operator));
+        }
+        return list.sort((a, b) => b.totalQty - a.totalQty);
+    }, [searchFilteredInspectionRows, reasonFilteredRejectionRows, hasActiveReasonFilter, getRejRowMatRej, getRejRowMacRej, getCleanPartNo, cardOperatorFilter, rejReasonLookupMap, getRowOperator]);
+
+    const operatorRejectionsTotals = useMemo(() => {
+        let mat = 0;
+        let mac = 0;
+        let total = 0;
+        operatorRejectionsData.forEach(item => {
+            mat += item.matRej;
+            mac += item.macRej;
+            total += item.totalQty;
+        });
+        return { matRej: mat, macRej: mac, totalQty: total };
+    }, [operatorRejectionsData]);
+
+    // ── 3. Machine wise Rejection Data & Helpers ──
+    const partToMachineMap = useMemo(() => {
+        const map = new Map();
+        const records = recordsData?.inspection_records || [];
+        records.forEach(r => {
+            const mac = (r.machineNo || r.machine || "").trim();
+            if (mac && mac !== "—" && mac !== "-" && mac !== "null" && mac !== "None" && mac !== "Unassigned" && mac !== "Vendor Rej") {
+                const p = getCleanPartNo(r.partNo || "").toUpperCase();
+                if (p && !map.has(p)) map.set(p, mac);
+            }
+        });
+        const rejRows = recordsData?.rejection_rows || [];
+        rejRows.forEach(r => {
+            const mac = (r.machineNo || r.machine || "").trim();
+            if (mac && mac !== "—" && mac !== "-" && mac !== "null" && mac !== "None" && mac !== "Unassigned" && mac !== "Vendor Rej") {
+                const p = getCleanPartNo(r.partNo || "").toUpperCase();
+                if (p && !map.has(p)) map.set(p, mac);
+            }
+        });
+        return map;
+    }, [recordsData, getCleanPartNo]);
+
+    const getRowMachine = useCallback((r) => {
+        if (!r) return "Unassigned";
+        const isJobOrder = (r.inspType && r.inspType.toLowerCase().includes("job")) ||
+            (r.typeLabel && r.typeLabel.toLowerCase().includes("job")) ||
+            (r.id && String(r.id).toUpperCase().startsWith("JIR"));
+        if (isJobOrder) {
+            return "Vendor Rej";
+        }
+        const raw = (r.machineNo || r.machine || "").trim();
+        if (raw && raw !== "—" && raw !== "-" && raw !== "null" && raw !== "None" && raw !== "Unassigned") {
+            return raw;
+        }
+        const pUpper = getCleanPartNo(r.partNo || "").toUpperCase();
+        if (pUpper && partToMachineMap.has(pUpper)) {
+            return partToMachineMap.get(pUpper);
+        }
+        for (const [k, v] of partToMachineMap.entries()) {
+            if (pUpper && (pUpper.includes(k) || k.includes(pUpper))) {
+                return v;
+            }
+        }
+        return "Unassigned";
+    }, [partToMachineMap, getCleanPartNo]);
+
+    const allCardMachineOptions = useMemo(() => {
+        const sourceRows = hasActiveReasonFilter ? reasonFilteredRejectionRows : searchFilteredInspectionRows;
+        const set = new Set();
+        sourceRows.forEach(r => {
+            const matRej = hasActiveReasonFilter ? getRejRowMatRej(r) : (parseFloat(String(r.matRejQty || 0).replace(/[^0-9.]/g, "")) || 0);
+            const macRej = hasActiveReasonFilter ? getRejRowMacRej(r) : (parseFloat(String(r.macRejQty || 0).replace(/[^0-9.]/g, "")) || 0);
+            if (matRej + macRej <= 0) return;
+            const m = getRowMachine(r);
+            if (m && m !== "—" && m !== "-" && m !== "null" && m !== "None" && m !== "Unassigned") {
+                set.add(m);
+            }
+        });
+        return Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+    }, [searchFilteredInspectionRows, reasonFilteredRejectionRows, hasActiveReasonFilter, getRejRowMatRej, getRejRowMacRej, getRowMachine]);
+
+    const filteredCardMachines = useMemo(() => {
+        if (!cardMachineSearch.trim()) return allCardMachineOptions;
+        const q = cardMachineSearch.toLowerCase().trim();
+        return allCardMachineOptions.filter(m => m.toLowerCase().includes(q));
+    }, [allCardMachineOptions, cardMachineSearch]);
+
+    const cardMachineCountMap = useMemo(() => {
+        const sourceRows = hasActiveReasonFilter ? reasonFilteredRejectionRows : searchFilteredInspectionRows;
+        const map = {};
+        sourceRows.forEach(r => {
+            const matRej = hasActiveReasonFilter ? getRejRowMatRej(r) : (parseFloat(String(r.matRejQty || 0).replace(/[^0-9.]/g, "")) || 0);
+            const macRej = hasActiveReasonFilter ? getRejRowMacRej(r) : (parseFloat(String(r.macRejQty || 0).replace(/[^0-9.]/g, "")) || 0);
+            const total = matRej + macRej;
+            if (total <= 0) return;
+            const m = getRowMachine(r);
+            map[m] = (map[m] || 0) + total;
+        });
+        return map;
+    }, [searchFilteredInspectionRows, reasonFilteredRejectionRows, hasActiveReasonFilter, getRejRowMatRej, getRejRowMacRej, getRowMachine]);
+
+    const machineRejectionsData = useMemo(() => {
+        const sourceRows = hasActiveReasonFilter ? reasonFilteredRejectionRows : searchFilteredInspectionRows;
+        const map = new Map();
+
+        sourceRows.forEach(r => {
+            const matRej = hasActiveReasonFilter ? getRejRowMatRej(r) : (parseFloat(String(r.matRejQty || 0).replace(/[^0-9.]/g, "")) || 0);
+            const macRej = hasActiveReasonFilter ? getRejRowMacRej(r) : (parseFloat(String(r.macRejQty || 0).replace(/[^0-9.]/g, "")) || 0);
+            const total = matRej + macRej;
+            if (total <= 0) return;
+
+            const partNo = getCleanPartNo(r.partNo || "—");
+            const desc = (r.description || r.product || (r.partNoDesc && r.partNoDesc.includes(" - ") ? r.partNoDesc.split(" - ").slice(1).join(" - ") : r.partNoDesc) || "—").trim();
+            const machineNo = getRowMachine(r);
+
+            const idKey = String(r.id || "").trim().toLowerCase();
+            const partKey = String(r.partNo || "").trim().toLowerCase();
+            const rawReason = (r.reason || r.defect || "").trim();
+            const resolvedReason = (rawReason && rawReason !== "—" && rawReason !== "-")
+                ? rawReason
+                : (idKey && partKey && rejReasonLookupMap.get(`${idKey}__${partKey}`)) ||
+                (idKey && rejReasonLookupMap.get(idKey)) ||
+                (partKey && rejReasonLookupMap.get(`part__${partKey}`)) ||
+                "Unspecified";
+
+            const key = `${partNo}___${machineNo}___${resolvedReason}`;
+            const existing = map.get(key);
+            if (!existing) {
+                map.set(key, { partNo, description: desc, machineNo, reason: resolvedReason, matRej, macRej, totalQty: total });
+            } else {
+                existing.matRej += matRej;
+                existing.macRej += macRej;
+                existing.totalQty += total;
+            }
+        });
+
+        let list = Array.from(map.values());
+        if (cardMachineFilter.length > 0) {
+            list = list.filter(item => cardMachineFilter.includes(item.machineNo));
+        }
+        return list.sort((a, b) => b.totalQty - a.totalQty);
+    }, [searchFilteredInspectionRows, reasonFilteredRejectionRows, hasActiveReasonFilter, getRejRowMatRej, getRejRowMacRej, getCleanPartNo, cardMachineFilter, rejReasonLookupMap]);
+
+    const machineRejectionsTotals = useMemo(() => {
+        let mat = 0;
+        let mac = 0;
+        let total = 0;
+        machineRejectionsData.forEach(item => {
+            mat += item.matRej;
+            mac += item.macRej;
+            total += item.totalQty;
+        });
+        return { matRej: mat, macRej: mac, totalQty: total };
+    }, [machineRejectionsData]);
+
+    // ── Operator Wise Rejection Chart Data & Instance ──
+    const operatorChartData = useMemo(() => {
+        const map = new Map();
+        operatorRejectionsData.forEach(row => {
+            const op = row.operator || "Unassigned";
+            if (!map.has(op)) {
+                map.set(op, { name: op, matRej: 0, macRej: 0, totalQty: 0 });
+            }
+            const item = map.get(op);
+            item.matRej += (row.matRej || 0);
+            item.macRej += (row.macRej || 0);
+            item.totalQty += (row.totalQty || 0);
+        });
+        const list = Array.from(map.values()).sort((a, b) => b.totalQty - a.totalQty);
+        return list.slice(0, 10);
+    }, [operatorRejectionsData]);
+
+    useEffect(() => {
+        if (operatorViewMode !== "chart" || !operatorRejChartRef.current) return;
+        operatorRejChartInstance.current?.destroy();
+
+        if (operatorChartData.length === 0) return;
+
+        const labels = operatorChartData.map(d => d.name);
+        const matData = operatorChartData.map(d => d.matRej);
+        const macData = operatorChartData.map(d => d.macRej);
+
+        operatorRejChartInstance.current = new Chart(operatorRejChartRef.current, {
+            type: "bar",
+            data: {
+                labels,
+                datasets: [
+                    {
+                        label: "Mat Rej",
+                        data: matData,
+                        backgroundColor: "#f43f5e",
+                        borderRadius: { topLeft: 4, bottomLeft: 4, topRight: 0, bottomRight: 0 },
+                        borderSkipped: false,
+                        barPercentage: 0.72,
+                        categoryPercentage: 0.82,
+                        stack: "rejStack",
+                    },
+                    {
+                        label: "Mac Rej",
+                        data: macData,
+                        backgroundColor: "#f59e0b",
+                        borderRadius: { topLeft: 0, bottomLeft: 0, topRight: 4, bottomRight: 4 },
+                        borderSkipped: false,
+                        barPercentage: 0.72,
+                        categoryPercentage: 0.82,
+                        stack: "rejStack",
+                    }
+                ]
+            },
             options: {
+                indexAxis: "y",
                 responsive: true,
                 maintainAspectRatio: false,
+                animation: {
+                    duration: 800,
+                    easing: "easeOutQuart"
+                },
+                layout: {
+                    padding: { top: 6, bottom: 6, left: 4, right: 14 }
+                },
                 plugins: {
-                    legend: { position: "bottom", labels: { ...fontBase, size: 11, weight: "600", padding: 12, boxWidth: 10 } },
+                    legend: {
+                        position: "top",
+                        align: "end",
+                        labels: {
+                            font: { family: QA_CHART_FONT, size: 10, weight: "600" },
+                            color: "#64748b",
+                            boxWidth: 9,
+                            boxHeight: 9,
+                            usePointStyle: true,
+                            pointStyle: "rectRounded",
+                            padding: 10
+                        }
+                    },
                     tooltip: {
-                        backgroundColor: "rgba(15, 23, 42, 0.9)",
-                        padding: 12,
+                        backgroundColor: "rgba(15, 23, 42, 0.94)",
+                        padding: 10,
                         cornerRadius: 8,
-                        titleFont: { size: 11.5, weight: "700", family: QA_CHART_FONT },
-                        bodyFont: { size: 11, weight: "500", family: QA_NUM_FONT },
-                        borderColor: "rgba(255, 255, 255, 0.1)",
+                        titleFont: { size: 11, weight: "700", family: QA_CHART_FONT },
+                        bodyFont: { size: 10.5, weight: "500", family: QA_NUM_FONT },
+                        footerFont: { size: 10.5, weight: "700", family: QA_NUM_FONT },
+                        borderColor: "rgba(255, 255, 255, 0.12)",
                         borderWidth: 1,
                         callbacks: {
-                            label: (ctx) => {
-                                const rawLabel = ctx.label || "";
-                                const cleanLabel = rawLabel.replace(/\s*\([\d.]*%\)/, '').trim();
-                                const val = Number(ctx.parsed) || 0;
-                                const sum = ctx.dataset.data.reduce((a, b) => Number(a) + Number(b), 0);
-                                const pct = sum > 0 ? ((val / sum) * 100).toFixed(1) : "0.0";
-                                return ` ${cleanLabel}: ${val.toLocaleString()} units (${pct}%)`;
+                            label: (ctx) => ` ${ctx.dataset.label}: ${Number(ctx.parsed.x || 0).toLocaleString()} Nos`,
+                            footer: (items) => {
+                                const total = items.reduce((acc, curr) => acc + (curr.parsed.x || 0), 0);
+                                return ` Total Rej: ${total.toLocaleString()} Nos`;
                             }
                         }
                     },
                     datalabels: {
-                        display: true,
-                        color: "#fff",
-                        font: { size: 11, weight: "700", family: QA_NUM_FONT },
-                        textStrokeColor: "rgba(15, 23, 42, 0.5)",
-                        textStrokeWidth: 1.5,
-                        formatter: (value, context) => {
-                            const val = Number(value) || 0;
-                            if (val <= 0) return "";
-                            const sum = context.dataset.data.reduce((a, b) => Number(a) + Number(b), 0);
-                            if (sum <= 0) return "";
-                            const rawPct = (val / sum) * 100;
-                            if (rawPct <= 0) return "";
-                            return rawPct < 0.1 ? "<0.1%" : `${rawPct.toFixed(1)}%`;
-                        }
+                        display: (ctx) => {
+                            const val = ctx.dataset.data[ctx.dataIndex];
+                            return val > 0;
+                        },
+                        color: "#ffffff",
+                        font: { family: QA_NUM_FONT, size: 9, weight: "700" },
+                        formatter: (val) => val > 0 ? val.toLocaleString() : ""
                     }
                 },
-                cutout: "64%",
+                scales: {
+                    x: {
+                        stacked: true,
+                        grid: { color: "rgba(226, 232, 240, 0.6)", drawBorder: false },
+                        ticks: {
+                            font: { family: QA_NUM_FONT, size: 9.5, weight: "600" },
+                            color: "#64748b",
+                            precision: 0
+                        }
+                    },
+                    y: {
+                        stacked: true,
+                        grid: { display: false },
+                        ticks: {
+                            font: { family: QA_CHART_FONT, size: 10, weight: "600" },
+                            color: "#1e293b",
+                            autoSkip: false
+                        }
+                    }
+                }
             }
         });
 
-        return () => resultChart.current?.destroy();
-    }, [chartsData?.result_donut, summaryData, fontBase, hasActiveFilter, hasActiveReasonFilter, searchFilteredInspectionRows, reasonFilteredRejectionRows, getRejRowReworkQty, getRejRowMatRej, getRejRowMacRej]);
-
-    // ── 3. Defect Category Breakdown Donut Chart ──
-    useEffect(() => {
-        if (!defectRef.current) return;
-        defectChart.current?.destroy();
-
-        // ── Calculate Defect Category Breakdown directly from KPI card metrics ──
-        let matTotal = 0;
-        let macTotal = 0;
-        let rwkTotal = 0;
-
-        if (hasActiveReasonFilter) {
-            reasonFilteredRejectionRows.forEach(r => {
-                matTotal += getRejRowMatRej(r);
-                macTotal += getRejRowMacRej(r);
-                rwkTotal += getRejRowReworkQty(r);
-            });
-        } else if (hasActiveFilter && searchFilteredInspectionRows.length > 0) {
-            matTotal = searchFilteredInspectionRows.reduce((sum, r) => sum + (parseFloat(String(r.matRejQty ?? 0).replace(/[^0-9.]/g, "")) || 0), 0);
-            macTotal = searchFilteredInspectionRows.reduce((sum, r) => sum + (parseFloat(String(r.macRejQty ?? 0).replace(/[^0-9.]/g, "")) || 0), 0);
-            rwkTotal = searchFilteredInspectionRows.reduce((sum, r) => sum + (parseFloat(String(r.reworkQty ?? r.rwkQty ?? (r.result === "REWORK" ? r.qty : 0)).replace(/[^0-9.]/g, "")) || 0), 0);
-        } else {
-            // As per KPI card of Material Rejection Qty, Machine Rejection Qty & Rework
-            matTotal = summaryData?.total_mat_rej !== undefined
-                ? parseFloat(summaryData.total_mat_rej)
-                : (parseFloat(String(summaryData?.kpis?.material_rej_card?.value || "0").replace(/[^0-9.]/g, "")) || 0);
-            macTotal = summaryData?.total_mac_rej !== undefined
-                ? parseFloat(summaryData.total_mac_rej)
-                : (parseFloat(String(summaryData?.kpis?.machine_rej_card?.value || "0").replace(/[^0-9.]/g, "")) || 0);
-            rwkTotal = parseFloat(String(summaryData?.rework || 0).replace(/[^0-9.]/g, "")) || 0;
-        }
-
-        const defectData = [matTotal, macTotal, rwkTotal];
-        const defectTotal = matTotal + macTotal + rwkTotal;
-        const defectBaseNames = ["Material Rejection", "Machine Rejection", "Rework"];
-        const defectLabels = defectBaseNames.map((name, idx) => {
-            const rawVal = Number(defectData[idx]) || 0;
-            const pct = defectTotal > 0 ? ((rawVal / defectTotal) * 100).toFixed(1) : "0.0";
-            return `${name} (${pct}%)`;
-        });
-        const defectDonut = {
-            labels: defectLabels,
-            datasets: [{
-                backgroundColor: ["#f43f5e", "#0f766e", "#f59e0b"],
-                hoverBackgroundColor: ["#e11d48", "#115e59", "#d97706"],
-                borderColor: ["#ffffff", "#ffffff", "#ffffff"],
-                borderWidth: 2,
-                data: defectData
-            }]
+        return () => {
+            operatorRejChartInstance.current?.destroy();
         };
+    }, [operatorViewMode, operatorChartData, QA_CHART_FONT, QA_NUM_FONT]);
 
-        defectChart.current = new Chart(defectRef.current, {
-            type: "doughnut",
-            data: defectDonut,
+    // ── Machine Wise Rejection Chart Data & Instance ──
+    const machineChartData = useMemo(() => {
+        const map = new Map();
+        machineRejectionsData.forEach(row => {
+            const mac = row.machineNo || "Unassigned";
+            if (!map.has(mac)) {
+                map.set(mac, { name: mac, matRej: 0, macRej: 0, totalQty: 0 });
+            }
+            const item = map.get(mac);
+            item.matRej += (row.matRej || 0);
+            item.macRej += (row.macRej || 0);
+            item.totalQty += (row.totalQty || 0);
+        });
+        const list = Array.from(map.values()).sort((a, b) => b.totalQty - a.totalQty);
+        return list.slice(0, 10);
+    }, [machineRejectionsData]);
+
+    useEffect(() => {
+        if (machineViewMode !== "chart" || !machineRejChartRef.current) return;
+        machineRejChartInstance.current?.destroy();
+
+        if (machineChartData.length === 0) return;
+
+        const labels = machineChartData.map(d => d.name);
+        const matData = machineChartData.map(d => d.matRej);
+        const macData = machineChartData.map(d => d.macRej);
+
+        machineRejChartInstance.current = new Chart(machineRejChartRef.current, {
+            type: "bar",
+            data: {
+                labels,
+                datasets: [
+                    {
+                        label: "Mat Rej",
+                        data: matData,
+                        backgroundColor: "#f43f5e",
+                        borderRadius: { topLeft: 4, bottomLeft: 4, topRight: 0, bottomRight: 0 },
+                        borderSkipped: false,
+                        barPercentage: 0.72,
+                        categoryPercentage: 0.82,
+                        stack: "rejStack",
+                    },
+                    {
+                        label: "Mac Rej",
+                        data: macData,
+                        backgroundColor: "#0d9488",
+                        borderRadius: { topLeft: 0, bottomLeft: 0, topRight: 4, bottomRight: 4 },
+                        borderSkipped: false,
+                        barPercentage: 0.72,
+                        categoryPercentage: 0.82,
+                        stack: "rejStack",
+                    }
+                ]
+            },
             options: {
+                indexAxis: "y",
                 responsive: true,
                 maintainAspectRatio: false,
+                animation: {
+                    duration: 800,
+                    easing: "easeOutQuart"
+                },
+                layout: {
+                    padding: { top: 6, bottom: 6, left: 4, right: 14 }
+                },
                 plugins: {
-                    legend: { position: "bottom", labels: { ...fontBase, size: 11, weight: "600", padding: 12, boxWidth: 10 } },
+                    legend: {
+                        position: "top",
+                        align: "end",
+                        labels: {
+                            font: { family: QA_CHART_FONT, size: 10, weight: "600" },
+                            color: "#64748b",
+                            boxWidth: 9,
+                            boxHeight: 9,
+                            usePointStyle: true,
+                            pointStyle: "rectRounded",
+                            padding: 10
+                        }
+                    },
                     tooltip: {
-                        backgroundColor: "rgba(15, 23, 42, 0.9)",
-                        padding: 12,
+                        backgroundColor: "rgba(15, 23, 42, 0.94)",
+                        padding: 10,
                         cornerRadius: 8,
-                        titleFont: { size: 11.5, weight: "700", family: QA_CHART_FONT },
-                        bodyFont: { size: 11, weight: "500", family: QA_NUM_FONT },
-                        borderColor: "rgba(255, 255, 255, 0.1)",
+                        titleFont: { size: 11, weight: "700", family: QA_CHART_FONT },
+                        bodyFont: { size: 10.5, weight: "500", family: QA_NUM_FONT },
+                        footerFont: { size: 10.5, weight: "700", family: QA_NUM_FONT },
+                        borderColor: "rgba(255, 255, 255, 0.12)",
                         borderWidth: 1,
                         callbacks: {
-                            label: (ctx) => {
-                                const rawLabel = ctx.label || "";
-                                const cleanLabel = rawLabel.replace(/\s*\([\d.]*%\)/, '').trim();
-                                const val = Number(ctx.parsed) || 0;
-                                const sum = ctx.dataset.data.reduce((a, b) => Number(a) + Number(b), 0);
-                                const pct = sum > 0 ? ((val / sum) * 100).toFixed(1) : "0.0";
-                                return ` ${cleanLabel}: ${val.toLocaleString()} units (${pct}%)`;
+                            label: (ctx) => ` ${ctx.dataset.label}: ${Number(ctx.parsed.x || 0).toLocaleString()} Nos`,
+                            footer: (items) => {
+                                const total = items.reduce((acc, curr) => acc + (curr.parsed.x || 0), 0);
+                                return ` Total Rej: ${total.toLocaleString()} Nos`;
                             }
                         }
                     },
                     datalabels: {
-                        display: true,
-                        color: "#fff",
-                        font: { size: 11, weight: "700", family: QA_NUM_FONT },
-                        textStrokeColor: "rgba(15, 23, 42, 0.5)",
-                        textStrokeWidth: 1.5,
-                        formatter: (value, context) => {
-                            const val = Number(value) || 0;
-                            if (val <= 0) return "";
-                            const sum = context.dataset.data.reduce((a, b) => Number(a) + Number(b), 0);
-                            if (sum <= 0) return "";
-                            const rawPct = (val / sum) * 100;
-                            if (rawPct <= 0) return "";
-                            return rawPct < 0.1 ? "<0.1%" : `${rawPct.toFixed(1)}%`;
-                        }
+                        display: (ctx) => {
+                            const val = ctx.dataset.data[ctx.dataIndex];
+                            return val > 0;
+                        },
+                        color: "#ffffff",
+                        font: { family: QA_NUM_FONT, size: 9, weight: "700" },
+                        formatter: (val) => val > 0 ? val.toLocaleString() : ""
                     }
                 },
-                cutout: "64%",
+                scales: {
+                    x: {
+                        stacked: true,
+                        grid: { color: "rgba(226, 232, 240, 0.6)", drawBorder: false },
+                        ticks: {
+                            font: { family: QA_NUM_FONT, size: 9.5, weight: "600" },
+                            color: "#64748b",
+                            precision: 0
+                        }
+                    },
+                    y: {
+                        stacked: true,
+                        grid: { display: false },
+                        ticks: {
+                            font: { family: QA_CHART_FONT, size: 10, weight: "600" },
+                            color: "#1e293b",
+                            autoSkip: false
+                        }
+                    }
+                }
             }
         });
 
-        return () => defectChart.current?.destroy();
-    }, [chartsData?.defect_donut, summaryData, fontBase, hasActiveFilter, hasActiveReasonFilter, searchFilteredInspectionRows, reasonFilteredRejectionRows, getRejRowMatRej, getRejRowMacRej, getRejRowReworkQty]);
+        return () => {
+            machineRejChartInstance.current?.destroy();
+        };
+    }, [machineViewMode, machineChartData, QA_CHART_FONT, QA_NUM_FONT]);
 
     // ── 4. Internal Mac Rejection PPM Chart ──
     useEffect(() => {
@@ -5326,9 +5953,11 @@ export default function QualityAnalysis() {
         if (!areArraysEqual(selectedRejectionReasons, appliedRejectionReasons)) count++;
         if (!areArraysEqual(selectedMachines, appliedMachines)) count++;
         if (!areArraysEqual(selectedProcesses, appliedProcesses)) count++;
+        if (!areArraysEqual(selectedParts, appliedParts)) count++;
+        if (!areArraysEqual(selectedOperators, appliedOperators)) count++;
 
         return { hasUnappliedChanges: count > 0, pendingChangesCount: count };
-    }, [dateRange, appliedDateRange, searchQuery, appliedSearchQuery, selectedCustomers, appliedCustomers, selectedRejectionReasons, appliedRejectionReasons, selectedMachines, appliedMachines, selectedProcesses, appliedProcesses]);
+    }, [dateRange, appliedDateRange, searchQuery, appliedSearchQuery, selectedCustomers, appliedCustomers, selectedRejectionReasons, appliedRejectionReasons, selectedMachines, appliedMachines, selectedProcesses, appliedProcesses, selectedParts, appliedParts, selectedOperators, appliedOperators]);
 
     const handleApplyFilters = () => {
         if (isGlobalLoading) return;
@@ -5342,13 +5971,15 @@ export default function QualityAnalysis() {
         setAppliedRejectionReasons([...selectedRejectionReasons]);
         setAppliedMachines([...selectedMachines]);
         setAppliedProcesses([...selectedProcesses]);
+        setAppliedParts([...selectedParts]);
+        setAppliedOperators([...selectedOperators]);
         setAppliedSearchQuery(trimmedQuery);
 
         // 2. Persist to session storage
         writeFilterSession("ba_filter_quality", { from: fromDate, to: toDate });
 
         // 3. Fetch data from backend
-        fetchQualityData(fromDate, toDate, trimmedQuery, selectedCustomers);
+        fetchQualityData(fromDate, toDate, trimmedQuery, selectedCustomers, selectedParts, selectedOperators);
     };
 
     const resetFilters = () => {
@@ -5364,6 +5995,8 @@ export default function QualityAnalysis() {
         setSelectedRejectionReasons([]);
         setSelectedMachines([]);
         setSelectedProcesses([]);
+        setSelectedParts([]);
+        setSelectedOperators([]);
         setSearchQuery("");
         setFilters({
             fromDate: formatYmd(dfltRange.from),
@@ -5380,10 +6013,12 @@ export default function QualityAnalysis() {
         setAppliedRejectionReasons([]);
         setAppliedMachines([]);
         setAppliedProcesses([]);
+        setAppliedParts([]);
+        setAppliedOperators([]);
         setAppliedSearchQuery("");
 
         writeFilterSession("ba_filter_quality", { from: dfltRange.from, to: dfltRange.to });
-        fetchQualityData(dfltRange.from, dfltRange.to, "", []);
+        fetchQualityData(dfltRange.from, dfltRange.to, "", [], [], []);
     };
 
     // ── Memoised derived data (avoids re-computation on unrelated renders) ─────
@@ -5406,6 +6041,17 @@ export default function QualityAnalysis() {
         return Array.from(set).sort();
     }, [searchFilteredInspectionRows]);
 
+    const handleTraceSort = useCallback((key) => {
+        if (key === "#") return;
+        setTraceSortConfig(prev => {
+            if (prev.key === key) {
+                return { key, direction: prev.direction === "asc" ? "desc" : "asc" };
+            }
+            const defaultDesc = ["Insp Date", "Prod Qty", "Ok Qty", "Mat Rej", "Mac Rej", "Rw Qty"].includes(key);
+            return { key, direction: defaultDesc ? "desc" : "asc" };
+        });
+    }, []);
+
     const activeTraceabilityRows = useMemo(() => {
         let rows = searchFilteredInspectionRows;
 
@@ -5420,14 +6066,103 @@ export default function QualityAnalysis() {
             });
         }
 
-        return rows.filter(r => {
+        const filtered = rows.filter(r => {
             if (!r) return false;
             const matchInspNo = selectedTraceInspNos === null || selectedTraceInspNos.includes(r.id);
             const matchMachineNo = selectedTraceMachineNos === null || selectedTraceMachineNos.includes(r.machineNo);
             const matchPartNo = selectedTracePartNos === null || selectedTracePartNos.includes(r.partNoDesc);
             return matchInspNo && matchMachineNo && matchPartNo;
         });
-    }, [searchFilteredInspectionRows, selectedTraceTypeFilter, selectedTraceInspNos, selectedTraceMachineNos, selectedTracePartNos]);
+
+        if (!traceSortConfig.key || traceSortConfig.key === "#") return filtered;
+
+        const isAsc = traceSortConfig.direction === "asc";
+
+        return [...filtered].sort((a, b) => {
+            let valA, valB;
+            switch (traceSortConfig.key) {
+                case "Inspno":
+                    valA = a.id || "";
+                    valB = b.id || "";
+                    break;
+                case "Insp Date":
+                    const dateA = parseDisplayDate(a.date);
+                    const dateB = parseDisplayDate(b.date);
+                    const timeA = dateA && !isNaN(dateA.getTime()) ? dateA.getTime() : 0;
+                    const timeB = dateB && !isNaN(dateB.getTime()) ? dateB.getTime() : 0;
+                    return isAsc ? timeA - timeB : timeB - timeA;
+                case "Machine No":
+                    valA = a.machineNo || "";
+                    valB = b.machineNo || "";
+                    break;
+                case "Shift":
+                    valA = a.shift || "";
+                    valB = b.shift || "";
+                    break;
+                case "Part No":
+                    valA = a.partNo || (a.partNoDesc && a.partNoDesc.includes(" - ") ? a.partNoDesc.split(" - ")[0] : (a.partNoDesc || ""));
+                    valB = b.partNo || (b.partNoDesc && b.partNoDesc.includes(" - ") ? b.partNoDesc.split(" - ")[0] : (b.partNoDesc || ""));
+                    break;
+                case "Description":
+                    valA = a.description || a.product || (a.partNoDesc && a.partNoDesc.includes(" - ") ? a.partNoDesc.split(" - ").slice(1).join(" - ") : "");
+                    valB = b.description || b.product || (b.partNoDesc && b.partNoDesc.includes(" - ") ? b.partNoDesc.split(" - ").slice(1).join(" - ") : "");
+                    break;
+                case "Process":
+                    valA = a.process || "";
+                    valB = b.process || "";
+                    break;
+                case "Operator Name / Vendor Name":
+                    const isJobA = (a.typeLabel?.toLowerCase().includes("job") || a.id?.toLowerCase().startsWith("ji") || a.inspType?.toLowerCase().includes("job"));
+                    valA = isJobA
+                        ? (a.cname || a.partyName || a.vendor || getPartyName(a.id, a.product || a.partNoDesc) || "")
+                        : (a.operatorName || "");
+                    const isJobB = (b.typeLabel?.toLowerCase().includes("job") || b.id?.toLowerCase().startsWith("ji") || b.inspType?.toLowerCase().includes("job"));
+                    valB = isJobB
+                        ? (b.cname || b.partyName || b.vendor || getPartyName(b.id, b.product || b.partNoDesc) || "")
+                        : (b.operatorName || "");
+                    break;
+                case "Prod Qty":
+                    valA = parseFloat(String(a.qty || 0).replace(/,/g, "")) || 0;
+                    valB = parseFloat(String(b.qty || 0).replace(/,/g, "")) || 0;
+                    return isAsc ? valA - valB : valB - valA;
+                case "Ok Qty":
+                    valA = parseFloat(String(a.okQty || (a.result === "PASS" ? a.qty : 0)).replace(/,/g, "")) || 0;
+                    valB = parseFloat(String(b.okQty || (b.result === "PASS" ? b.qty : 0)).replace(/,/g, "")) || 0;
+                    return isAsc ? valA - valB : valB - valA;
+                case "Mat Rej":
+                    valA = parseFloat(String(a.matRejQty || 0).replace(/,/g, "")) || 0;
+                    valB = parseFloat(String(b.matRejQty || 0).replace(/,/g, "")) || 0;
+                    return isAsc ? valA - valB : valB - valA;
+                case "Mac Rej":
+                    valA = parseFloat(String(a.macRejQty || 0).replace(/,/g, "")) || 0;
+                    valB = parseFloat(String(b.macRejQty || 0).replace(/,/g, "")) || 0;
+                    return isAsc ? valA - valB : valB - valA;
+                case "Rw Qty":
+                    valA = parseFloat(String(a.reworkQty || 0).replace(/,/g, "")) || 0;
+                    valB = parseFloat(String(b.reworkQty || 0).replace(/,/g, "")) || 0;
+                    return isAsc ? valA - valB : valB - valA;
+                case "Inspected By":
+                    valA = a.inspector || a.inspBy || a.operatorName || "";
+                    valB = b.inspector || b.inspBy || b.operatorName || "";
+                    break;
+                case "Routecard Details":
+                    valA = a.roucard || a.routecardDetails || a.routecard || "";
+                    valB = b.roucard || b.routecardDetails || b.routecard || "";
+                    break;
+                default:
+                    valA = a[traceSortConfig.key] || "";
+                    valB = b[traceSortConfig.key] || "";
+            }
+
+            if (typeof valA === "number" && typeof valB === "number") {
+                return isAsc ? valA - valB : valB - valA;
+            }
+
+            return isAsc
+                ? String(valA).localeCompare(String(valB), undefined, { numeric: true, sensitivity: "base" })
+                : String(valB).localeCompare(String(valA), undefined, { numeric: true, sensitivity: "base" });
+        });
+    }, [searchFilteredInspectionRows, selectedTraceTypeFilter, selectedTraceInspNos, selectedTraceMachineNos, selectedTracePartNos, traceSortConfig]);
 
     const activeTraceabilityRowsTotals = useMemo(() => {
         let totalProd = 0;
@@ -5583,6 +6318,131 @@ export default function QualityAnalysis() {
         return prodPerfData?.products || [];
     }, [prodPerfData, hasNoData, hasActiveFilter, hasActiveReasonFilter, searchFilteredInspectionRows, reasonFilteredRejectionRows, getRejRowMatRej, getRejRowMacRej, getRejRowReworkQty]);
 
+    const activeProductRework = useMemo(() => {
+        if (hasNoData) return [];
+
+        // 1. Reason filter active
+        if (hasActiveReasonFilter && reasonFilteredRejectionRows) {
+            const partMap = new Map();
+            reasonFilteredRejectionRows.forEach(r => {
+                const partNo = (r.partNo || "").trim();
+                const descVal = (r.product || r.description || "").trim();
+                if (!partNo && !descVal) return;
+                const key = `${partNo}___${descVal}`;
+                if (!partMap.has(key)) {
+                    partMap.set(key, { partNo, descVal, insp: 0, ok: 0, rework: 0 });
+                }
+                const entry = partMap.get(key);
+                const rework = getRejRowReworkQty(r);
+                const matRej = getRejRowMatRej(r);
+                const macRej = getRejRowMacRej(r);
+                const qty = parseFloat(String(r.qty).replace(/[^0-9.]/g, "")) || (matRej + macRej + rework);
+                entry.insp += qty;
+                entry.rework += rework;
+            });
+
+            const sorted = Array.from(partMap.values()).sort((a, b) => b.rework - a.rework);
+            const totalRwk = sorted.reduce((sum, e) => sum + e.rework, 0);
+
+            return sorted.map(entry => {
+                const { partNo, descVal, insp, rework } = entry;
+                let name = partNo;
+                if (descVal && partNo) name = `${partNo} (${descVal})`;
+                else if (descVal) name = descVal;
+
+                const rwkRate = insp > 0 ? (rework / insp) * 100.0 : 0.0;
+                const shareVal = totalRwk > 0 ? (rework / totalRwk) * 100.0 : 0.0;
+
+                return {
+                    name,
+                    insp: insp.toLocaleString("en-IN"),
+                    pass: "0",
+                    rwk: rework.toLocaleString("en-IN"),
+                    rwkNum: rework,
+                    barW: Math.min(100, Math.max(0, shareVal || rwkRate)),
+                    barColor: "#f59e0b",
+                    rateVal: `${rwkRate.toFixed(1)}%`,
+                    rateColor: rework > 0 ? "#ea580c" : "#10b981"
+                };
+            });
+        }
+
+        // 2. Search / Customer / Part / etc filter active
+        if (hasActiveFilter && searchFilteredInspectionRows) {
+            const partMap = new Map();
+            searchFilteredInspectionRows.forEach(r => {
+                const partNo = (r.partNo || (r.partNoDesc && r.partNoDesc.includes(" - ") ? r.partNoDesc.split(" - ")[0] : r.partNoDesc) || "").trim();
+                const descVal = (r.description || r.product || (r.partNoDesc && r.partNoDesc.includes(" - ") ? r.partNoDesc.split(" - ").slice(1).join(" - ") : "") || "").trim();
+                if (!partNo && !descVal) return;
+                const key = `${partNo}___${descVal}`;
+                if (!partMap.has(key)) {
+                    partMap.set(key, { partNo, descVal, insp: 0, ok: 0, rework: 0 });
+                }
+                const entry = partMap.get(key);
+                const insp = parseFloat(String(r.qty || 0).replace(/,/g, "")) || 0;
+                const ok = parseFloat(String(r.okQty || (r.result === "PASS" ? r.qty : (r.result === "PENDING" ? r.qty : 0))).replace(/,/g, "")) || 0;
+                const rework = parseFloat(String(r.reworkQty || (r.result === "REWORK" ? r.qty : 0)).replace(/,/g, "")) || 0;
+                entry.insp += insp;
+                entry.ok += ok;
+                entry.rework += rework;
+            });
+
+            const sorted = Array.from(partMap.values()).sort((a, b) => b.rework - a.rework);
+            const totalRwk = sorted.reduce((sum, e) => sum + e.rework, 0);
+
+            return sorted.map(entry => {
+                const { partNo, descVal, insp, ok, rework } = entry;
+                let name = partNo;
+                if (descVal && partNo) name = `${partNo} (${descVal})`;
+                else if (descVal) name = descVal;
+
+                const rwkRate = insp > 0 ? (rework / insp) * 100.0 : 0.0;
+                const shareVal = totalRwk > 0 ? (rework / totalRwk) * 100.0 : 0.0;
+
+                return {
+                    name,
+                    insp: insp.toLocaleString("en-IN"),
+                    pass: ok.toLocaleString("en-IN"),
+                    rwk: rework.toLocaleString("en-IN"),
+                    rwkNum: rework,
+                    barW: Math.min(100, Math.max(0, shareVal || rwkRate)),
+                    barColor: "#f59e0b",
+                    rateVal: `${rwkRate.toFixed(1)}%`,
+                    rateColor: rework > 0 ? "#ea580c" : "#10b981"
+                };
+            });
+        }
+
+        // 3. Initial load / fallback from prodPerfData
+        const raw = prodPerfData?.products || [];
+        return raw.map(p => {
+            const inspNum = parseFloat(String(p.insp || 0).replace(/,/g, "")) || 0;
+            const rwkNum = p.reworkNum !== undefined ? p.reworkNum : (parseFloat(String(p.rework || 0).replace(/,/g, "")) || 0);
+            const rwkRate = inspNum > 0 ? (rwkNum / inspNum) * 100.0 : 0.0;
+            return {
+                name: p.name,
+                insp: p.insp,
+                pass: p.pass,
+                rwk: p.rework || (rwkNum > 0 ? rwkNum.toLocaleString("en-IN") : "0"),
+                rwkNum,
+                barW: Math.min(100, Math.max(0, rwkRate)),
+                barColor: "#f59e0b",
+                rateVal: p.reworkRate || `${rwkRate.toFixed(1)}%`,
+                rateColor: rwkNum > 0 ? "#ea580c" : "#10b981"
+            };
+        }).sort((a, b) => b.rwkNum - a.rwkNum);
+    }, [prodPerfData, hasNoData, hasActiveFilter, hasActiveReasonFilter, searchFilteredInspectionRows, reasonFilteredRejectionRows, getRejRowMatRej, getRejRowMacRej, getRejRowReworkQty]);
+
+    const handleInspSort = useCallback((key) => {
+        setInspSortConfig(prev => {
+            if (prev.key === key) {
+                return { key, direction: prev.direction === "asc" ? "desc" : "asc" };
+            }
+            const defaultDesc = ["Insp Date", "Insp Qty", "OK Qty", "Mat Rej Qty", "Mac Rej Qty", "Rej %", "Rework Qty"].includes(key);
+            return { key, direction: defaultDesc ? "desc" : "asc" };
+        });
+    }, []);
+
     const activeInspectionRows = useMemo(() => {
         let rows = searchFilteredInspectionRows;
 
@@ -5617,8 +6477,85 @@ export default function QualityAnalysis() {
             });
         }
 
-        return rows;
-    }, [searchFilteredInspectionRows, selectedType, tableInspNoSearch, tableSelectedCustomers, tablePartNoDescSearch]);
+        if (!inspSortConfig.key) return rows;
+
+        const isAsc = inspSortConfig.direction === "asc";
+
+        return [...rows].sort((a, b) => {
+            let valA, valB;
+            switch (inspSortConfig.key) {
+                case "Type":
+                    valA = a.typeLabel || "";
+                    valB = b.typeLabel || "";
+                    break;
+                case "Insp No":
+                    valA = a.id || "";
+                    valB = b.id || "";
+                    break;
+                case "Insp Date":
+                    const dateA = parseDisplayDate(a.date);
+                    const dateB = parseDisplayDate(b.date);
+                    const timeA = dateA && !isNaN(dateA.getTime()) ? dateA.getTime() : 0;
+                    const timeB = dateB && !isNaN(dateB.getTime()) ? dateB.getTime() : 0;
+                    return isAsc ? timeA - timeB : timeB - timeA;
+                case "Part No":
+                    valA = a.partNo || (a.partNoDesc && a.partNoDesc.includes(" - ") ? a.partNoDesc.split(" - ")[0] : (a.partNoDesc || ""));
+                    valB = b.partNo || (b.partNoDesc && b.partNoDesc.includes(" - ") ? b.partNoDesc.split(" - ")[0] : (b.partNoDesc || ""));
+                    break;
+                case "Description":
+                    valA = a.description || (a.product && a.product.includes(" - ") ? a.product.split(" - ").slice(1).join(" - ") : (a.product || ""));
+                    valB = b.description || (b.product && b.product.includes(" - ") ? b.product.split(" - ").slice(1).join(" - ") : (b.product || ""));
+                    break;
+                case "Process":
+                    valA = a.process || "";
+                    valB = b.process || "";
+                    break;
+                case "Insp Qty":
+                    valA = parseFloat(String(a.qty || 0).replace(/,/g, "")) || 0;
+                    valB = parseFloat(String(b.qty || 0).replace(/,/g, "")) || 0;
+                    return isAsc ? valA - valB : valB - valA;
+                case "OK Qty":
+                    valA = parseFloat(String(a.okQty || (a.result === "PASS" ? a.qty : (a.result === "PENDING" ? a.qty : "0"))).replace(/,/g, "")) || 0;
+                    valB = parseFloat(String(b.okQty || (b.result === "PASS" ? b.qty : (b.result === "PENDING" ? b.qty : "0"))).replace(/,/g, "")) || 0;
+                    return isAsc ? valA - valB : valB - valA;
+                case "Mat Rej Qty":
+                    valA = parseFloat(String(a.matRejQty || 0).replace(/,/g, "")) || 0;
+                    valB = parseFloat(String(b.matRejQty || 0).replace(/,/g, "")) || 0;
+                    return isAsc ? valA - valB : valB - valA;
+                case "Mac Rej Qty":
+                    valA = parseFloat(String(a.macRejQty || 0).replace(/,/g, "")) || 0;
+                    valB = parseFloat(String(b.macRejQty || 0).replace(/,/g, "")) || 0;
+                    return isAsc ? valA - valB : valB - valA;
+                case "Rej %":
+                    const totA = parseFloat(String(a.qty || 0).replace(/,/g, "")) || 0;
+                    const totB = parseFloat(String(b.qty || 0).replace(/,/g, "")) || 0;
+                    const rejA = (parseFloat(String(a.matRejQty || 0).replace(/,/g, "")) || 0) + (parseFloat(String(a.macRejQty || 0).replace(/,/g, "")) || 0);
+                    const rejB = (parseFloat(String(b.matRejQty || 0).replace(/,/g, "")) || 0) + (parseFloat(String(b.macRejQty || 0).replace(/,/g, "")) || 0);
+                    valA = totA > 0 ? (rejA / totA) * 100 : 0;
+                    valB = totB > 0 ? (rejB / totB) * 100 : 0;
+                    return isAsc ? valA - valB : valB - valA;
+                case "Rework Qty":
+                    valA = parseFloat(String(a.reworkQty || (a.result === "REWORK" ? a.qty : "0")).replace(/,/g, "")) || 0;
+                    valB = parseFloat(String(b.reworkQty || (b.result === "REWORK" ? b.qty : "0")).replace(/,/g, "")) || 0;
+                    return isAsc ? valA - valB : valB - valA;
+                case "Insp By":
+                    valA = a.inspector || a.operator || a.inspBy || "";
+                    valB = b.inspector || b.operator || b.inspBy || "";
+                    break;
+                default:
+                    valA = a[inspSortConfig.key] || "";
+                    valB = b[inspSortConfig.key] || "";
+            }
+
+            if (typeof valA === "number" && typeof valB === "number") {
+                return isAsc ? valA - valB : valB - valA;
+            }
+
+            return isAsc
+                ? String(valA).localeCompare(String(valB), undefined, { numeric: true, sensitivity: "base" })
+                : String(valB).localeCompare(String(valA), undefined, { numeric: true, sensitivity: "base" });
+        });
+    }, [searchFilteredInspectionRows, selectedType, tableInspNoSearch, tableSelectedCustomers, tablePartNoDescSearch, inspSortConfig]);
 
     const activeInspectionRowsTotals = useMemo(() => {
         let totalInsp = 0;
@@ -5698,15 +6635,94 @@ export default function QualityAnalysis() {
         return reasonFilteredRejectionRows.filter(r => r.inspType === selectedInspTypeFilter);
     }, [reasonFilteredRejectionRows, selectedInspTypeFilter]);
 
-    const activeRejectionRows = useMemo(() => {
-        if (selectedDispFilter === "ALL") return typeFilteredRejectionRows;
-        return typeFilteredRejectionRows.filter(r => {
-            const d = (r.disp || "").toLowerCase();
-            if (selectedDispFilter === "REJECTION") return d.includes("reject");
-            if (selectedDispFilter === "REWORK") return d.includes("rework");
-            return true;
+    const handleRejSort = useCallback((key) => {
+        setRejSortConfig(prev => {
+            if (prev.key === key) {
+                return { key, direction: prev.direction === "asc" ? "desc" : "asc" };
+            }
+            const defaultDesc = ["Date", "Mat Rej", "Mac Rej", "Rework Qty", "Total Qty"].includes(key);
+            return { key, direction: defaultDesc ? "desc" : "asc" };
         });
-    }, [typeFilteredRejectionRows, selectedDispFilter]);
+    }, []);
+
+    const activeRejectionRows = useMemo(() => {
+        let rows = typeFilteredRejectionRows;
+        if (selectedDispFilter !== "ALL") {
+            rows = rows.filter(r => {
+                const d = (r.disp || "").toLowerCase();
+                if (selectedDispFilter === "REJECTION") return d.includes("reject");
+                if (selectedDispFilter === "REWORK") return d.includes("rework");
+                return true;
+            });
+        }
+
+        if (!rejSortConfig.key) return rows;
+
+        const isAsc = rejSortConfig.direction === "asc";
+
+        return [...rows].sort((a, b) => {
+            let valA, valB;
+            switch (rejSortConfig.key) {
+                case "Insp No":
+                    valA = a.id || "";
+                    valB = b.id || "";
+                    break;
+                case "Insp Type":
+                    valA = a.inspType || "";
+                    valB = b.inspType || "";
+                    break;
+                case "Part No":
+                    valA = a.partNo || (a.product && a.product.includes(" - ") ? a.product.split(" - ")[0] : (a.product || ""));
+                    valB = b.partNo || (b.product && b.product.includes(" - ") ? b.product.split(" - ")[0] : (b.product || ""));
+                    break;
+                case "Description":
+                    valA = a.description || (a.product && a.product.includes(" - ") ? a.product.split(" - ").slice(1).join(" - ") : (a.product || ""));
+                    valB = b.description || (b.product && b.product.includes(" - ") ? b.product.split(" - ").slice(1).join(" - ") : (b.product || ""));
+                    break;
+                case "Reason":
+                    valA = a.reason || "";
+                    valB = b.reason || "";
+                    break;
+                case "Mat Rej":
+                    valA = getRejRowMatRej(a);
+                    valB = getRejRowMatRej(b);
+                    return isAsc ? valA - valB : valB - valA;
+                case "Mac Rej":
+                    valA = getRejRowMacRej(a);
+                    valB = getRejRowMacRej(b);
+                    return isAsc ? valA - valB : valB - valA;
+                case "Rework Qty":
+                    valA = getRejRowReworkQty(a);
+                    valB = getRejRowReworkQty(b);
+                    return isAsc ? valA - valB : valB - valA;
+                case "Total Qty":
+                    valA = parseFloat(String(a.qty).replace(/[^0-9.]/g, "")) || 0;
+                    valB = parseFloat(String(b.qty).replace(/[^0-9.]/g, "")) || 0;
+                    return isAsc ? valA - valB : valB - valA;
+                case "Disposition":
+                    valA = a.disp || "";
+                    valB = b.disp || "";
+                    break;
+                case "Date":
+                    const dateA = parseDisplayDate(a.date);
+                    const dateB = parseDisplayDate(b.date);
+                    const timeA = dateA && !isNaN(dateA.getTime()) ? dateA.getTime() : 0;
+                    const timeB = dateB && !isNaN(dateB.getTime()) ? dateB.getTime() : 0;
+                    return isAsc ? timeA - timeB : timeB - timeA;
+                default:
+                    valA = a[rejSortConfig.key] || "";
+                    valB = b[rejSortConfig.key] || "";
+            }
+
+            if (typeof valA === "number" && typeof valB === "number") {
+                return isAsc ? valA - valB : valB - valA;
+            }
+
+            return isAsc
+                ? String(valA).localeCompare(String(valB), undefined, { numeric: true, sensitivity: "base" })
+                : String(valB).localeCompare(String(valA), undefined, { numeric: true, sensitivity: "base" });
+        });
+    }, [typeFilteredRejectionRows, selectedDispFilter, rejSortConfig, getRejRowMatRej, getRejRowMacRej, getRejRowReworkQty]);
 
     const rejectionTableHeaders = useMemo(() => {
         if (selectedDispFilter === "REJECTION") {
@@ -5750,6 +6766,330 @@ export default function QualityAnalysis() {
     const totalRejRwkQty = useMemo(() =>
         activeRejectionRows.reduce((sum, r) => sum + (parseFloat(String(r.qty).replace(/[^0-9.]/g, "")) || 0), 0),
         [activeRejectionRows]);
+
+    // ── Rejection & Rework Summary: Inhouse vs Outsource Data & Chart Computation ──
+    const summaryChartData = useMemo(() => {
+        let inhouseRejQty = 0;
+        let inhouseRwkQty = 0;
+        let outsourceRejQty = 0;
+        let outsourceRwkQty = 0;
+
+        const reasonMap = new Map();
+
+        activeRejectionRows.forEach(r => {
+            const isOutsource =
+                (r.inspType && r.inspType.toLowerCase().includes("job")) ||
+                (r.typeLabel && r.typeLabel.toLowerCase().includes("job")) ||
+                (r.id && String(r.id).toUpperCase().startsWith("JIR"));
+
+            const isRej = (r.disp || "").toLowerCase().includes("reject");
+            const isRwk = (r.disp || "").toLowerCase().includes("rework");
+
+            const matRej = getRejRowMatRej ? getRejRowMatRej(r) : 0;
+            const macRej = getRejRowMacRej ? getRejRowMacRej(r) : 0;
+            const rejQty = isRej ? (matRej + macRej || parseFloat(String(r.qty).replace(/[^0-9.]/g, "")) || 0) : 0;
+            const rwkQty = isRwk ? ((getRejRowReworkQty ? getRejRowReworkQty(r) : 0) || parseFloat(String(r.qty).replace(/[^0-9.]/g, "")) || 0) : 0;
+
+            if (isOutsource) {
+                outsourceRejQty += rejQty;
+                outsourceRwkQty += rwkQty;
+            } else {
+                inhouseRejQty += rejQty;
+                inhouseRwkQty += rwkQty;
+            }
+
+            // Reason aggregation
+            const reason = (r.reason && r.reason.trim()) ? r.reason.trim() : "Unspecified";
+            if (!reasonMap.has(reason)) {
+                reasonMap.set(reason, {
+                    reason,
+                    inhouseRej: 0,
+                    inhouseRwk: 0,
+                    outsourceRej: 0,
+                    outsourceRwk: 0,
+                    total: 0
+                });
+            }
+            const item = reasonMap.get(reason);
+            if (isOutsource) {
+                item.outsourceRej += rejQty;
+                item.outsourceRwk += rwkQty;
+            } else {
+                item.inhouseRej += rejQty;
+                item.inhouseRwk += rwkQty;
+            }
+            item.total += (rejQty + rwkQty);
+        });
+
+        const topReasons = Array.from(reasonMap.values())
+            .filter(item => item.total > 0)
+            .sort((a, b) => b.total - a.total)
+            .slice(0, 6);
+
+        return {
+            kpis: {
+                inhouseRejQty,
+                inhouseRwkQty,
+                outsourceRejQty,
+                outsourceRwkQty,
+                totalRejQty: inhouseRejQty + outsourceRejQty,
+                totalRwkQty: inhouseRwkQty + outsourceRwkQty
+            },
+            topReasons
+        };
+    }, [activeRejectionRows, getRejRowMatRej, getRejRowMacRej, getRejRowReworkQty]);
+
+    useEffect(() => {
+        if (summaryViewMode !== "chart" || !summaryOriginChartRef.current) return;
+        summaryOriginChartInstance.current?.destroy();
+
+        const ctx = summaryOriginChartRef.current;
+        const { inhouseRejQty, inhouseRwkQty, outsourceRejQty, outsourceRwkQty } = summaryChartData.kpis;
+        const totalVolume = inhouseRejQty + inhouseRwkQty + outsourceRejQty + outsourceRwkQty;
+
+        summaryOriginChartInstance.current = new Chart(ctx, {
+            type: "bar",
+            data: {
+                labels: ["Inhouse", "Outsource (Job Order)"],
+                datasets: [
+                    {
+                        label: "Rejection",
+                        data: [inhouseRejQty, outsourceRejQty],
+                        backgroundColor: "#f43f5e",
+                        borderRadius: { topLeft: 4, bottomLeft: 4, topRight: 0, bottomRight: 0 },
+                        borderSkipped: false,
+                        barPercentage: 0.62,
+                        categoryPercentage: 0.75,
+                        stack: "originStack"
+                    },
+                    {
+                        label: "Rework",
+                        data: [inhouseRwkQty, outsourceRwkQty],
+                        backgroundColor: "#f59e0b",
+                        borderRadius: { topLeft: 0, bottomLeft: 0, topRight: 4, bottomRight: 4 },
+                        borderSkipped: false,
+                        barPercentage: 0.62,
+                        categoryPercentage: 0.75,
+                        stack: "originStack"
+                    }
+                ]
+            },
+            options: {
+                indexAxis: "y",
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: {
+                    duration: 800,
+                    easing: "easeOutQuart"
+                },
+                layout: {
+                    padding: { top: 12, right: 28, bottom: 8, left: 6 }
+                },
+                plugins: {
+                    legend: {
+                        position: "top",
+                        align: "end",
+                        labels: {
+                            boxWidth: 10,
+                            boxHeight: 10,
+                            usePointStyle: true,
+                            pointStyle: "circle",
+                            font: { family: QA_CHART_FONT, size: 10.5, weight: "600" },
+                            color: "#475569",
+                            padding: 12
+                        }
+                    },
+                    tooltip: {
+                        backgroundColor: "rgba(15, 23, 42, 0.94)",
+                        padding: { top: 8, bottom: 8, left: 12, right: 12 },
+                        cornerRadius: 8,
+                        titleFont: { size: 11, weight: "700", family: QA_CHART_FONT },
+                        bodyFont: { size: 10.5, weight: "500", family: QA_NUM_FONT },
+                        footerFont: { size: 10.5, weight: "700", family: QA_NUM_FONT },
+                        borderColor: "rgba(255, 255, 255, 0.12)",
+                        borderWidth: 1,
+                        callbacks: {
+                            label: (c) => ` ${c.dataset.label}: ${Number(c.parsed.x || 0).toLocaleString()} Nos`,
+                            footer: (items) => {
+                                const sum = items.reduce((acc, curr) => acc + (curr.parsed.x || 0), 0);
+                                const pct = totalVolume > 0 ? ((sum / totalVolume) * 100).toFixed(1) : 0;
+                                return ` Subtotal: ${sum.toLocaleString()} Nos (${pct}%)`;
+                            }
+                        }
+                    },
+                    datalabels: {
+                        display: (c) => {
+                            const val = c.dataset.data[c.dataIndex];
+                            return val > 0;
+                        },
+                        color: "#ffffff",
+                        font: { family: QA_NUM_FONT, size: 9.5, weight: "700" },
+                        formatter: (val) => val > 0 ? val.toLocaleString() : ""
+                    }
+                },
+                scales: {
+                    x: {
+                        stacked: true,
+                        grid: { color: "rgba(226, 232, 240, 0.6)", drawBorder: false },
+                        ticks: {
+                            font: { family: QA_NUM_FONT, size: 9.5, weight: "600" },
+                            color: "#64748b",
+                            precision: 0
+                        }
+                    },
+                    y: {
+                        stacked: true,
+                        grid: { display: false },
+                        ticks: {
+                            font: { family: QA_CHART_FONT, size: 10.5, weight: "600" },
+                            color: "#1e293b"
+                        }
+                    }
+                }
+            }
+        });
+
+        return () => {
+            summaryOriginChartInstance.current?.destroy();
+        };
+    }, [summaryViewMode, summaryChartData, QA_CHART_FONT, QA_NUM_FONT]);
+
+    useEffect(() => {
+        if (summaryViewMode !== "chart" || !summaryReasonChartRef.current) return;
+        summaryReasonChartInstance.current?.destroy();
+
+        const ctx = summaryReasonChartRef.current;
+        const reasons = summaryChartData.topReasons;
+
+        if (reasons.length === 0) return;
+
+        const labels = reasons.map(r => r.reason);
+
+        summaryReasonChartInstance.current = new Chart(ctx, {
+            type: "bar",
+            data: {
+                labels,
+                datasets: [
+                    {
+                        label: "Inhouse Rej",
+                        data: reasons.map(r => r.inhouseRej),
+                        backgroundColor: "#f43f5e",
+                        borderRadius: { topLeft: 4, bottomLeft: 4, topRight: 0, bottomRight: 0 },
+                        borderSkipped: false,
+                        barPercentage: 0.68,
+                        categoryPercentage: 0.8,
+                        stack: "reasonStack"
+                    },
+                    {
+                        label: "Inhouse Rwk",
+                        data: reasons.map(r => r.inhouseRwk),
+                        backgroundColor: "#fb923c",
+                        borderSkipped: false,
+                        barPercentage: 0.68,
+                        categoryPercentage: 0.8,
+                        stack: "reasonStack"
+                    },
+                    {
+                        label: "Outsource Rej",
+                        data: reasons.map(r => r.outsourceRej),
+                        backgroundColor: "#0d9488",
+                        borderSkipped: false,
+                        barPercentage: 0.68,
+                        categoryPercentage: 0.8,
+                        stack: "reasonStack"
+                    },
+                    {
+                        label: "Outsource Rwk",
+                        data: reasons.map(r => r.outsourceRwk),
+                        backgroundColor: "#6366f1",
+                        borderRadius: { topLeft: 0, bottomLeft: 0, topRight: 4, bottomRight: 4 },
+                        borderSkipped: false,
+                        barPercentage: 0.68,
+                        categoryPercentage: 0.8,
+                        stack: "reasonStack"
+                    }
+                ]
+            },
+            options: {
+                indexAxis: "y",
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: {
+                    duration: 800,
+                    easing: "easeOutQuart"
+                },
+                layout: {
+                    padding: { top: 12, right: 28, bottom: 8, left: 6 }
+                },
+                plugins: {
+                    legend: {
+                        position: "top",
+                        align: "end",
+                        labels: {
+                            boxWidth: 9,
+                            boxHeight: 9,
+                            usePointStyle: true,
+                            pointStyle: "circle",
+                            font: { family: QA_CHART_FONT, size: 10, weight: "600" },
+                            color: "#475569",
+                            padding: 10
+                        }
+                    },
+                    tooltip: {
+                        backgroundColor: "rgba(15, 23, 42, 0.94)",
+                        padding: { top: 8, bottom: 8, left: 12, right: 12 },
+                        cornerRadius: 8,
+                        titleFont: { size: 11, weight: "700", family: QA_CHART_FONT },
+                        bodyFont: { size: 10.5, weight: "500", family: QA_NUM_FONT },
+                        footerFont: { size: 10.5, weight: "700", family: QA_NUM_FONT },
+                        borderColor: "rgba(255, 255, 255, 0.12)",
+                        borderWidth: 1,
+                        callbacks: {
+                            label: (c) => ` ${c.dataset.label}: ${Number(c.parsed.x || 0).toLocaleString()} Nos`,
+                            footer: (items) => {
+                                const sum = items.reduce((acc, curr) => acc + (curr.parsed.x || 0), 0);
+                                return ` Reason Total: ${sum.toLocaleString()} Nos`;
+                            }
+                        }
+                    },
+                    datalabels: {
+                        display: (c) => {
+                            const val = c.dataset.data[c.dataIndex];
+                            return val > 0;
+                        },
+                        color: "#ffffff",
+                        font: { family: QA_NUM_FONT, size: 9, weight: "700" },
+                        formatter: (val) => val > 0 ? val.toLocaleString() : ""
+                    }
+                },
+                scales: {
+                    x: {
+                        stacked: true,
+                        grid: { color: "rgba(226, 232, 240, 0.6)", drawBorder: false },
+                        ticks: {
+                            font: { family: QA_NUM_FONT, size: 9.5, weight: "600" },
+                            color: "#64748b",
+                            precision: 0
+                        }
+                    },
+                    y: {
+                        stacked: true,
+                        grid: { display: false },
+                        ticks: {
+                            font: { family: QA_CHART_FONT, size: 10, weight: "600" },
+                            color: "#1e293b",
+                            autoSkip: false
+                        }
+                    }
+                }
+            }
+        });
+
+        return () => {
+            summaryReasonChartInstance.current?.destroy();
+        };
+    }, [summaryViewMode, summaryChartData, QA_CHART_FONT, QA_NUM_FONT]);
+
 
     const activeReworkQueue = useMemo(() => {
         if (hasNoData) return [];
@@ -6289,13 +7629,59 @@ export default function QualityAnalysis() {
 
     return (
         <div className={`qa2-root ${animated ? "qa2-root--visible" : ""}`}>
-            {/* ── Global YouTube-Style Loading Top Bar ── */}
-            <div className={`qa2-global-progress-bar ${isGlobalLoading ? "qa2-global-progress-bar--active" : ""}`} />
+            {/* ── Modern Glassmorphism Status Loading Card (Identical to Sales Analysis) ── */}
+            <div className={`qa2-status-card-container ${showStatusBar ? "qa2-status-card--active" : "qa2-status-card--hidden"}`}>
+                <div className="qa2-status-card">
+                    <div className="qa2-status-card__glow-bg" />
+                    <div className="qa2-status-card__body">
+                        {/* Left section: Icon + Title + Dynamic Status description */}
+                        <div className="qa2-status-card__left">
+                            <div className={`qa2-status-card__icon-box ${displayProgress >= 99.5 ? "qa2-status-card__icon-box--done" : ""}`}>
+                                {displayProgress >= 99.5 ? (
+                                    <CheckCircle2 size={18} className="qa2-status-card__icon-check" />
+                                ) : (
+                                    <Loader2 size={18} className="qa2-status-card__icon-spin" />
+                                )}
+                            </div>
+                            <div className="qa2-status-card__text-wrap">
+                                <div className="qa2-status-card__title-row">
+                                    <span className="qa2-status-card__title">
+                                        {displayProgress >= 99.5 ? "Quality Analytics Synchronized" : "Updating Quality Analytics"}
+                                    </span>
+                                    <span className={`qa2-status-card__badge ${displayProgress >= 99.5 ? "qa2-status-card__badge--done" : ""}`}>
+                                        <span className="qa2-status-card__badge-dot" />
+                                        {displayProgress >= 99.5 ? "Ready" : "Live Sync"}
+                                    </span>
+                                </div>
+                                <div className="qa2-status-card__subtitle">
+                                    {displayProgress >= 99.5
+                                        ? "All inspection records, rejection metrics, and telemetry are up to date"
+                                        : displayProgress < 30
+                                            ? "Fetching inspection records and quality telemetry..."
+                                            : displayProgress < 65
+                                                ? "Aggregating defect causes, machine rejections & trends..."
+                                                : "Finalizing KPIs, PPM calculations, and traceability logs..."}
+                                </div>
+                            </div>
+                        </div>
 
-            {/* ── Page Hero ── */}
-            <div className="qa2-page-hero">
-                <div className="qa2-hero-left">
-                    <div>
+                        {/* Right section: High-tech glass percentage pill */}
+                        <div className="qa2-status-card__right">
+                            <div className={`qa2-status-pill ${displayProgress >= 99.5 ? "qa2-status-pill--done" : ""}`}>
+                                <span className="qa2-status-pill__percent">{Math.round(displayProgress)}%</span>
+                                <span className="qa2-status-pill__label">{displayProgress >= 99.5 ? "Complete" : "Loaded"}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Integrated Sleek Progress Bar with Shimmer Beam */}
+                    <div className="qa2-status-card__track">
+                        <div
+                            className={`qa2-status-card__fill ${displayProgress >= 99.5 ? "qa2-status-card__fill--done" : ""}`}
+                            style={{ width: `${Math.min(100, Math.max(0, displayProgress))}%` }}
+                        >
+                            <div className="qa2-status-card__fill-shimmer" />
+                        </div>
                     </div>
                 </div>
             </div>
@@ -6429,6 +7815,317 @@ export default function QualityAnalysis() {
                                                 }}
                                             >
                                                 Reset to All Customers
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Part No (Multi-Select) Filter Dropdown */}
+                    <div className="qa2-fg" style={{ minWidth: '190px', flex: '1 1 210px', position: 'relative' }} ref={partRef}>
+                        <label className="qa2-fl" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <span>Part No</span>
+                            {selectedParts.length > 0 && (
+                                <span style={{ fontSize: '0.68rem', color: '#2563eb', fontWeight: 600 }}>
+                                    {selectedParts.length} active
+                                </span>
+                            )}
+                        </label>
+                        <div style={{ position: "relative", width: "100%" }}>
+                            <button
+                                type="button"
+                                disabled={isGlobalLoading}
+                                className={`qa2-part-trigger${partDropdownOpen ? " active" : ""}${selectedParts.length > 0 ? " has-filter" : ""}${isGlobalLoading ? " disabled" : ""}`}
+                                onClick={() => !isGlobalLoading && setPartDropdownOpen(!partDropdownOpen)}
+                                title={isGlobalLoading ? "Data is loading..." : "Filter by Part Number"}
+                                style={isGlobalLoading ? { cursor: 'not-allowed', opacity: 0.65 } : {}}
+                            >
+                                <Package size={14} className="qa2-part-trigger-icon" />
+                                <span className="qa2-cust-trigger-label">
+                                    {selectedParts.length === 0
+                                        ? "All Parts"
+                                        : selectedParts.length === 1
+                                            ? selectedParts[0]
+                                            : `${selectedParts.length} Parts Selected`}
+                                </span>
+                                {selectedParts.length > 0 && (
+                                    <span className="qa2-part-count-badge">{selectedParts.length}</span>
+                                )}
+                                <ChevronDown size={13} className={`qa2-cust-arrow-icon${partDropdownOpen ? " open" : ""}`} />
+                            </button>
+
+                            {partDropdownOpen && !isGlobalLoading && (
+                                <div className="qa2-part-dropdown-panel">
+                                    <div className="qa2-cust-search-row">
+                                        <Search size={13} className="qa2-cust-search-icon" />
+                                        <input
+                                            type="text"
+                                            placeholder="Search part numbers..."
+                                            className="qa2-cust-search-input"
+                                            value={partSearch}
+                                            onChange={(e) => setPartSearch(e.target.value)}
+                                            onClick={(e) => e.stopPropagation()}
+                                            autoFocus
+                                        />
+                                        {partSearch && (
+                                            <button
+                                                type="button"
+                                                className="qa2-cust-search-clear"
+                                                onClick={(e) => { e.stopPropagation(); setPartSearch(""); }}
+                                            >
+                                                <X size={12} />
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    {/* Quick Actions (Select All / Clear) */}
+                                    <div className="qa2-reason-quick-actions">
+                                        <span className="qa2-reason-action-info">
+                                            {selectedParts.length === 0
+                                                ? "All parts included"
+                                                : `${selectedParts.length} of ${uniquePartOptions.length} selected`}
+                                        </span>
+                                        <div style={{ display: 'flex', gap: '8px' }}>
+                                            <button
+                                                type="button"
+                                                className="qa2-part-action-btn"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleSelectAllParts();
+                                                }}
+                                            >
+                                                Select All
+                                            </button>
+                                            {selectedParts.length > 0 && (
+                                                <button
+                                                    type="button"
+                                                    className="qa2-part-action-btn danger"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleClearAllParts();
+                                                    }}
+                                                >
+                                                    Clear
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div className="qa2-cust-list-scroll">
+                                        {/* All Parts Option */}
+                                        <div
+                                            className={`qa2-part-item${selectedParts.length === 0 ? " is-active" : ""}`}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setSelectedParts([]);
+                                            }}
+                                        >
+                                            <div className={`qa2-part-check-box${selectedParts.length === 0 ? " checked" : ""}`}>
+                                                {selectedParts.length === 0 && <Check size={11} strokeWidth={3} />}
+                                            </div>
+                                            <span className="qa2-cust-item-title">All Parts</span>
+                                            <span className="qa2-cust-item-meta">{uniquePartOptions.length}</span>
+                                        </div>
+
+                                        <div className="qa2-cust-divider" />
+
+                                        {filteredDropdownParts.length === 0 ? (
+                                            <div className="qa2-cust-empty">No parts found</div>
+                                        ) : (
+                                            filteredDropdownParts.map((part) => {
+                                                const isSelected = selectedParts.includes(part);
+                                                const cleanP = getCleanPartNo(part);
+                                                const count = partCountMap[cleanP] || partCountMap[part] || 0;
+                                                return (
+                                                    <div
+                                                        key={part}
+                                                        className={`qa2-part-item${isSelected ? " is-active" : ""}`}
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handlePartToggle(part);
+                                                        }}
+                                                    >
+                                                        <div className={`qa2-part-check-box${isSelected ? " checked" : ""}`}>
+                                                            {isSelected && <Check size={11} strokeWidth={3} />}
+                                                        </div>
+                                                        <span className="qa2-cust-item-title" title={part}>{part}</span>
+                                                        {count > 0 && (
+                                                            <span className="qa2-part-pill-count">{count}</span>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })
+                                        )}
+                                    </div>
+
+                                    {selectedParts.length > 0 && (
+                                        <div className="qa2-cust-footer">
+                                            <button
+                                                type="button"
+                                                className="qa2-part-reset-btn"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setSelectedParts([]);
+                                                }}
+                                            >
+                                                Reset to All Parts
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Operator Filter Dropdown */}
+                    <div className="qa2-fg" style={{ minWidth: '170px', flex: '1 1 180px', position: 'relative' }} ref={operatorRef}>
+                        <label className="qa2-fl" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <span>Operator</span>
+                            {selectedOperators.length > 0 && (
+                                <span style={{ fontSize: '0.68rem', color: '#8b5cf6', fontWeight: 600 }}>
+                                    {selectedOperators.length} active
+                                </span>
+                            )}
+                        </label>
+                        <div style={{ position: "relative", width: "100%" }}>
+                            <button
+                                type="button"
+                                disabled={isGlobalLoading}
+                                className={`qa2-op-trigger${operatorDropdownOpen ? " active" : ""}${selectedOperators.length > 0 ? " has-filter" : ""}${isGlobalLoading ? " disabled" : ""}`}
+                                onClick={() => !isGlobalLoading && setOperatorDropdownOpen(!operatorDropdownOpen)}
+                                title={isGlobalLoading ? "Data is loading..." : "Filter by Operator"}
+                                style={isGlobalLoading ? { cursor: 'not-allowed', opacity: 0.65 } : {}}
+                            >
+                                <UserCheck size={14} className="qa2-op-trigger-icon" />
+                                <span className="qa2-cust-trigger-label">
+                                    {selectedOperators.length === 0
+                                        ? "All Operators"
+                                        : selectedOperators.length === 1
+                                            ? selectedOperators[0]
+                                            : `${selectedOperators.length} Operators Selected`}
+                                </span>
+                                {selectedOperators.length > 0 && (
+                                    <span className="qa2-op-count-badge">{selectedOperators.length}</span>
+                                )}
+                                <ChevronDown size={13} className={`qa2-cust-arrow-icon${operatorDropdownOpen ? " open" : ""}`} />
+                            </button>
+
+                            {operatorDropdownOpen && !isGlobalLoading && (
+                                <div className="qa2-op-dropdown-panel">
+                                    <div className="qa2-cust-search-row">
+                                        <Search size={13} className="qa2-cust-search-icon" />
+                                        <input
+                                            type="text"
+                                            placeholder="Search operators..."
+                                            className="qa2-cust-search-input"
+                                            value={operatorSearch}
+                                            onChange={(e) => setOperatorSearch(e.target.value)}
+                                            onClick={(e) => e.stopPropagation()}
+                                            autoFocus
+                                        />
+                                        {operatorSearch && (
+                                            <button
+                                                type="button"
+                                                className="qa2-cust-search-clear"
+                                                onClick={(e) => { e.stopPropagation(); setOperatorSearch(""); }}
+                                            >
+                                                <X size={12} />
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    {/* Quick Actions (Select All / Clear) */}
+                                    <div className="qa2-reason-quick-actions">
+                                        <span className="qa2-reason-action-info">
+                                            {selectedOperators.length === 0
+                                                ? "All operators included"
+                                                : `${selectedOperators.length} of ${uniqueOperatorNames.length} selected`}
+                                        </span>
+                                        <div style={{ display: 'flex', gap: '8px' }}>
+                                            <button
+                                                type="button"
+                                                className="qa2-op-action-btn"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleSelectAllOperators();
+                                                }}
+                                            >
+                                                Select All
+                                            </button>
+                                            {selectedOperators.length > 0 && (
+                                                <button
+                                                    type="button"
+                                                    className="qa2-op-action-btn danger"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleClearAllOperators();
+                                                    }}
+                                                >
+                                                    Clear
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div className="qa2-cust-list-scroll">
+                                        {/* All Operators Option */}
+                                        <div
+                                            className={`qa2-op-item${selectedOperators.length === 0 ? " is-active" : ""}`}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setSelectedOperators([]);
+                                            }}
+                                        >
+                                            <div className={`qa2-op-check-box${selectedOperators.length === 0 ? " checked" : ""}`}>
+                                                {selectedOperators.length === 0 && <Check size={11} strokeWidth={3} />}
+                                            </div>
+                                            <span className="qa2-cust-item-title">All Operators</span>
+                                            <span className="qa2-cust-item-meta">{uniqueOperatorNames.length}</span>
+                                        </div>
+
+                                        <div className="qa2-cust-divider" />
+
+                                        {filteredDropdownOperators.length === 0 ? (
+                                            <div className="qa2-cust-empty">No operators found</div>
+                                        ) : (
+                                            filteredDropdownOperators.map((op) => {
+                                                const isSelected = selectedOperators.includes(op);
+                                                const count = operatorCountMap[op] || 0;
+                                                return (
+                                                    <div
+                                                        key={op}
+                                                        className={`qa2-op-item${isSelected ? " is-active" : ""}`}
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleOperatorToggle(op);
+                                                        }}
+                                                    >
+                                                        <div className={`qa2-op-check-box${isSelected ? " checked" : ""}`}>
+                                                            {isSelected && <Check size={11} strokeWidth={3} />}
+                                                        </div>
+                                                        <span className="qa2-cust-item-title" title={op}>{op}</span>
+                                                        {count > 0 && (
+                                                            <span className="qa2-op-pill-count">{count}</span>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })
+                                        )}
+                                    </div>
+
+                                    {selectedOperators.length > 0 && (
+                                        <div className="qa2-cust-footer">
+                                            <button
+                                                type="button"
+                                                className="qa2-op-reset-btn"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setSelectedOperators([]);
+                                                }}
+                                            >
+                                                Reset to All Operators
                                             </button>
                                         </div>
                                     )}
@@ -6931,7 +8628,7 @@ export default function QualityAnalysis() {
                                         if (isGlobalLoading) return;
                                         setSearchQuery("");
                                         setAppliedSearchQuery("");
-                                        fetchQualityData(appliedDateRange.from, appliedDateRange.to, "", appliedCustomers);
+                                        fetchQualityData(appliedDateRange.from, appliedDateRange.to, "", appliedCustomers, appliedParts, appliedOperators);
                                     }}
                                     style={{
                                         position: 'absolute',
@@ -6987,7 +8684,7 @@ export default function QualityAnalysis() {
                             )}
                         </button>
 
-                        {(selectedCustomers.length > 0 || selectedRejectionReasons.length > 0 || selectedMachines.length > 0 || selectedProcesses.length > 0 || searchQuery || appliedCustomers.length > 0 || appliedRejectionReasons.length > 0 || appliedMachines.length > 0 || appliedProcesses.length > 0 || appliedSearchQuery || hasUnappliedChanges) && (
+                        {(selectedCustomers.length > 0 || selectedParts.length > 0 || selectedOperators.length > 0 || selectedRejectionReasons.length > 0 || selectedMachines.length > 0 || selectedProcesses.length > 0 || searchQuery || appliedCustomers.length > 0 || appliedParts.length > 0 || appliedOperators.length > 0 || appliedRejectionReasons.length > 0 || appliedMachines.length > 0 || appliedProcesses.length > 0 || appliedSearchQuery || hasUnappliedChanges) && (
                             <button
                                 type="button"
                                 disabled={isGlobalLoading}
@@ -7124,30 +8821,401 @@ export default function QualityAnalysis() {
                 </div>
             </div>
 
-            {/* ── Charts Row 1.5: Results Split & Defect Category Breakdown (2-col) ── */}
+            {/* ── Row 1.5: Operator wise Rejection & Machine wise Rejection (2-col Tables) ── */}
             <div className="qa2-charts-2 qa2-animate qa2-d3">
-                <div className="qa2-card qa2-chart-card qa2-card-premium" data-spotlight="qa-results-split">
-                    <SectionHead icon={BarChart2} iconColor="#10b981" title="Inspection Results Split" />
-                    {chartsLoading ? (
-                        <div className="qa2-skeleton-chart qa2-pulse-loader" style={{ justifyContent: "center", alignItems: "center", height: "192px" }}>
-                            <div className="qa2-skeleton qa2-shimmer qa2-skeleton-circle" style={{ width: "100px", height: "100px", border: "10px solid #f1f5f9" }} />
+                {/* 1. Operator wise Rejection Card */}
+                <div className="qa2-card qa2-card-premium qa2-rej-table-card" data-spotlight="qa-operator-rejection">
+                    <SectionHead
+                        icon={UserCheck}
+                        iconColor="#8b5cf6"
+                        title="Operator wise Rejection"
+                        // badge={operatorRejectionsData.length > 0 ? `${operatorRejectionsData.length} Items` : null}
+                        badgeCls="qa2-badge-purple"
+                        extra={
+                            <div className="qa2-head-actions">
+                                <div className="qa2-view-toggle-group">
+                                    <button
+                                        type="button"
+                                        className={`qa2-view-toggle-btn op-active${operatorViewMode === "grid" ? " active" : ""}`}
+                                        onClick={() => setOperatorViewMode("grid")}
+                                        title="Grid Table View"
+                                    >
+                                        <LayoutGrid size={11} />
+                                        <span>Grid</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className={`qa2-view-toggle-btn op-active${operatorViewMode === "chart" ? " active" : ""}`}
+                                        onClick={() => setOperatorViewMode("chart")}
+                                        title="Chart View"
+                                    >
+                                        <BarChart2 size={11} />
+                                        <span>Chart</span>
+                                    </button>
+                                </div>
+                                <div style={{ position: 'relative' }} ref={cardOperatorRef}>
+                                    <button
+                                        type="button"
+                                        className={`qa2-trend-filter-btn op-btn${cardOperatorDropdownOpen ? " active" : ""}${cardOperatorFilter.length > 0 ? " has-filter" : ""}`}
+                                        onClick={() => setCardOperatorDropdownOpen(!cardOperatorDropdownOpen)}
+                                        title="Filter by Operator (Multiple Selection)"
+                                    >
+                                        <UserCheck size={12} className="qa2-trend-filter-icon" />
+                                        <span className="qa2-trend-filter-label">
+                                            {cardOperatorFilter.length === 0
+                                                ? "Operator: All"
+                                                : cardOperatorFilter.length === 1
+                                                    ? cardOperatorFilter[0]
+                                                    : `${cardOperatorFilter.length} Operators`}
+                                        </span>
+                                        {cardOperatorFilter.length > 0 && (
+                                            <span className="qa2-trend-filter-badge">{cardOperatorFilter.length}</span>
+                                        )}
+                                        <ChevronDown size={11} className={`qa2-trend-arrow${cardOperatorDropdownOpen ? " open" : ""}`} />
+                                    </button>
+
+                                    {cardOperatorDropdownOpen && (
+                                        <div className="qa2-trend-dropdown-panel" style={{ minWidth: '260px', width: '270px', zIndex: 120 }}>
+                                            <div className="qa2-cust-search-row">
+                                                <Search size={12} className="qa2-cust-search-icon" />
+                                                <input
+                                                    type="text"
+                                                    placeholder="Search operator..."
+                                                    className="qa2-cust-search-input"
+                                                    value={cardOperatorSearch}
+                                                    onChange={(e) => setCardOperatorSearch(e.target.value)}
+                                                    onClick={(e) => e.stopPropagation()}
+                                                    autoFocus
+                                                />
+                                                {cardOperatorSearch && (
+                                                    <button type="button" className="qa2-cust-search-clear" onClick={(e) => { e.stopPropagation(); setCardOperatorSearch(""); }}>
+                                                        <X size={11} />
+                                                    </button>
+                                                )}
+                                            </div>
+                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 8px', borderBottom: '1px solid #f1f5f9', background: '#fafafa', borderRadius: '6px', marginBottom: '4px', fontSize: '0.70rem' }}>
+                                                <span style={{ fontWeight: 600, color: '#64748b' }}>Select Multiple</span>
+                                                <div style={{ display: 'flex', gap: '8px' }}>
+                                                    <button
+                                                        type="button"
+                                                        style={{ border: 'none', background: 'transparent', color: '#7c3aed', fontWeight: 600, cursor: 'pointer', padding: 0, fontSize: '0.70rem' }}
+                                                        onClick={(e) => { e.stopPropagation(); setCardOperatorFilter([...filteredCardOperators]); }}
+                                                    >
+                                                        All
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        style={{ border: 'none', background: 'transparent', color: '#64748b', fontWeight: 600, cursor: 'pointer', padding: 0, fontSize: '0.70rem' }}
+                                                        onClick={(e) => { e.stopPropagation(); setCardOperatorFilter([]); }}
+                                                    >
+                                                        Clear
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <div className="qa2-cust-list-scroll" style={{ maxHeight: '210px' }}>
+                                                <div
+                                                    className={`qa2-cust-item${cardOperatorFilter.length === 0 ? " is-active" : ""}`}
+                                                    onClick={(e) => { e.stopPropagation(); setCardOperatorFilter([]); }}
+                                                >
+                                                    <div className={`qa2-cust-check-box${cardOperatorFilter.length === 0 ? " checked" : ""}`}>
+                                                        {cardOperatorFilter.length === 0 && <Check size={11} strokeWidth={3} />}
+                                                    </div>
+                                                    <span className="qa2-cust-item-title" style={{ fontWeight: cardOperatorFilter.length === 0 ? 700 : 500 }}>
+                                                        All Operators
+                                                    </span>
+                                                    <span className="qa2-cust-item-meta">{filteredCardOperators.length}</span>
+                                                </div>
+                                                {filteredCardOperators.map(op => {
+                                                    const isChecked = cardOperatorFilter.includes(op);
+                                                    const count = cardOperatorCountMap[op] || 0;
+                                                    return (
+                                                        <div
+                                                            key={op}
+                                                            className={`qa2-cust-item${isChecked ? " is-active" : ""}`}
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setCardOperatorFilter(prev =>
+                                                                    prev.includes(op) ? prev.filter(x => x !== op) : [...prev, op]
+                                                                );
+                                                            }}
+                                                        >
+                                                            <div className={`qa2-cust-check-box${isChecked ? " checked" : ""}`}>
+                                                                {isChecked && <Check size={11} strokeWidth={3} />}
+                                                            </div>
+                                                            <span className="qa2-cust-item-title" title={op}>{op}</span>
+                                                            {count > 0 && <span className="qa2-cust-item-meta">{count}</span>}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        }
+                    />
+                    {chartsLoading || recordsLoading ? (
+                        <div className="qa2-skeleton-chart qa2-pulse-loader" style={{ height: "340px", padding: "16px" }}>
+                            <div style={{ display: "flex", flexDirection: "column", gap: "10px", width: "100%" }}>
+                                {[1, 2, 3, 4, 5, 6, 7].map(i => (
+                                    <div key={i} className="qa2-skeleton qa2-shimmer" style={{ height: "34px", width: "100%", borderRadius: "6px" }} />
+                                ))}
+                            </div>
                         </div>
-                    ) : (hasNoData || !chartsData?.result_donut) ? (
-                        <QualityEmptyState message="No Data found on this period" height="192px" />
+                    ) : (hasNoData || operatorRejectionsData.length === 0) ? (
+                        <QualityEmptyState message="No operator rejection records found for this period" height="340px" />
+                    ) : operatorViewMode === "grid" ? (
+                        <div className="qa2-rej-table-wrap qa2-view-animated">
+                            <table className="qa2-rej-mini-table">
+                                <thead>
+                                    <tr>
+                                        <th className="qa2-rej-col-sl">Sl.No</th>
+                                        <th className="qa2-rej-col-part">Part No</th>
+                                        <th className="qa2-rej-col-desc">Description</th>
+                                        <th className="qa2-rej-col-tag">Operator</th>
+                                        <th className="qa2-rej-col-reason">Rej Reason</th>
+                                        <th className="qa2-rej-col-mat">Mat Rej</th>
+                                        <th className="qa2-rej-col-mac">Mac Rej</th>
+                                        <th className="qa2-rej-col-tot">Total Qty</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {operatorRejectionsData.map((row, idx) => (
+                                        <tr key={`${row.partNo}-${row.operator}-${row.reason}-${idx}`}>
+                                            <td className="qa2-rej-col-sl">{idx + 1}</td>
+                                            <td className="qa2-rej-col-part" title={row.partNo}>{row.partNo}</td>
+                                            <td className="qa2-rej-col-desc" title={row.description}>{row.description}</td>
+                                            <td className="qa2-rej-col-tag">
+                                                <span className="qa2-op-pill" title={row.operator}>
+                                                    <UserCheck size={10} style={{ flexShrink: 0 }} />
+                                                    <span className="qa2-pill-text">{row.operator}</span>
+                                                </span>
+                                            </td>
+                                            <td className="qa2-rej-col-reason">
+                                                <span className="qa2-rej-reason-pill" title={row.reason}>
+                                                    <span className="qa2-pill-text">{row.reason}</span>
+                                                </span>
+                                            </td>
+                                            <td className="qa2-rej-col-mat">{(row.matRej || 0).toLocaleString()}</td>
+                                            <td className="qa2-rej-col-mac">{(row.macRej || 0).toLocaleString()}</td>
+                                            <td className="qa2-rej-col-tot">{(row.totalQty || 0).toLocaleString()}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                                <tfoot>
+                                    <tr>
+                                        <td colSpan={5} className="qa2-rej-total-label-cell">
+                                            <span className="qa2-rej-total-label">Total Rejection</span>
+                                        </td>
+                                        <td className="qa2-rej-col-mat qa2-rej-total-val">{(operatorRejectionsTotals.matRej || 0).toLocaleString()}</td>
+                                        <td className="qa2-rej-col-mac qa2-rej-total-val">{(operatorRejectionsTotals.macRej || 0).toLocaleString()}</td>
+                                        <td className="qa2-rej-col-tot qa2-rej-total-val"><span className="qa2-rej-total-grand">{(operatorRejectionsTotals.totalQty || 0).toLocaleString()}</span></td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
                     ) : (
-                        <div className="qa2-chart-wrap"><canvas ref={resultRef} /></div>
+                        <div className="qa2-rej-chart-wrap qa2-view-animated">
+                            <canvas ref={operatorRejChartRef} />
+                        </div>
                     )}
                 </div>
-                <div className="qa2-card qa2-chart-card qa2-card-premium" data-spotlight="qa-defect-breakdown">
-                    <SectionHead icon={AlertTriangle} iconColor="#ef4444" title="Defect Category Breakdown" />
-                    {chartsLoading ? (
-                        <div className="qa2-skeleton-chart qa2-pulse-loader" style={{ justifyContent: "center", alignItems: "center", height: "192px" }}>
-                            <div className="qa2-skeleton qa2-shimmer qa2-skeleton-circle" style={{ width: "100px", height: "100px", border: "10px solid #f1f5f9" }} />
+
+                {/* 2. Machine wise Rejection Card */}
+                <div className="qa2-card qa2-card-premium qa2-rej-table-card" data-spotlight="qa-machine-rejection">
+                    <SectionHead
+                        icon={Cpu}
+                        iconColor="#0d9488"
+                        title="Machine wise Rejection"
+                        // badge={machineRejectionsData.length > 0 ? `${machineRejectionsData.length} Items` : null}
+                        badgeCls="qa2-badge-teal"
+                        extra={
+                            <div className="qa2-head-actions">
+                                <div className="qa2-view-toggle-group">
+                                    <button
+                                        type="button"
+                                        className={`qa2-view-toggle-btn mac-active${machineViewMode === "grid" ? " active" : ""}`}
+                                        onClick={() => setMachineViewMode("grid")}
+                                        title="Grid Table View"
+                                    >
+                                        <LayoutGrid size={11} />
+                                        <span>Grid</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className={`qa2-view-toggle-btn mac-active${machineViewMode === "chart" ? " active" : ""}`}
+                                        onClick={() => setMachineViewMode("chart")}
+                                        title="Chart View"
+                                    >
+                                        <BarChart2 size={11} />
+                                        <span>Chart</span>
+                                    </button>
+                                </div>
+                                <div style={{ position: 'relative' }} ref={cardMachineRef}>
+                                    <button
+                                        type="button"
+                                        className={`qa2-trend-filter-btn mac-btn${cardMachineDropdownOpen ? " active" : ""}${cardMachineFilter.length > 0 ? " has-filter" : ""}`}
+                                        onClick={() => setCardMachineDropdownOpen(!cardMachineDropdownOpen)}
+                                        title="Filter by Machine (Multiple Selection)"
+                                    >
+                                        <Cpu size={12} className="qa2-trend-filter-icon" />
+                                        <span className="qa2-trend-filter-label">
+                                            {cardMachineFilter.length === 0
+                                                ? "Machine: All"
+                                                : cardMachineFilter.length === 1
+                                                    ? cardMachineFilter[0]
+                                                    : `${cardMachineFilter.length} Machines`}
+                                        </span>
+                                        {cardMachineFilter.length > 0 && (
+                                            <span className="qa2-trend-filter-badge">{cardMachineFilter.length}</span>
+                                        )}
+                                        <ChevronDown size={11} className={`qa2-trend-arrow${cardMachineDropdownOpen ? " open" : ""}`} />
+                                    </button>
+
+                                    {cardMachineDropdownOpen && (
+                                        <div className="qa2-trend-dropdown-panel" style={{ minWidth: '260px', width: '270px', zIndex: 120 }}>
+                                            <div className="qa2-cust-search-row">
+                                                <Search size={12} className="qa2-cust-search-icon" />
+                                                <input
+                                                    type="text"
+                                                    placeholder="Search machine..."
+                                                    className="qa2-cust-search-input"
+                                                    value={cardMachineSearch}
+                                                    onChange={(e) => setCardMachineSearch(e.target.value)}
+                                                    onClick={(e) => e.stopPropagation()}
+                                                    autoFocus
+                                                />
+                                                {cardMachineSearch && (
+                                                    <button type="button" className="qa2-cust-search-clear" onClick={(e) => { e.stopPropagation(); setCardMachineSearch(""); }}>
+                                                        <X size={11} />
+                                                    </button>
+                                                )}
+                                            </div>
+                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 8px', borderBottom: '1px solid #f1f5f9', background: '#fafafa', borderRadius: '6px', marginBottom: '4px', fontSize: '0.70rem' }}>
+                                                <span style={{ fontWeight: 600, color: '#64748b' }}>Select Multiple</span>
+                                                <div style={{ display: 'flex', gap: '8px' }}>
+                                                    <button
+                                                        type="button"
+                                                        style={{ border: 'none', background: 'transparent', color: '#0d9488', fontWeight: 600, cursor: 'pointer', padding: 0, fontSize: '0.70rem' }}
+                                                        onClick={(e) => { e.stopPropagation(); setCardMachineFilter([...filteredCardMachines]); }}
+                                                    >
+                                                        All
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        style={{ border: 'none', background: 'transparent', color: '#64748b', fontWeight: 600, cursor: 'pointer', padding: 0, fontSize: '0.70rem' }}
+                                                        onClick={(e) => { e.stopPropagation(); setCardMachineFilter([]); }}
+                                                    >
+                                                        Clear
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <div className="qa2-cust-list-scroll" style={{ maxHeight: '210px' }}>
+                                                <div
+                                                    className={`qa2-cust-item${cardMachineFilter.length === 0 ? " is-active" : ""}`}
+                                                    onClick={(e) => { e.stopPropagation(); setCardMachineFilter([]); }}
+                                                >
+                                                    <div className={`qa2-cust-check-box${cardMachineFilter.length === 0 ? " checked" : ""}`}>
+                                                        {cardMachineFilter.length === 0 && <Check size={11} strokeWidth={3} />}
+                                                    </div>
+                                                    <span className="qa2-cust-item-title" style={{ fontWeight: cardMachineFilter.length === 0 ? 700 : 500 }}>
+                                                        All Machines
+                                                    </span>
+                                                    <span className="qa2-cust-item-meta">{filteredCardMachines.length}</span>
+                                                </div>
+                                                {filteredCardMachines.map(m => {
+                                                    const isChecked = cardMachineFilter.includes(m);
+                                                    const count = cardMachineCountMap[m] || 0;
+                                                    return (
+                                                        <div
+                                                            key={m}
+                                                            className={`qa2-cust-item${isChecked ? " is-active" : ""}`}
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setCardMachineFilter(prev =>
+                                                                    prev.includes(m) ? prev.filter(x => x !== m) : [...prev, m]
+                                                                );
+                                                            }}
+                                                        >
+                                                            <div className={`qa2-cust-check-box${isChecked ? " checked" : ""}`}>
+                                                                {isChecked && <Check size={11} strokeWidth={3} />}
+                                                            </div>
+                                                            <span className="qa2-cust-item-title" title={m}>{m}</span>
+                                                            {count > 0 && <span className="qa2-cust-item-meta">{count}</span>}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        }
+                    />
+                    {chartsLoading || recordsLoading ? (
+                        <div className="qa2-skeleton-chart qa2-pulse-loader" style={{ height: "340px", padding: "16px" }}>
+                            <div style={{ display: "flex", flexDirection: "column", gap: "10px", width: "100%" }}>
+                                {[1, 2, 3, 4, 5, 6, 7].map(i => (
+                                    <div key={i} className="qa2-skeleton qa2-shimmer" style={{ height: "34px", width: "100%", borderRadius: "6px" }} />
+                                ))}
+                            </div>
                         </div>
-                    ) : (hasNoData || !chartsData?.defect_donut || !chartsData?.defect_donut?.datasets?.[0]?.data?.some(v => Number(v) > 0)) ? (
-                        <QualityEmptyState message="No Data found on this period" height="192px" />
+                    ) : (hasNoData || machineRejectionsData.length === 0) ? (
+                        <QualityEmptyState message="No machine rejection records found for this period" height="340px" />
+                    ) : machineViewMode === "grid" ? (
+                        <div className="qa2-rej-table-wrap qa2-view-animated">
+                            <table className="qa2-rej-mini-table">
+                                <thead>
+                                    <tr>
+                                        <th className="qa2-rej-col-sl">Sl.No</th>
+                                        <th className="qa2-rej-col-part">Part No</th>
+                                        <th className="qa2-rej-col-desc">Description</th>
+                                        <th className="qa2-rej-col-tag">Machine No</th>
+                                        <th className="qa2-rej-col-reason">Rej Reason</th>
+                                        <th className="qa2-rej-col-mat">Mat Rej</th>
+                                        <th className="qa2-rej-col-mac">Mac Rej</th>
+                                        <th className="qa2-rej-col-tot">Total Qty</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {machineRejectionsData.map((row, idx) => (
+                                        <tr key={`${row.partNo}-${row.machineNo}-${row.reason}-${idx}`}>
+                                            <td className="qa2-rej-col-sl">{idx + 1}</td>
+                                            <td className="qa2-rej-col-part" title={row.partNo}>{row.partNo}</td>
+                                            <td className="qa2-rej-col-desc" title={row.description}>{row.description}</td>
+                                            <td className="qa2-rej-col-tag">
+                                                <span className="qa2-mac-pill" title={row.machineNo}>
+                                                    <Cpu size={10} style={{ flexShrink: 0 }} />
+                                                    <span className="qa2-pill-text">{row.machineNo}</span>
+                                                </span>
+                                            </td>
+                                            <td className="qa2-rej-col-reason">
+                                                <span className="qa2-rej-reason-pill" title={row.reason}>
+                                                    <span className="qa2-pill-text">{row.reason}</span>
+                                                </span>
+                                            </td>
+                                            <td className="qa2-rej-col-mat">{(row.matRej || 0).toLocaleString()}</td>
+                                            <td className="qa2-rej-col-mac">{(row.macRej || 0).toLocaleString()}</td>
+                                            <td className="qa2-rej-col-tot">{(row.totalQty || 0).toLocaleString()}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                                <tfoot>
+                                    <tr>
+                                        <td colSpan={5} className="qa2-rej-total-label-cell">
+                                            <span className="qa2-rej-total-label">Total Rejection</span>
+                                        </td>
+                                        <td className="qa2-rej-col-mat qa2-rej-total-val">{(machineRejectionsTotals.matRej || 0).toLocaleString()}</td>
+                                        <td className="qa2-rej-col-mac qa2-rej-total-val">{(machineRejectionsTotals.macRej || 0).toLocaleString()}</td>
+                                        <td className="qa2-rej-col-tot qa2-rej-total-val"><span className="qa2-rej-total-grand">{(machineRejectionsTotals.totalQty || 0).toLocaleString()}</span></td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
                     ) : (
-                        <div className="qa2-chart-wrap"><canvas ref={defectRef} /></div>
+                        <div className="qa2-rej-chart-wrap qa2-view-animated">
+                            <canvas ref={machineRejChartRef} />
+                        </div>
                     )}
                 </div>
             </div>
@@ -7622,59 +9690,147 @@ export default function QualityAnalysis() {
             {/* ── Product Quality + Defect Cause ── */}
             <div className="qa2-charts-2 qa2-animate qa2-d3">
 
-                {/* Product Quality */}
-                <div className="qa2-card qa2-card-premium" data-spotlight="qa-product-quality">
-                    <SectionHead icon={Package} iconColor="#6366f1" title="Product-wise Quality Performance"
-                        extra={<span className="qa2-section-sub">Target ≥ 95%</span>} />
-                    {prodPerfLoading ? (
-                        <div className="qa2-pq-list qa2-pulse-loader" style={{ padding: "1rem" }}>
-                            {[1, 2, 3, 4, 5, 6, 7].map(i => (
-                                <div className="qa2-skeleton-row" key={i} style={{ marginBottom: "12.5px" }}>
-                                    <div className="qa2-skeleton qa2-shimmer" style={{ width: "35%", height: "13px" }} />
-                                    <div className="qa2-skeleton qa2-shimmer" style={{ width: "12%", height: "13px" }} />
-                                    <div className="qa2-skeleton qa2-shimmer" style={{ width: "12%", height: "13px" }} />
-                                    <div className="qa2-skeleton qa2-shimmer" style={{ width: "20%", height: "6px", borderRadius: "3px" }} />
-                                    <div className="qa2-skeleton qa2-shimmer" style={{ width: "10%", height: "13px" }} />
+                {/* Product Quality (Rejection / Rework Flip Card) */}
+                <div className="qa2-card-flip-wrap" data-spotlight="qa-product-quality">
+                    <div className={`qa2-card-flip-inner ${productAnalysisMode === "rework" ? "qa2-is-flipped" : ""}`}>
+                        {/* Front Face: Product-wise Quality Performance (Rejection/Pass) */}
+                        <div className="qa2-flip-face qa2-flip-face-front qa2-card">
+                            <SectionHead
+                                icon={Package}
+                                iconColor="#6366f1"
+                                title="Product-wise Quality Performance"
+                                extra={
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <span className="qa2-section-sub">Target ≥ 95%</span>
+                                        <button
+                                            type="button"
+                                            className="qa2-btn-flip is-rejection"
+                                            onClick={toggleProductAnalysisMode}
+                                            title="Flip to view Product Rework analysis"
+                                        >
+                                            <RotateCcw size={12} className="qa2-btn-flip-icon" />
+                                            <span>Rework</span>
+                                        </button>
+                                    </div>
+                                }
+                            />
+                            {prodPerfLoading ? (
+                                <div className="qa2-pq-list qa2-pulse-loader" style={{ padding: "1rem" }}>
+                                    {[1, 2, 3, 4, 5, 6, 7].map(i => (
+                                        <div className="qa2-skeleton-row" key={i} style={{ marginBottom: "12.5px" }}>
+                                            <div className="qa2-skeleton qa2-shimmer" style={{ width: "35%", height: "13px" }} />
+                                            <div className="qa2-skeleton qa2-shimmer" style={{ width: "12%", height: "13px" }} />
+                                            <div className="qa2-skeleton qa2-shimmer" style={{ width: "12%", height: "13px" }} />
+                                            <div className="qa2-skeleton qa2-shimmer" style={{ width: "20%", height: "6px", borderRadius: "3px" }} />
+                                            <div className="qa2-skeleton qa2-shimmer" style={{ width: "10%", height: "13px" }} />
+                                        </div>
+                                    ))}
                                 </div>
-                            ))}
+                            ) : (
+                                <>
+                                    <div className="qa2-pq-header">
+                                        <span className="qa2-pqh-name">Product</span>
+                                        <span className="qa2-pqh-num" style={{ minWidth: '40px', textAlign: 'right' }}>Insp</span>
+                                        <span className="qa2-pqh-num" style={{ minWidth: '40px', textAlign: 'right' }}>Pass</span>
+                                        <span className="qa2-pqh-num" style={{ minWidth: '40px', textAlign: 'right' }}>Rej</span>
+                                        <span className="qa2-pqh-bar" style={{ width: '72px', textAlign: 'right' }}>Rate</span>
+                                        <span className="qa2-pqh-rate" style={{ minWidth: '65px', textAlign: 'right' }}>%</span>
+                                    </div>
+                                    <div className="qa2-pq-scroll-container">
+                                        {activeProductQuality.length > 0 ? (
+                                            activeProductQuality.map((p, i) => {
+                                                const displayRate = p.rateVal ? p.rateVal.replace("⚠", "").trim() : "";
+                                                const isWarning = p.hasWarning || (p.rateVal && p.rateVal.includes("⚠")) || p.rateVal === "Rework" || p.rateVal === "0%";
+                                                return (
+                                                    <div className="qa2-pq-row" key={i}>
+                                                        <div className="qa2-pq-name" title={p.name}>{p.name}</div>
+                                                        <div className="qa2-pq-num qa2-muted">{p.insp}</div>
+                                                        <div className="qa2-pq-num qa2-green">{p.pass}</div>
+                                                        <div className="qa2-pq-num qa2-red">{p.rej}</div>
+                                                        <div className="qa2-pq-bar-track">
+                                                            <div className="qa2-pq-bar-fill" style={{ width: `${p.barW}%`, background: p.barColor }} />
+                                                        </div>
+                                                        <div className="qa2-pq-rate" style={{ color: p.rateColor, display: 'inline-flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end', minWidth: '65px' }}>
+                                                            <span>{displayRate}</span>
+                                                            {isWarning && <AlertTriangle size={13} style={{ color: p.rateColor }} />}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })
+                                        ) : (
+                                            <QualityEmptyState message="No Data found on this period" height="240px" />
+                                        )}
+                                    </div>
+                                </>
+                            )}
                         </div>
-                    ) : (
-                        <>
-                            <div className="qa2-pq-header">
-                                <span className="qa2-pqh-name">Product</span>
-                                <span className="qa2-pqh-num" style={{ minWidth: '40px', textAlign: 'right' }}>Insp</span>
-                                <span className="qa2-pqh-num" style={{ minWidth: '40px', textAlign: 'right' }}>Pass</span>
-                                <span className="qa2-pqh-num" style={{ minWidth: '40px', textAlign: 'right' }}>Rej</span>
-                                <span className="qa2-pqh-bar" style={{ width: '72px', textAlign: 'right' }}>Rate</span>
-                                <span className="qa2-pqh-rate" style={{ minWidth: '65px', textAlign: 'right' }}>%</span>
-                            </div>
-                            <div className="qa2-pq-scroll-container">
-                                {activeProductQuality.length > 0 ? (
-                                    activeProductQuality.map((p, i) => {
-                                        const displayRate = p.rateVal ? p.rateVal.replace("⚠", "").trim() : "";
-                                        const isWarning = p.hasWarning || (p.rateVal && p.rateVal.includes("⚠")) || p.rateVal === "Rework" || p.rateVal === "0%";
-                                        return (
-                                            <div className="qa2-pq-row" key={i}>
-                                                <div className="qa2-pq-name" title={p.name}>{p.name}</div>
-                                                <div className="qa2-pq-num qa2-muted">{p.insp}</div>
-                                                <div className="qa2-pq-num qa2-green">{p.pass}</div>
-                                                <div className="qa2-pq-num qa2-red">{p.rej}</div>
-                                                <div className="qa2-pq-bar-track">
-                                                    <div className="qa2-pq-bar-fill" style={{ width: `${p.barW}%`, background: p.barColor }} />
+
+                        {/* Back Face: Product-wise Rework Performance */}
+                        <div className="qa2-flip-face qa2-flip-face-back qa2-card">
+                            <SectionHead
+                                icon={Package}
+                                iconColor="#f59e0b"
+                                title="Product-wise Rework Performance"
+                                badge="Rework Tracking"
+                                badgeCls="qa2-badge-orange"
+                                extra={
+                                    <button
+                                        type="button"
+                                        className="qa2-btn-flip is-rework"
+                                        onClick={toggleProductAnalysisMode}
+                                        title="Flip to view Product Quality & Rejection performance"
+                                    >
+                                        <RotateCcw size={12} className="qa2-btn-flip-icon" />
+                                        <span>Rejection</span>
+                                    </button>
+                                }
+                            />
+                            {prodPerfLoading ? (
+                                <div className="qa2-pq-list qa2-pulse-loader" style={{ padding: "1rem" }}>
+                                    {[1, 2, 3, 4, 5, 6, 7].map(i => (
+                                        <div className="qa2-skeleton-row" key={i} style={{ marginBottom: "12.5px" }}>
+                                            <div className="qa2-skeleton qa2-shimmer" style={{ width: "35%", height: "13px" }} />
+                                            <div className="qa2-skeleton qa2-shimmer" style={{ width: "12%", height: "13px" }} />
+                                            <div className="qa2-skeleton qa2-shimmer" style={{ width: "12%", height: "13px" }} />
+                                            <div className="qa2-skeleton qa2-shimmer" style={{ width: "20%", height: "6px", borderRadius: "3px" }} />
+                                            <div className="qa2-skeleton qa2-shimmer" style={{ width: "10%", height: "13px" }} />
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <>
+                                    <div className="qa2-pq-header">
+                                        <span className="qa2-pqh-name">Product</span>
+                                        <span className="qa2-pqh-num" style={{ minWidth: '40px', textAlign: 'right' }}>Insp</span>
+                                        <span className="qa2-pqh-num" style={{ minWidth: '40px', textAlign: 'right' }}>Pass</span>
+                                        <span className="qa2-pqh-num" style={{ minWidth: '40px', textAlign: 'right', color: '#ea580c' }}>Rwk</span>
+                                        <span className="qa2-pqh-bar" style={{ width: '72px', textAlign: 'right' }}>Rate</span>
+                                        <span className="qa2-pqh-rate" style={{ minWidth: '65px', textAlign: 'right' }}>%</span>
+                                    </div>
+                                    <div className="qa2-pq-scroll-container">
+                                        {activeProductRework.length > 0 ? (
+                                            activeProductRework.map((p, i) => (
+                                                <div className="qa2-pq-row" key={i}>
+                                                    <div className="qa2-pq-name" title={p.name}>{p.name}</div>
+                                                    <div className="qa2-pq-num qa2-muted">{p.insp}</div>
+                                                    <div className="qa2-pq-num qa2-green">{p.pass}</div>
+                                                    <div className="qa2-pq-num" style={{ color: '#ea580c', fontWeight: 600 }}>{p.rwk}</div>
+                                                    <div className="qa2-pq-bar-track" style={{ background: '#fef3c7' }}>
+                                                        <div className="qa2-pq-bar-fill" style={{ width: `${p.barW}%`, background: p.barColor }} />
+                                                    </div>
+                                                    <div className="qa2-pq-rate" style={{ color: p.rateColor, display: 'inline-flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end', minWidth: '65px' }}>
+                                                        <span>{p.rateVal}</span>
+                                                    </div>
                                                 </div>
-                                                <div className="qa2-pq-rate" style={{ color: p.rateColor, display: 'inline-flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end', minWidth: '65px' }}>
-                                                    <span>{displayRate}</span>
-                                                    {isWarning && <AlertTriangle size={13} style={{ color: p.rateColor }} />}
-                                                </div>
-                                            </div>
-                                        );
-                                    })
-                                ) : (
-                                    <QualityEmptyState message="No Data found on this period" height="240px" />
-                                )}
-                            </div>
-                        </>
-                    )}
+                                            ))
+                                        ) : (
+                                            <QualityEmptyState message="No Rework Data found on this period" height="240px" />
+                                        )}
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    </div>
                 </div>
 
                 {/* Defect Cause */}
@@ -8148,6 +10304,24 @@ export default function QualityAnalysis() {
                             >
                                 <FileText size={10} style={{ strokeWidth: 3 }} /> Job Order: {jobOrderCount}
                             </span>
+
+                            {/* Modern Asc / Desc Sort Toggle Button in Card Header */}
+                            <button
+                                type="button"
+                                className="qa2-sort-pill-btn"
+                                onClick={() => setInspSortConfig(prev => ({
+                                    ...prev,
+                                    direction: prev.direction === "asc" ? "desc" : "asc"
+                                }))}
+                                title={`Currently sorted by ${inspSortConfig.key} (${inspSortConfig.direction === "asc" ? "Ascending" : "Descending"}). Click to toggle Asc/Desc.`}
+                            >
+                                {inspSortConfig.direction === "asc" ? (
+                                    <ArrowUp size={11} strokeWidth={2.5} className="qa2-sort-icon-active" />
+                                ) : (
+                                    <ArrowDown size={11} strokeWidth={2.5} className="qa2-sort-icon-active" />
+                                )}
+                                <span>{inspSortConfig.key}: {inspSortConfig.direction === "asc" ? "Asc" : "Desc"}</span>
+                            </button>
                             {selectedType !== "ALL" && (
                                 <button
                                     className="qa2-clear-type-filter-btn"
@@ -8352,9 +10526,30 @@ export default function QualityAnalysis() {
                         <table className="qa2-table">
                             <thead>
                                 <tr>
-                                    {["Type", "Insp No", "Insp Date", "Part No", "Description", "Process", "Insp Qty", "OK Qty", "Mat Rej Qty", "Mac Rej Qty", "Rej %", "Rework Qty", "Insp By"].map(h => (
-                                        <th key={h} className={h.includes("Qty") || h.includes("%") ? "qa2-td-r" : ""}>{h}</th>
-                                    ))}
+                                    {["Type", "Insp No", "Insp Date", "Part No", "Description", "Process", "Insp Qty", "OK Qty", "Mat Rej Qty", "Mac Rej Qty", "Rej %", "Rework Qty", "Insp By"].map(h => {
+                                        const isSorted = inspSortConfig.key === h;
+                                        const isAsc = inspSortConfig.direction === "asc";
+                                        const isRight = h.includes("Qty") || h.includes("%");
+                                        return (
+                                            <th
+                                                key={h}
+                                                className={`qa2-th-sortable ${isRight ? "qa2-th-r" : ""} ${isSorted ? "is-sorted" : ""}`}
+                                                onClick={() => handleInspSort(h)}
+                                                title={`Click to sort by ${h} (${isSorted && isAsc ? "Descending" : "Ascending"})`}
+                                            >
+                                                <div className="qa2-th-sort-inner" style={{ justifyContent: isRight ? "flex-end" : "flex-start" }}>
+                                                    <span>{h}</span>
+                                                    <span className={`qa2-th-sort-icon ${isSorted ? "active" : ""}`}>
+                                                        {isSorted ? (
+                                                            isAsc ? <ArrowUp size={11} strokeWidth={2.5} /> : <ArrowDown size={11} strokeWidth={2.5} />
+                                                        ) : (
+                                                            <ArrowUpDown size={10} strokeWidth={2} />
+                                                        )}
+                                                    </span>
+                                                </div>
+                                            </th>
+                                        );
+                                    })}
                                 </tr>
                             </thead>
                             <tbody>
@@ -8763,6 +10958,48 @@ export default function QualityAnalysis() {
                                 )}
                             </div>
 
+                            {/* Modern Grid / Chart View Toggle */}
+                            <div className="qa2-view-toggle-group">
+                                <button
+                                    type="button"
+                                    className={`qa2-view-toggle-btn${summaryViewMode === "grid" ? " active" : ""}`}
+                                    onClick={() => setSummaryViewMode("grid")}
+                                    title="Show Data Table View"
+                                >
+                                    <LayoutGrid size={11} />
+                                    <span>Grid</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    className={`qa2-view-toggle-btn${summaryViewMode === "chart" ? " active" : ""}`}
+                                    onClick={() => setSummaryViewMode("chart")}
+                                    title="Show Chart View (Inhouse vs Outsource)"
+                                >
+                                    <BarChart2 size={11} />
+                                    <span>Chart</span>
+                                </button>
+                            </div>
+
+                            {/* Modern Asc / Desc Sort Toggle Button in Card Header (Grid view) */}
+                            {summaryViewMode === "grid" && (
+                                <button
+                                    type="button"
+                                    className="qa2-sort-pill-btn"
+                                    onClick={() => setRejSortConfig(prev => ({
+                                        ...prev,
+                                        direction: prev.direction === "asc" ? "desc" : "asc"
+                                    }))}
+                                    title={`Currently sorted by ${rejSortConfig.key} (${rejSortConfig.direction === "asc" ? "Ascending" : "Descending"}). Click to toggle Asc/Desc.`}
+                                >
+                                    {rejSortConfig.direction === "asc" ? (
+                                        <ArrowUp size={11} strokeWidth={2.5} className="qa2-sort-icon-active" />
+                                    ) : (
+                                        <ArrowDown size={11} strokeWidth={2.5} className="qa2-sort-icon-active" />
+                                    )}
+                                    <span>{rejSortConfig.key}: {rejSortConfig.direction === "asc" ? "Asc" : "Desc"}</span>
+                                </button>
+                            )}
+
                             {(selectedDispFilter !== "ALL" || selectedInspTypeFilter !== "ALL" || selectedRejectionReasons.length > 0 || appliedRejectionReasons.length > 0) && (
                                 <button
                                     className="qa2-clear-type-filter-btn"
@@ -8803,14 +11040,36 @@ export default function QualityAnalysis() {
                             </div>
                         ))}
                     </div>
-                ) : (
-                    <div className="qa2-table-scroll">
+                ) : summaryViewMode === "grid" ? (
+                    <div className="qa2-table-scroll qa2-view-animated">
                         <table className="qa2-table">
                             <thead>
                                 <tr>
-                                    {rejectionTableHeaders.map(h => (
-                                        <th key={h} style={getRejColStyle(h)} className={["Mat Rej", "Mac Rej", "Rework Qty", "Total Qty", "Qty"].includes(h) ? "qa2-th-r" : ""}>{h}</th>
-                                    ))}
+                                    {rejectionTableHeaders.map(h => {
+                                        const isSorted = rejSortConfig.key === h;
+                                        const isAsc = rejSortConfig.direction === "asc";
+                                        const isRight = ["Mat Rej", "Mac Rej", "Rework Qty", "Total Qty", "Qty"].includes(h);
+                                        return (
+                                            <th
+                                                key={h}
+                                                style={getRejColStyle(h)}
+                                                className={`qa2-th-sortable ${isRight ? "qa2-th-r" : ""} ${isSorted ? "is-sorted" : ""}`}
+                                                onClick={() => handleRejSort(h)}
+                                                title={`Click to sort by ${h} (${isSorted && isAsc ? "Descending" : "Ascending"})`}
+                                            >
+                                                <div className="qa2-th-sort-inner" style={{ justifyContent: isRight ? "flex-end" : "flex-start" }}>
+                                                    <span>{h}</span>
+                                                    <span className={`qa2-th-sort-icon ${isSorted ? "active" : ""}`}>
+                                                        {isSorted ? (
+                                                            isAsc ? <ArrowUp size={11} strokeWidth={2.5} /> : <ArrowDown size={11} strokeWidth={2.5} />
+                                                        ) : (
+                                                            <ArrowUpDown size={10} strokeWidth={2} />
+                                                        )}
+                                                    </span>
+                                                </div>
+                                            </th>
+                                        );
+                                    })}
                                 </tr>
                             </thead>
                             <tbody>
@@ -8955,6 +11214,108 @@ export default function QualityAnalysis() {
                                 </tfoot>
                             )}
                         </table>
+                    </div>
+                ) : (
+                    <div className="qa2-summary-chart-container qa2-view-animated">
+                        {/* Executive KPI Strip */}
+                        <div className="qa2-summary-kpi-grid">
+                            <div className="qa2-summary-kpi-card inhouse-rej">
+                                <div className="qa2-summary-kpi-left">
+                                    <div className="qa2-summary-kpi-icon">
+                                        <XCircle size={15} />
+                                    </div>
+                                    <div>
+                                        <div className="qa2-summary-kpi-title">Inhouse Rejection</div>
+                                        <div className="qa2-summary-kpi-sub">Internal Inspection</div>
+                                    </div>
+                                </div>
+                                <div className="qa2-summary-kpi-right">
+                                    <div className="qa2-summary-kpi-val">{summaryChartData.kpis.inhouseRejQty.toLocaleString("en-IN")}</div>
+                                </div>
+                            </div>
+
+                            <div className="qa2-summary-kpi-card inhouse-rwk">
+                                <div className="qa2-summary-kpi-left">
+                                    <div className="qa2-summary-kpi-icon">
+                                        <Wrench size={15} />
+                                    </div>
+                                    <div>
+                                        <div className="qa2-summary-kpi-title">Inhouse Rework</div>
+                                        <div className="qa2-summary-kpi-sub">Internal Rework</div>
+                                    </div>
+                                </div>
+                                <div className="qa2-summary-kpi-right">
+                                    <div className="qa2-summary-kpi-val">{summaryChartData.kpis.inhouseRwkQty.toLocaleString("en-IN")}</div>
+                                </div>
+                            </div>
+
+                            <div className="qa2-summary-kpi-card outsource-rej">
+                                <div className="qa2-summary-kpi-left">
+                                    <div className="qa2-summary-kpi-icon">
+                                        <Truck size={15} />
+                                    </div>
+                                    <div>
+                                        <div className="qa2-summary-kpi-title">Outsource Rejection</div>
+                                        <div className="qa2-summary-kpi-sub">Job Order / Vendor</div>
+                                    </div>
+                                </div>
+                                <div className="qa2-summary-kpi-right">
+                                    <div className="qa2-summary-kpi-val">{summaryChartData.kpis.outsourceRejQty.toLocaleString("en-IN")}</div>
+                                </div>
+                            </div>
+
+                            <div className="qa2-summary-kpi-card outsource-rwk">
+                                <div className="qa2-summary-kpi-left">
+                                    <div className="qa2-summary-kpi-icon">
+                                        <RotateCcw size={15} />
+                                    </div>
+                                    <div>
+                                        <div className="qa2-summary-kpi-title">Outsource Rework</div>
+                                        <div className="qa2-summary-kpi-sub">Job Order Rework</div>
+                                    </div>
+                                </div>
+                                <div className="qa2-summary-kpi-right">
+                                    <div className="qa2-summary-kpi-val">{summaryChartData.kpis.outsourceRwkQty.toLocaleString("en-IN")}</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Dual Charts Row */}
+                        <div className="qa2-summary-charts-row">
+                            {/* Origin Volume Breakdown */}
+                            <div className="qa2-summary-subchart-box">
+                                <div className="qa2-summary-subchart-header">
+                                    <div className="qa2-summary-subchart-title">
+                                        <Layers size={13} style={{ color: "#3b82f6" }} />
+                                        <span>Origin Volume Breakdown</span>
+                                    </div>
+                                    <span className="qa2-summary-subchart-badge">Inhouse vs Outsource</span>
+                                </div>
+                                <div className="qa2-summary-subchart-canvas">
+                                    <canvas ref={summaryOriginChartRef} />
+                                </div>
+                            </div>
+
+                            {/* Top Defect Reasons by Origin */}
+                            <div className="qa2-summary-subchart-box">
+                                <div className="qa2-summary-subchart-header">
+                                    <div className="qa2-summary-subchart-title">
+                                        <AlertTriangle size={13} style={{ color: "#f59e0b" }} />
+                                        <span>Top Defect Reasons by Origin</span>
+                                    </div>
+                                    <span className="qa2-summary-subchart-badge">Rejection & Rework Split</span>
+                                </div>
+                                <div className="qa2-summary-subchart-canvas">
+                                    {summaryChartData.topReasons.length > 0 ? (
+                                        <canvas ref={summaryReasonChartRef} />
+                                    ) : (
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#94a3b8', fontSize: '0.8rem' }}>
+                                            No defect reasons recorded
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 )}
             </div>
@@ -9374,6 +11735,24 @@ export default function QualityAnalysis() {
                                 )}
                             </div>
 
+                            {/* Modern Asc / Desc Sort Toggle Button in Card Header */}
+                            <button
+                                type="button"
+                                className="qa2-sort-pill-btn"
+                                onClick={() => setTraceSortConfig(prev => ({
+                                    ...prev,
+                                    direction: prev.direction === "asc" ? "desc" : "asc"
+                                }))}
+                                title={`Currently sorted by ${traceSortConfig.key} (${traceSortConfig.direction === "asc" ? "Ascending" : "Descending"}). Click to toggle Asc/Desc.`}
+                            >
+                                {traceSortConfig.direction === "asc" ? (
+                                    <ArrowUp size={11} strokeWidth={2.5} className="qa2-sort-icon-active" />
+                                ) : (
+                                    <ArrowDown size={11} strokeWidth={2.5} className="qa2-sort-icon-active" />
+                                )}
+                                <span>{traceSortConfig.key}: {traceSortConfig.direction === "asc" ? "Asc" : "Desc"}</span>
+                            </button>
+
                             {selectedTraceTypeFilter !== "ALL" && (
                                 <button
                                     className="qa2-clear-type-filter-btn"
@@ -9404,9 +11783,37 @@ export default function QualityAnalysis() {
                     <table className="qa2-table">
                         <thead>
                             <tr>
-                                {["#", "Inspno", "Insp Date", "Machine No", "Shift", "Part No", "Description", "Process", "Operator Name / Vendor Name", "Prod Qty", "Ok Qty", "Mat Rej", "Mac Rej", "Rw Qty", "Inspected By", "Routecard Details"].map(h => (
-                                    <th key={h} style={getTraceColStyle(h)} className={["Prod Qty", "Ok Qty", "Mat Rej", "Mac Rej", "Rw Qty"].includes(h) ? "qa2-td-r" : ""}>{h}</th>
-                                ))}
+                                {["#", "Inspno", "Insp Date", "Machine No", "Shift", "Part No", "Description", "Process", "Operator Name / Vendor Name", "Prod Qty", "Ok Qty", "Mat Rej", "Mac Rej", "Rw Qty", "Inspected By", "Routecard Details"].map(h => {
+                                    const isSortable = h !== "#";
+                                    const isSorted = traceSortConfig.key === h;
+                                    const isAsc = traceSortConfig.direction === "asc";
+                                    const isRight = ["Prod Qty", "Ok Qty", "Mat Rej", "Mac Rej", "Rw Qty"].includes(h);
+
+                                    return (
+                                        <th
+                                            key={h}
+                                            style={getTraceColStyle(h)}
+                                            className={`${isRight ? "qa2-td-r " : ""}${isSortable ? "qa2-th-sortable " : ""}${isSorted ? "is-sorted" : ""}`}
+                                            onClick={() => isSortable && handleTraceSort(h)}
+                                            title={isSortable ? `Click to sort by ${h} (${isSorted && isAsc ? "Descending" : "Ascending"})` : ""}
+                                        >
+                                            {isSortable ? (
+                                                <div className="qa2-th-sort-inner" style={{ justifyContent: isRight ? "flex-end" : "flex-start" }}>
+                                                    <span>{h}</span>
+                                                    <span className={`qa2-th-sort-icon ${isSorted ? "active" : ""}`}>
+                                                        {isSorted ? (
+                                                            isAsc ? <ArrowUp size={11} strokeWidth={2.5} /> : <ArrowDown size={11} strokeWidth={2.5} />
+                                                        ) : (
+                                                            <ArrowUpDown size={10} strokeWidth={2} />
+                                                        )}
+                                                    </span>
+                                                </div>
+                                            ) : (
+                                                h
+                                            )}
+                                        </th>
+                                    );
+                                })}
                             </tr>
                         </thead>
                         <tbody>

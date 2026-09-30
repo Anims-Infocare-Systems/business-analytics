@@ -485,11 +485,7 @@ const DEFAULT_FILTER_OPTIONS = {
   machines_conv: [],
   machine_types_map: {},
   shifts: ["All Shifts", "Shift 1 (6AM-2PM)", "Shift 2 (2PM-10PM)", "Shift 3 (10PM-6AM)"],
-  reasons: [
-    "All Reasons", "MACHINE BREAKDOWN", "INSERT CHANGE", "MACHINE CLEANING", "NMP",
-    "NO LOAD", "NO PLAN", "SETTING", "Production Idle Time", "Conv Production Idle Time",
-    "Conv Rod Idle Time", "Machine Idle Entry",
-  ],
+  reasons: ["All Reasons"],
 };
 
 /* ════════════════════════════════════════════════
@@ -1219,9 +1215,31 @@ export default function IdleTimeReport() {
   const [kpiCards, setKpiCards] = useState(() => buildKpiCards({}, "This Period"));
   const [topReasonsChart, setTopReasonsChart] = useState({ labels: [], data: [], hours_display: [], colors: [] });
   const [acceptedIdle, setAcceptedIdle] = useState({ chart: [0, 0], hours_display: ["0:00", "0:00"], tiles: [] });
-  const [monthwiseChart, setMonthwiseChart] = useState({ labels: [], hours: [], cost: [], hours_display: [] });
+  const [monthwiseChart, setMonthwiseChart] = useState({ labels: [], hours: [], cost: [], hours_display: [], range_display: "" });
   const [daywiseChart, setDaywiseChart] = useState({ labels: [], data: [], isSunday: [], hours_display: [] });
   const [idleChartType, setIdleChartType] = useState("daily");
+
+  const monthRangeBadge = useMemo(() => {
+    if (monthwiseChart.range_display) return monthwiseChart.range_display;
+    if (appliedDateRange.from && appliedDateRange.to) {
+      const from = new Date(appliedDateRange.from);
+      const to = new Date(appliedDateRange.to);
+      if (!isNaN(from) && !isNaN(to)) {
+        const fM = from.toLocaleString("en-US", { month: "short" });
+        const fY = String(from.getFullYear()).slice(-2);
+        const tM = to.toLocaleString("en-US", { month: "short" });
+        const tY = String(to.getFullYear()).slice(-2);
+        const startStr = `${fM} ${fY}`;
+        const endStr = `${tM} ${tY}`;
+        return startStr === endStr ? startStr : `${startStr}—${endStr}`;
+      }
+    }
+    if (monthwiseChart.labels?.length) {
+      if (monthwiseChart.labels.length === 1) return monthwiseChart.labels[0];
+      return `${monthwiseChart.labels[0]}—${monthwiseChart.labels[monthwiseChart.labels.length - 1]}`;
+    }
+    return "";
+  }, [appliedDateRange, monthwiseChart]);
   const [totalStats, setTotalStats] = useState(() => buildTotalStats({}));
   const [shiftTiles, setShiftTiles] = useState([]);
   const [shiftChart, setShiftChart] = useState({ labels: [], datasets: [] });
@@ -1322,9 +1340,10 @@ export default function IdleTimeReport() {
             hours: data.monthwise.hours ?? [],
             cost: data.monthwise.cost_lakhs ?? [],
             hours_display: data.monthwise.hours_display ?? [],
+            range_display: data.monthwise.range_display || "",
           });
         } else {
-          setMonthwiseChart({ labels: [], hours: [], cost: [], hours_display: [] });
+          setMonthwiseChart({ labels: [], hours: [], cost: [], hours_display: [], range_display: "" });
         }
         if (data?.daywise?.labels) {
           setDaywiseChart({
@@ -1856,6 +1875,7 @@ export default function IdleTimeReport() {
           borderWidth: ds.borderWidth ?? 1.5,
           borderRadius: ds.borderRadius ?? 6,
           borderSkipped: false,
+          maxBarThickness: 80,
         })),
       },
       options: {
@@ -1897,8 +1917,17 @@ export default function IdleTimeReport() {
           },
         },
         scales: {
-          x: { ticks: { ...TICK_STYLE, font: { size: 10.5, family: CHART_FONT, weight: "700" } }, grid: { display: false } },
-          y: { beginAtZero: true, ticks: { ...TICK_STYLE, callback: v => `${v}h` }, grid: { color: GRID_COLOR, drawBorder: false } },
+          x: {
+            stacked: true,
+            ticks: { ...TICK_STYLE, font: { size: 10.5, family: CHART_FONT, weight: "700" } },
+            grid: { display: false }
+          },
+          y: {
+            stacked: true,
+            beginAtZero: true,
+            ticks: { ...TICK_STYLE, callback: v => `${v}h` },
+            grid: { color: GRID_COLOR, drawBorder: false }
+          },
         },
       },
     });
@@ -2567,7 +2596,7 @@ export default function IdleTimeReport() {
         <SectionLabel label="Total Idle Hours + Day Wise / Month Wise Trend" />
 
         <div className="itr-g2">
-          <Card data-spotlight="itr-month-wise" title={<span style={{ display: "flex", alignItems: "center", gap: "6px" }}><FiCalendar size={16} /> Idle Hours + Cost — Month Wise</span>} badge="Oct 25→Mar 26" badgeBg="#dbeafe" badgeColor="#2563eb" accentColor="#2563eb">
+          <Card data-spotlight="itr-month-wise" title={<span style={{ display: "flex", alignItems: "center", gap: "6px" }}><FiCalendar size={16} /> Idle Hours + Cost — Month Wise</span>} badge={monthRangeBadge} badgeBg="#dbeafe" badgeColor="#2563eb" accentColor="#2563eb">
             {monthwiseChart.labels.length === 0 ? (
               <EmptyState message="No monthly history available for this selection." />
             ) : (

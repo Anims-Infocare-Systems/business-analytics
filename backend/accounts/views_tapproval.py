@@ -447,7 +447,6 @@ def _build_financial_summary_rows(
         {"label": "Total Amount", "value": round(tamt, 2), "sub": False, "neg": False},
         {"label": "Discount", "value": round(disamt, 2), "sub": True, "neg": True},
         {"label": "Before Tax P & F", "value": round(before_tax_pf, 2), "sub": True, "neg": False},
-        {"label": "After Tax P & F", "value": round(after_tax_pf, 2), "sub": True, "neg": False},
     ]
     for t in tax_lines:
         rows.append({
@@ -456,6 +455,7 @@ def _build_financial_summary_rows(
             "sub": False,
             "neg": False,
         })
+    rows.append({"label": "After Tax P & F", "value": round(after_tax_pf, 2), "sub": True, "neg": False})
     rows.append({
         "label": "Round Off",
         "value": round(round_off, 2),

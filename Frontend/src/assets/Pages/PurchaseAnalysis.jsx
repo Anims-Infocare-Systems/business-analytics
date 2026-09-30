@@ -80,6 +80,31 @@ const normalizePoUom = (rawUom, rawStr) => {
     return "NOS";
 };
 
+const parseDateValue = (str) => {
+    if (!str) return 0;
+    if (str instanceof Date) return isNaN(str.getTime()) ? 0 : str.getTime();
+    const s = String(str).trim();
+    if (!s) return 0;
+    if (s.includes("-") || s.includes("/")) {
+        const sep = s.includes("-") ? "-" : "/";
+        const parts = s.split(sep);
+        if (parts.length === 3) {
+            // YYYY-MM-DD
+            if (parts[0].length === 4) {
+                const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+                return isNaN(d.getTime()) ? 0 : d.getTime();
+            }
+            // DD-MM-YYYY or DD/MM/YYYY
+            if (parts[2].length === 4) {
+                const d = new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]));
+                return isNaN(d.getTime()) ? 0 : d.getTime();
+            }
+        }
+    }
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? 0 : d.getTime();
+};
+
 // ─────────────────────────────────────────────
 //  Average Purchase Value (APV) Classification Helpers
 // ─────────────────────────────────────────────
@@ -88,7 +113,6 @@ const RAW_CATEGORIES = [
     { id: "Nos (Casting)", label: "Nos (Casting)", short: "Nos (Casting)", color: "#0284c7", bg: "rgba(2, 132, 199, 0.1)" },
     { id: "KGS (Rod)", label: "KGS (Rod)", short: "KGS (Rod)", color: "#ea580c", bg: "rgba(234, 88, 12, 0.1)" },
     { id: "Mtrs (Rod)", label: "Mtrs (Rod)", short: "Mtrs (Rod)", color: "#059669", bg: "rgba(5, 150, 105, 0.1)" },
-    { id: "Rod", label: "Rod", short: "Rod", color: "#d97706", bg: "rgba(217, 119, 6, 0.1)" },
     { id: "B.Out", label: "B.Out (Bought Out)", short: "B.Out", color: "#7c3aed", bg: "rgba(124, 58, 237, 0.1)" },
     { id: "Other", label: "Other", short: "Other", color: "#64748b", bg: "rgba(100, 116, 139, 0.1)" }
 ];
@@ -97,13 +121,16 @@ const getRawMaterialCategory = (row) => {
     if (!row) return "Nos (Casting)";
     if (row.category && typeof row.category === "string") {
         const cat = row.category.trim();
-        if (cat === "Nos (Casting)" || cat === "KGS (Rod)" || cat === "Mtrs (Rod)" || cat === "Rod" || cat === "B.Out" || cat === "Other") {
+        if (cat === "Nos (Casting)" || cat === "KGS (Rod)" || cat === "Mtrs (Rod)" || cat === "B.Out" || cat === "Other") {
             return cat;
         }
         if (cat.toLowerCase().includes("cast") || cat.toLowerCase().includes("nos")) return "Nos (Casting)";
         if (cat.toLowerCase().includes("kgs")) return "KGS (Rod)";
         if (cat.toLowerCase().includes("mtr") || cat.toLowerCase().includes("tube")) return "Mtrs (Rod)";
-        if (cat.toLowerCase().includes("rod")) return "Rod";
+        if (cat.toLowerCase().includes("rod") || cat === "Rod") {
+            const rawUom = (row.uom || row.unit || "").toUpperCase().trim();
+            return (rawUom.includes("MTR") || rawUom.includes("METER")) ? "Mtrs (Rod)" : "KGS (Rod)";
+        }
         if (cat.toLowerCase().includes("b.out") || cat.toLowerCase().includes("bought")) return "B.Out";
     }
 
@@ -500,8 +527,8 @@ function AdvancedPurchaseAnalyticsSection({
 
         // 1. Ingest poRows (primary source of rich PO transactions)
         (poRows || []).forEach(r => {
-            const rawPart = (r.part_no || r.partNo || r.material_code || "").trim();
-            const rawDesc = (r.description || r.material || "").trim();
+            const rawPart = (r.rmname || r.part_no || r.partNo || r.material_code || "").trim();
+            const rawDesc = (r.mattype || r.description || r.material || "").trim();
             const partKey = rawPart || rawDesc;
             if (!partKey || partKey === "–" || partKey === "-") return;
 
@@ -518,11 +545,13 @@ function AdvancedPurchaseAnalyticsSection({
             const status = r.status || (grnNo ? "GRN Done" : "Open");
             const poType = r.po_type || r.poType || "";
             const department = r.department || r.dept || "";
+            const mattype = (r.mattype || "").trim();
 
             if (!map.has(partKey)) {
                 map.set(partKey, {
                     partNo: rawPart || partKey,
                     description: rawDesc || rawPart || partKey,
+                    mattype: mattype || rawDesc || "",
                     uom,
                     vendors: new Set(),
                     transactions: [],
@@ -532,7 +561,8 @@ function AdvancedPurchaseAnalyticsSection({
 
             const entry = map.get(partKey);
             if (vendor && vendor !== "—") entry.vendors.add(vendor);
-            if (!entry.description && rawDesc) entry.description = rawDesc;
+            if (!entry.mattype && mattype) entry.mattype = mattype;
+            if ((!entry.description || entry.description === entry.partNo) && rawDesc) entry.description = rawDesc;
 
             entry.transactions.push({
                 poDate,
@@ -553,8 +583,8 @@ function AdvancedPurchaseAnalyticsSection({
 
         // 2. Ingest priceTrendRows if any additional part exists
         (priceTrendRows || []).forEach(r => {
-            const rawPart = (r.part_no || r.partNo || "").trim();
-            const rawDesc = (r.description || r.material || "").trim();
+            const rawPart = (r.rmname || r.part_no || r.partNo || "").trim();
+            const rawDesc = (r.mattype || r.description || r.material || "").trim();
             const partKey = rawPart || rawDesc;
             if (!partKey || partKey === "–" || partKey === "-") return;
 
@@ -567,11 +597,13 @@ function AdvancedPurchaseAnalyticsSection({
             const uom = normalizePoUom(r.uom, rawDesc);
             const poType = r.po_type || r.type || "";
             const department = r.department || "";
+            const mattype = (r.mattype || "").trim();
 
             if (!map.has(partKey)) {
                 map.set(partKey, {
                     partNo: rawPart || partKey,
                     description: rawDesc || rawPart || partKey,
+                    mattype: mattype || rawDesc || "",
                     uom,
                     vendors: new Set(),
                     transactions: [],
@@ -581,6 +613,7 @@ function AdvancedPurchaseAnalyticsSection({
 
             const entry = map.get(partKey);
             if (vendor && vendor !== "—") entry.vendors.add(vendor);
+            if (!entry.mattype && mattype) entry.mattype = mattype;
 
             // Avoid duplicate PO entry if already inserted
             const exists = entry.transactions.some(t => t.poNumber === poNo && t.poDate === poDate);
@@ -607,12 +640,12 @@ function AdvancedPurchaseAnalyticsSection({
         const catalogList = [];
 
         map.forEach((item, partKey) => {
-            // Sort transactions by date ascending
+            // Sort transactions chronologically ascending
             const txs = [...item.transactions].sort((a, b) => {
-                const da = new Date(a.poDate);
-                const db = new Date(b.poDate);
-                if (!isNaN(da.getTime()) && !isNaN(db.getTime())) {
-                    return da.getTime() - db.getTime();
+                const da = parseDateValue(a.poDate);
+                const db = parseDateValue(b.poDate);
+                if (da && db && da !== db) {
+                    return da - db;
                 }
                 return String(a.poDate).localeCompare(String(b.poDate));
             });
@@ -623,7 +656,8 @@ function AdvancedPurchaseAnalyticsSection({
             if (effectiveTxs.length === 0) return;
 
             const earliestTx = effectiveTxs[0];
-            const latestTx = effectiveTxs[effectiveTxs.length - 1];
+            const latestAnyTx = txs[txs.length - 1];
+            const latestTx = effectiveTxs[effectiveTxs.length - 1] || latestAnyTx;
 
             // ── Commercial Base Rate & Revisions from Commer_BaseRateDet ──
             const commHistory = commercialRates[partKey] || commercialRates[item.partNo] || [];
@@ -898,6 +932,7 @@ function AdvancedPurchaseAnalyticsSection({
             catalogList.push({
                 partNo: item.partNo,
                 description: item.description,
+                mattype: item.mattype,
                 uom: item.uom,
                 vendor: primaryVendor,
                 activeRate,
@@ -910,7 +945,7 @@ function AdvancedPurchaseAnalyticsSection({
                 avgRate,
                 minRate,
                 maxRate,
-                lastPoDate: latestTx.poDate,
+                lastPoDate: (latestTx && latestTx.poDate) || (latestAnyTx && latestAnyTx.poDate) || "",
                 projectedNextRate,
                 buySignalType,
                 buySignalTitle,
@@ -934,8 +969,13 @@ function AdvancedPurchaseAnalyticsSection({
             });
         });
 
-        // Sort catalog by total spend descending
-        catalogList.sort((a, b) => b.totalSpend - a.totalSpend);
+        // Sort catalog by latest PO date descending, then partNo / rmname ascending (as per query logic: ORDER BY podate DESC, rmname)
+        catalogList.sort((a, b) => {
+            const timeA = parseDateValue(a.lastPoDate);
+            const timeB = parseDateValue(b.lastPoDate);
+            if (timeB !== timeA) return timeB - timeA;
+            return String(a.partNo || "").localeCompare(String(b.partNo || ""));
+        });
         return catalogList;
     }, [poRows, commercialRates, priceTrendRows]);
 
@@ -1004,6 +1044,11 @@ function AdvancedPurchaseAnalyticsSection({
         }
     }, [rawCatalogList.length, storeCatalogList.length, apaMode]);
 
+    // Reset selected part on mode switch so the default (last PO partno) of that mode is displayed
+    useEffect(() => {
+        setSelectedPartNo("");
+    }, [apaMode]);
+
     // Auto-select valid part when mode, category, or group changes
     useEffect(() => {
         if (scopedCatalog.length > 0) {
@@ -1036,20 +1081,12 @@ function AdvancedPurchaseAnalyticsSection({
     // Clean display strings for Part No & Description
     const displayPartNo = useMemo(() => {
         if (!hero) return "";
-        const p = (hero.partNo || "").trim();
-        if (p.includes(" - ")) return p.split(" - ")[0].trim();
-        return p;
+        return (hero.partNo || "").trim();
     }, [hero]);
 
     const displayDesc = useMemo(() => {
         if (!hero) return "";
-        const d = (hero.description || "").trim();
-        if (d.includes(" - ")) {
-            const parts = d.split(" - ");
-            const rest = parts.slice(1).join(" - ").trim();
-            return rest || d;
-        }
-        return d || hero.partNo;
+        return (hero.mattype || hero.description || hero.partNo || "").trim();
     }, [hero]);
 
     // ── Interactive Animated Chart.js Graph Instance Effect ──
@@ -1458,6 +1495,7 @@ function AdvancedPurchaseAnalyticsSection({
                                         setApaMode("raw");
                                         setApaRawCategories([]);
                                         setApaStoreGroups([]);
+                                        setSelectedPartNo("");
                                     }}
                                 >
                                     <Package size={15} strokeWidth={2.2} />
@@ -1471,6 +1509,7 @@ function AdvancedPurchaseAnalyticsSection({
                                         setApaMode("store");
                                         setApaRawCategories([]);
                                         setApaStoreGroups([]);
+                                        setSelectedPartNo("");
                                     }}
                                 >
                                     <Factory size={15} strokeWidth={2.2} />
@@ -1686,7 +1725,7 @@ function AdvancedPurchaseAnalyticsSection({
                                                 >
                                                     <div className="apa-dropdown-item-main">
                                                         <span className="apa-dropdown-item-part">{p.partNo}</span>
-                                                        <span className="apa-dropdown-item-desc">{p.description}</span>
+                                                        <span className="apa-dropdown-item-desc">{p.mattype || p.description}</span>
                                                     </div>
                                                     <div className="apa-dropdown-item-meta">
                                                         <span className="apa-dropdown-item-rate">
@@ -2097,10 +2136,8 @@ function AdvancedPurchaseAnalyticsSection({
                                         ) : (
                                             filteredCatalog.map((p, i) => {
                                                 const isSelected = p.partNo === selectedPartNo;
-                                                const cleanPart = p.partNo.includes(" - ") ? p.partNo.split(" - ")[0].trim() : p.partNo;
-                                                const cleanDesc = p.description && p.description.includes(" - ")
-                                                    ? (p.description.split(" - ").slice(1).join(" - ").trim() || p.description)
-                                                    : (p.description || p.partNo);
+                                                const cleanPart = (p.partNo || "").trim();
+                                                const cleanDesc = (p.mattype || p.description || p.partNo || "").trim();
 
                                                 return (
                                                     <tr
@@ -2822,9 +2859,9 @@ export default function PurchaseAnalysis() {
                 if (!matched) return false;
             }
             if (appliedPoType && appliedPoType !== "All Types") {
-                const t = (r.po_type || r.dtype || "").toLowerCase();
-                const target = appliedPoType.toLowerCase();
-                if (t && !t.includes(target) && !target.includes(t)) return false;
+                const t = (r.po_type || r.dtype || "").toLowerCase().replace(/[\s_-]*po$/i, "").trim();
+                const target = appliedPoType.toLowerCase().replace(/[\s_-]*po$/i, "").trim();
+                if (t && target && !t.includes(target) && !target.includes(t)) return false;
             }
             if (appliedSearchQuery && appliedSearchQuery.trim()) {
                 const q = appliedSearchQuery.toLowerCase().trim();
@@ -5756,7 +5793,7 @@ export default function PurchaseAnalysis() {
 
     // Category / Group Counts for Dynamic Badges
     const rawCategoryCounts = useMemo(() => {
-        const counts = { "All": apvRawRows.length, "Nos (Casting)": 0, "KGS (Rod)": 0, "Mtrs (Rod)": 0, "Rod": 0, "B.Out": 0, "Other": 0 };
+        const counts = { "All": apvRawRows.length, "Nos (Casting)": 0, "KGS (Rod)": 0, "Mtrs (Rod)": 0, "B.Out": 0, "Other": 0 };
         apvRawRows.forEach(r => {
             const cat = getRawMaterialCategory(r);
             if (counts[cat] !== undefined) counts[cat]++;
@@ -5824,13 +5861,12 @@ export default function PurchaseAnalysis() {
                 "Nos (Casting)": { color: "#0284c7", bg: "rgba(2, 132, 199, 0.08)" },
                 "KGS (Rod)": { color: "#ea580c", bg: "rgba(234, 88, 12, 0.08)" },
                 "Mtrs (Rod)": { color: "#059669", bg: "rgba(5, 150, 105, 0.08)" },
-                "Rod": { color: "#d97706", bg: "rgba(217, 119, 6, 0.08)" },
                 "B.Out": { color: "#7c3aed", bg: "rgba(124, 58, 237, 0.08)" },
                 "Other": { color: "#64748b", bg: "rgba(100, 116, 139, 0.08)" }
             };
 
             const cats = apvRawCategories.length === 0
-                ? ["Nos (Casting)", "KGS (Rod)", "Mtrs (Rod)", "Rod", "B.Out", "Other"]
+                ? ["Nos (Casting)", "KGS (Rod)", "Mtrs (Rod)", "B.Out", "Other"]
                 : apvRawCategories;
 
             seriesList = cats.map(cat => ({

@@ -940,6 +940,28 @@
     box-shadow: 0 8px 22px rgba(245, 158, 11, .42);
 }
 
+.map-action-btn--inactive,
+.map-prev-btn--inactive,
+button:disabled.map-action-btn--inactive,
+button:disabled.map-prev-btn--inactive {
+    background: #e2e8f0 !important;
+    color: #94a3b8 !important;
+    border: 1px solid #cbd5e1 !important;
+    box-shadow: none !important;
+    transform: none !important;
+    cursor: not-allowed !important;
+    opacity: 0.65 !important;
+}
+
+.map-action-btn--inactive:hover,
+.map-prev-btn--inactive:hover {
+    background: #e2e8f0 !important;
+    color: #94a3b8 !important;
+    transform: none !important;
+    box-shadow: none !important;
+    border-color: #cbd5e1 !important;
+}
+
 .map-btn-spin {
     width: 14px;
     height: 14px;
@@ -1255,9 +1277,9 @@
 }
 
 .map-prev__meta-item--vendor {
-    flex: 1.2;
-    min-width: 170px;
-    max-width: 290px;
+    flex: 1.8;
+    min-width: 180px;
+    max-width: none;
 }
 
 .map-prev__meta-item--compact {
@@ -1290,10 +1312,12 @@
 .map-prev__meta-val--vendor {
     color: #e11d48;
     font-weight: 800;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: unset;
     display: block;
+    line-height: 1.25;
+    word-break: normal;
 }
 
 .map-prev__meta-val-badge {
@@ -1459,6 +1483,42 @@
     display: none !important;
     width: 0 !important;
     height: 0 !important;
+}
+
+/* ── Modern UI Scroll for Raw Material & Supplier DC Table ── */
+.map-prev__table-wrap--raw-scroll {
+    overflow-x: auto !important;
+    overflow-y: auto !important;
+    scrollbar-width: thin !important;
+    scrollbar-color: #fda4af #fff1f2 !important;
+    -ms-overflow-style: auto !important;
+}
+
+.map-prev__table-wrap--raw-scroll::-webkit-scrollbar {
+    display: block !important;
+    height: 6px !important;
+    width: 6px !important;
+    background: #fff1f2 !important;
+}
+
+.map-prev__table-wrap--raw-scroll::-webkit-scrollbar-track {
+    background: #fff1f2 !important;
+    border-radius: 0 0 10px 10px !important;
+}
+
+.map-prev__table-wrap--raw-scroll::-webkit-scrollbar-thumb {
+    background: #fda4af !important;
+    border-radius: 6px !important;
+    transition: background 0.2s ease;
+}
+
+.map-prev__table-wrap--raw-scroll::-webkit-scrollbar-thumb:hover {
+    background: #f43f5e !important;
+}
+
+.map-prev__table--raw {
+    min-width: 1100px !important;
+    width: 100%;
 }
 
 .map-prev__table {
@@ -2863,6 +2923,15 @@
     color: var(--map-rose);
 }
 
+.map-comm-table-wrap .map-prev__table-wrap {
+    min-height: auto !important;
+    max-height: none !important;
+    margin-bottom: 0 !important;
+    border-radius: 10px !important;
+    border: 1.5px solid #f1f5f9 !important;
+    box-shadow: none !important;
+}
+
 /* Commercial Master Table Styling */
 .map-comm-table {
     width: 100%;
@@ -2881,6 +2950,16 @@
     letter-spacing: 0.05em !important;
     box-shadow: none !important;
     white-space: nowrap !important;
+}
+
+.map-comm-table th.map-prev__td--center,
+.map-comm-table td.map-prev__td--center {
+    text-align: center !important;
+}
+
+.map-comm-table th.map-prev__td--num,
+.map-comm-table td.map-prev__td--num {
+    text-align: right !important;
 }
 
 .map-comm-table td {

@@ -79,9 +79,19 @@ function RankBadge({ r }) {
     return <span className={`er-rank-badge ${cls}`}>{pfx}{r}</span>;
 }
 
+function formatIdleHrsMins(val) {
+    const num = Number(val);
+    if (!Number.isFinite(num) || num <= 0) return "0h 00m";
+    const totalMinutes = Math.round(num * 60);
+    const h = Math.floor(totalMinutes / 60);
+    const m = totalMinutes % 60;
+    return `${h}h ${String(m).padStart(2, "0")}m`;
+}
+
 function IdlePill({ v }) {
-    const cls = v === 0 ? "er-pill--ok" : v <= 1.5 ? "er-pill--warn" : "er-pill--high";
-    return <span className={`er-pill ${cls}`}>{v.toFixed(2)}h</span>;
+    const num = Number(v) || 0;
+    const cls = num === 0 ? "er-pill--ok" : num <= 1.5 ? "er-pill--warn" : "er-pill--high";
+    return <span className={`er-pill ${cls}`}>{formatIdleHrsMins(v)}</span>;
 }
 
 function RejPill({ v }) {

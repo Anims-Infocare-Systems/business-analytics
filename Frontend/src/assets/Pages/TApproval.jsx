@@ -237,13 +237,13 @@ function Toast({ toasts }) {
                 <div key={t.id} className={`tap-toast tap-toast--${t.type}`}>
                     <span className="tap-toast__icon">
                         {t.type === "success-approve" && (
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20,6 9,17 4,12"/></svg>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20,6 9,17 4,12" /></svg>
                         )}
                         {t.type === "success-modify" && (
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
                         )}
                         {t.type === "error" && (
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="9" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
                         )}
                     </span>
                     <span className="tap-toast__msg">{t.msg}</span>
@@ -324,9 +324,9 @@ function formatSummaryRows(fin, fmt) {
         { label: "Total Amount", val: fmt(fin.totalAmount), sub: false },
         { label: "Discount", val: `- ${fmt(fin.discount)}`, sub: true },
         { label: "Before Tax P & F", val: fmt(fin.bfTaxPF), sub: true },
-        { label: "After Tax P & F", val: fmt(fin.afTaxPF), sub: true },
         { label: `Tax CGST @ ${fin.cgstPct} %`, val: fmt(fin.cgstAmt), sub: false },
         { label: `Tax SGST @ ${fin.sgstPct} %`, val: fmt(fin.sgstAmt), sub: false },
+        { label: "After Tax P & F", val: fmt(fin.afTaxPF), sub: true },
         { label: "Round Off", val: (fin.roundOff >= 0 ? "+ " : "") + fmt(fin.roundOff), sub: true },
         { label: "Grand Total", val: `₹ ${fmt(fin.grandTotal)}`, sub: false, grand: true },
     ];
@@ -506,7 +506,7 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                         <span className="tap-prev__meta-val">{card.poDate}</span>
                     </div>
                     <div className="tap-prev__meta-item">
-                        <span className="tap-prev__meta-label">Customer</span>
+                        <span className="tap-prev__meta-label">Party Name</span>
                         <span className="tap-prev__meta-val tap-prev__meta-val--vendor">{card.vendor}</span>
                     </div>
                     <div className="tap-prev__meta-item">
@@ -515,7 +515,7 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                     </div>
                     <div className="tap-prev__meta-item">
                         <span className="tap-prev__meta-label">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
                             Approved By
                         </span>
                         <span className={`tap-prev__meta-val-badge tap-prev__meta-val-badge--${card.approvedBy ? "approved" : "pending"}`}>
@@ -524,7 +524,7 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                     </div>
                     <div className="tap-prev__meta-item">
                         <span className="tap-prev__meta-label">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12,6 12,12 16,14"/></svg>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><polyline points="12,6 12,12 16,14" /></svg>
                             Date-Time
                         </span>
                         <span className={`tap-prev__meta-val-badge tap-prev__meta-val-badge--${card.approvedBy ? "approved" : "pending"}`}>
@@ -629,7 +629,7 @@ function DetailModal({ card, isLoading, actionLoading, onClose, onApprove, onMod
                         >
                             {actionLoading?.pono === docNo && actionLoading?.type === "approve"
                                 ? <><BtnSpinner /> Approving…</>
-                                : <><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20,6 9,17 4,12"/></svg> {labels.approveLabel}</>}
+                                : <><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20,6 9,17 4,12" /></svg> {labels.approveLabel}</>}
                         </button>
                     )}
                 </div>
@@ -677,7 +677,7 @@ function TypeGroup({ type, cards, collapsed, onToggle, onPreview, onApprove, onM
                 <div className="tap-group__hd-left">
                     <span className="tap-group__hd-icon">{getTypeIcon(type)}</span>
                     <span className="tap-group__hd-title">{type}</span>
-                    
+
                     <button
                         type="button"
                         className={`tap-group__pill tap-group__pill--all ${filterStatus === "All" ? "tap-group__pill--all-active" : ""}`}
@@ -786,7 +786,7 @@ function readFilterSession(key, defaults) {
     } catch { return defaults; }
 }
 function writeFilterSession(key, data) {
-    try { sessionStorage.setItem(key, JSON.stringify(data)); } catch {}
+    try { sessionStorage.setItem(key, JSON.stringify(data)); } catch { }
 }
 
 export default function TApproval() {
@@ -956,7 +956,7 @@ export default function TApproval() {
         const seen = new Set();
         cards.forEach(c => { if (c.type) seen.add(c.type); });
         const ordered = TYPE_ORDER.filter(t => seen.has(t));
-        const extras  = [...seen].filter(t => !TYPE_ORDER.includes(t));
+        const extras = [...seen].filter(t => !TYPE_ORDER.includes(t));
         return [...ordered, ...extras];
     }, [cards]);
 
@@ -1100,7 +1100,7 @@ export default function TApproval() {
                 />
                 <div className="tap-filter__search-wrap">
                     <svg className="tap-filter__search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                        <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
                     </svg>
                     <input
                         className="tap-filter__search"
@@ -1134,7 +1134,7 @@ export default function TApproval() {
                         <span className="tap-type-dd__trigger-icon">
                             {typeFilter ? getTypeIcon(typeFilter) : (
                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                    <line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/>
+                                    <line x1="4" y1="6" x2="20" y2="6" /><line x1="8" y1="12" x2="16" y2="12" /><line x1="11" y1="18" x2="13" y2="18" />
                                 </svg>
                             )}
                         </span>
@@ -1146,7 +1146,7 @@ export default function TApproval() {
                         )}
                         <svg className={`tap-type-dd__caret ${typeDropOpen ? "tap-type-dd__caret--up" : ""}`}
                             width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                            <polyline points="6,9 12,15 18,9"/>
+                            <polyline points="6,9 12,15 18,9" />
                         </svg>
                     </button>
 
@@ -1161,19 +1161,19 @@ export default function TApproval() {
                                 >
                                     <span className="tap-type-dd__item-icon">
                                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                            <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
-                                            <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+                                            <rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" />
+                                            <rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" />
                                         </svg>
                                     </span>
                                     <span className="tap-type-dd__item-label">All Types</span>
                                     <span className="tap-type-dd__item-badge">{cards.length}</span>
                                     {typeFilter === null && (
                                         <svg className="tap-type-dd__item-check" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-                                            <polyline points="20,6 9,17 4,12"/>
+                                            <polyline points="20,6 9,17 4,12" />
                                         </svg>
                                     )}
                                 </button>
-                                <div className="tap-type-dd__divider"/>
+                                <div className="tap-type-dd__divider" />
                                 {availableTypes.map(t => {
                                     const cnt = cards.filter(c => c.type === t).length;
                                     const isActive = typeFilter === t;
@@ -1189,7 +1189,7 @@ export default function TApproval() {
                                             <span className="tap-type-dd__item-badge">{cnt}</span>
                                             {isActive && (
                                                 <svg className="tap-type-dd__item-check" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-                                                    <polyline points="20,6 9,17 4,12"/>
+                                                    <polyline points="20,6 9,17 4,12" />
                                                 </svg>
                                             )}
                                         </button>
@@ -1204,16 +1204,16 @@ export default function TApproval() {
                 <div className="tap-filter__actions-wrap">
                     <button type="button" className="tap-filter__btn" onClick={() => !isLoading && refreshBoard()} disabled={isLoading}>
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                            <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
                         </svg>
                         Search
                     </button>
                     <button type="button" className="tap-filter__reset-btn" onClick={() => !isLoading && handleResetFilters()} disabled={isLoading}>
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                            <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
-                            <path d="M21 3v5h-5"/>
-                            <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
-                            <path d="M3 21v-5h5"/>
+                            <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+                            <path d="M21 3v5h-5" />
+                            <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+                            <path d="M3 21v-5h5" />
                         </svg>
                         Reset
                     </button>

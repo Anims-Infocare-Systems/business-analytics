@@ -351,6 +351,14 @@ def user_rights_me(request):
         except Exception as e:
             print("[USER-RIGHTS] Warning checking M-Approval settings:", e)
 
+    if rights.get("E-Approval"):
+        try:
+            from accounts.utils.eapproval_settings import check_eapproval_settings
+            if not check_eapproval_settings(tenant):
+                rights["E-Approval"] = False
+        except Exception as e:
+            print("[USER-RIGHTS] Warning checking E-Approval settings:", e)
+
     resp_data = {
         "success": True,
         "company": tenant.get("company_name", ""),

@@ -2989,7 +2989,7 @@ def purchase_analysis_fulfillment_schedule(request):
         return Response({"error": str(e), "rows": []}, status=401)
 
     start_date, end_date = parse_date_range(request)
-    dtype_param = (request.GET.get("dtype") or "").strip()
+    dtype_param = (request.GET.get("dtype") or request.GET.get("po_type") or "").strip()
     apply_dtype = dtype_param and dtype_param.lower() != "all types"
 
     company_code = tenant.get("company_code")
@@ -3065,12 +3065,23 @@ def purchase_analysis_fulfillment_schedule(request):
         dtype_filter_sql = ""
         dtype_params = []
         if apply_dtype and po_dtype:
-            dtype_filter_sql = f" AND LTRIM(RTRIM(ISNULL(PM.[{po_dtype}], N''))) = ?"
-            dtype_params.append(dtype_param)
+            dt_lower = dtype_param.lower().strip()
+            if "service" in dt_lower:
+                dtype_filter_sql = f" AND (LOWER(LTRIM(RTRIM(ISNULL(PM.[{po_dtype}], N'')))) LIKE '%service%' OR UPPER(LTRIM(RTRIM(ISNULL(PM.[{po_dtype}], N'')))) = 'SERVICE PO')"
+            elif "raw" in dt_lower:
+                dtype_filter_sql = f" AND (LOWER(LTRIM(RTRIM(ISNULL(PM.[{po_dtype}], N'')))) LIKE '%raw%' OR UPPER(LTRIM(RTRIM(ISNULL(PM.[{po_dtype}], N'')))) = 'RAW MATERIAL')"
+            elif "store" in dt_lower:
+                dtype_filter_sql = f" AND (LOWER(LTRIM(RTRIM(ISNULL(PM.[{po_dtype}], N'')))) LIKE '%store%' OR UPPER(LTRIM(RTRIM(ISNULL(PM.[{po_dtype}], N'')))) = 'STORE MATERIAL' OR UPPER(LTRIM(RTRIM(ISNULL(PM.[{po_dtype}], N'')))) = 'STORES MATERIAL')"
+            else:
+                dtype_filter_sql = f" AND (UPPER(LTRIM(RTRIM(ISNULL(PM.[{po_dtype}], N'')))) = UPPER(?) OR UPPER(LTRIM(RTRIM(ISNULL(PM.[{po_dtype}], N'')))) = UPPER(?))"
+                dtype_params.append(dtype_param)
+                dtype_params.append(dtype_param.replace(" PO", "").replace(" po", "").strip())
 
         company_sql = ""
         if po_cc and company_code:
             company_sql = f" AND PM.[{po_cc}] = ?"
+
+        po_dtype_sel = f"LTRIM(RTRIM(ISNULL(PM.[{po_dtype}], N'')))" if po_dtype else "CAST(N'' AS NVARCHAR(128))"
 
         sd_itcode_col = f"MAX(LTRIM(RTRIM(ISNULL([{sd_itcode}], N''))))" if sd_itcode else "CAST(N'' AS NVARCHAR(256))"
         det_itcode_col = f"MAX(LTRIM(RTRIM(ISNULL(PD.[{det_itcode}], N''))))" if det_itcode else "CAST(N'' AS NVARCHAR(256))"
@@ -3187,6 +3198,8 @@ def purchase_analysis_fulfillment_schedule(request):
         params.extend([s_date_str, e_date_str])
 
         # For Set 2:
+        if apply_dtype and po_dtype:
+            params.extend(dtype_params)
         params.extend([s_date_str, e_date_str])
         params.extend([s_date_str, e_date_str])
 
@@ -3201,6 +3214,7 @@ def purchase_analysis_fulfillment_schedule(request):
                     PM.[{po_pono}]                 AS pono,
                     CAST(PM.[{po_podate}] AS DATE) AS podate,
                     PM.[{po_cid}]                  AS cid,
+                    {po_dtype_sel}                 AS po_type,
                     LTRIM(RTRIM(ISNULL(PD.[{det_rmname}], N''))) AS rmname,
                     {det_itcode_col}               AS itcode,
                     {det_icode_col}                AS icode,
@@ -3220,6 +3234,7 @@ def purchase_analysis_fulfillment_schedule(request):
                     PM.[{po_pono}],
                     CAST(PM.[{po_podate}] AS DATE),
                     PM.[{po_cid}],
+                    {po_dtype_sel},
                     LTRIM(RTRIM(ISNULL(PD.[{det_rmname}], N'')))
             ),
             SCH_DATA AS
@@ -3239,6 +3254,7 @@ def purchase_analysis_fulfillment_schedule(request):
                     P.pono AS pono,
                     P.podate AS podate,
                     P.cid AS cid,
+                    P.po_type AS po_type,
                     P.rmname AS rmname,
                     P.POQty AS POQty,
                     P.Rate AS Rate,
@@ -3270,6 +3286,7 @@ def purchase_analysis_fulfillment_schedule(request):
                     SD.pono AS pono,
                     CAST(PM.[{po_podate}] AS DATE) AS podate,
                     PM.[{po_cid}] AS cid,
+                    {po_dtype_sel} AS po_type,
                     COALESCE(NULLIF(LTRIM(RTRIM(PD.[{det_rmname}])), N''), NULLIF(SD.icode, N''), NULLIF(SD.itcode, N''), N'Item') AS rmname,
                     ISNULL(CAST(PD.[{det_qty}] AS FLOAT), SD.SchdQty) AS POQty,
                     ISNULL(CAST(PD.[{det_rate}] AS FLOAT), 0) AS Rate,
@@ -3278,10 +3295,11 @@ def purchase_analysis_fulfillment_schedule(request):
                     SD.SchdQty AS SchdQty,
                     ISNULL(G.GRNQty, 0) AS GRNQty
                 FROM SCH_DATA SD
-                LEFT JOIN {q_m} PM
+                INNER JOIN {q_m} PM
                     ON PM.[{po_pono}] = SD.pono
                     {del_pm_sql}
                     {exclude_filter}
+                    {dtype_filter_sql}
                 LEFT JOIN {q_d} PD
                     ON PM.[{po_pono}] = PD.[{det_pono}]
                    AND (
@@ -3318,6 +3336,7 @@ def purchase_analysis_fulfillment_schedule(request):
                 C.pono AS [PO NO],
                 C.podate AS [PO DATE],
                 {cm_name_sel} AS [SUPPLIER],
+                C.po_type AS [PO TYPE],
                 C.rmname AS [PART NO],
                 C.POQty AS [PO QTY],
 
@@ -3409,12 +3428,13 @@ def purchase_analysis_fulfillment_schedule(request):
         cursor.execute(query, params)
         raw_rows = []
         for r in cursor.fetchall() or []:
-            sno, po_num, po_dt, sup, rmn, po_q, shd_dt, shd_q, grn_q, bal_q, bal_val, age_days, status_val, rate, po_val = r
+            sno, po_num, po_dt, sup, po_tp, rmn, po_q, shd_dt, shd_q, grn_q, bal_q, bal_val, age_days, status_val, rate, po_val = r
             raw_rows.append({
                 "sno": sno,
                 "po_number": str(po_num or "").strip(),
                 "po_date_obj": po_dt,
                 "supplier": str(sup or "").strip() or "Unassigned",
+                "po_type": str(po_tp or "").strip(),
                 "rmname": str(rmn or "").strip(),
                 "po_qty_num": float(po_q or 0),
                 "schd_dt_obj": shd_dt,
@@ -3472,6 +3492,8 @@ def purchase_analysis_fulfillment_schedule(request):
             "po_number": r["po_number"],
             "po_date": _iso(r["po_date_obj"]),
             "supplier": r["supplier"],
+            "po_type": r["po_type"],
+            "dtype": r["po_type"],
             "part_no": part_no,
             "description": "",
             "po_qty": f"{po_q:g} NOS",
@@ -3712,7 +3734,7 @@ def purchase_analysis_average_purchase_value(request):
 
                 WHEN M.WMPartNo IS NOT NULL
                      AND ISNULL(M.Rod, 0) = 1
-                    THEN 'Rod'
+                    THEN 'KGS (Rod)'
 
                 WHEN M.RMCodeNo IS NOT NULL
                     THEN 'B.Out'
@@ -4036,8 +4058,7 @@ def purchase_analysis_advanced_purchase_analytics(request):
             ROW_NUMBER() OVER
             (
                 ORDER BY
-                    P.podate,
-                    P.pono,
+                    P.podate DESC,
                     P.rmname
             ) AS [SL NO],
 
@@ -4047,6 +4068,7 @@ def purchase_analysis_advanced_purchase_analytics(request):
 
             COALESCE
             (
+                NULLIF(LTRIM(RTRIM(P.mattype)), ''),
                 M.WMDescription,
                 M.RMDescription,
                 M.RPMDescription,
@@ -4069,7 +4091,7 @@ def purchase_analysis_advanced_purchase_analytics(request):
                     THEN 'Mtrs (Rod)'
 
                 WHEN M.WMPartNo IS NOT NULL AND ISNULL(M.Rod, 0) = 1
-                    THEN 'Rod'
+                    THEN 'KGS (Rod)'
 
                 WHEN M.RMCodeNo IS NOT NULL
                     THEN 'B.Out'
@@ -4119,8 +4141,7 @@ def purchase_analysis_advanced_purchase_analytics(request):
           {search_where}
 
         ORDER BY
-            P.podate,
-            P.pono,
+            P.podate DESC,
             P.rmname;
         """
 
@@ -4220,8 +4241,10 @@ def purchase_analysis_advanced_purchase_analytics(request):
                 "podate": podate,
                 "part_no": partno,
                 "partno": partno,
+                "rmname": partno,
                 "material_code": partno,
                 "description": desc,
+                "mattype": desc,
                 "material": desc,
                 "po_qty": po_qty,
                 "qty": po_qty,

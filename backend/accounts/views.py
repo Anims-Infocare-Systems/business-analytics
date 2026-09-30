@@ -687,6 +687,14 @@ def login_view(request):
         except Exception as e:
             print("[LOGIN] Warning checking M-Approval settings:", e)
 
+    if rights.get("E-Approval"):
+        try:
+            from accounts.utils.eapproval_settings import check_eapproval_settings
+            if not check_eapproval_settings(tenant):
+                rights["E-Approval"] = False
+        except Exception as e:
+            print("[LOGIN] Warning checking E-Approval settings:", e)
+
     has_access = is_super_admin or any(rights.values())
 
     return Response({

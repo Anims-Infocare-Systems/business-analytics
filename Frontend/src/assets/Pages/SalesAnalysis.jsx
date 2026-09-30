@@ -2399,6 +2399,12 @@ export default function SalesAnalysis() {
         return traceSortAsc ? timeA - timeB : timeB - timeA;
       }
 
+      if (traceSortField === "invQty" || traceSortField === "dcQty") {
+        const numA = Number(valA) || 0;
+        const numB = Number(valB) || 0;
+        return traceSortAsc ? numA - numB : numB - numA;
+      }
+
       if (typeof valA === "number" && typeof valB === "number") {
         return traceSortAsc ? valA - valB : valB - valA;
       }
@@ -2470,7 +2476,8 @@ export default function SalesAnalysis() {
       const currRate = (row.currRate !== undefined && row.currRate !== null && Number(row.currRate) !== 0) ? Number(row.currRate) : 1;
       const amt = (row.amt !== undefined && row.amt !== null && Number(row.amt) !== 0) ? Number(row.amt) : (row.qty * row.rate);
       const value = amt * currRate;
-      const pendingQty = Math.max(0, row.qty - row.dcQty - row.shortCloseQty);
+      const totalDcQty = (row.totalDcQty !== undefined && row.totalDcQty !== null) ? Number(row.totalDcQty) : Number(row.dcQty || 0);
+      const pendingQty = Math.max(0, row.qty - totalDcQty - Number(row.shortCloseQty || 0));
       const pendingValue = row.qty > 0 ? (pendingQty / row.qty) * value : (pendingQty * row.rate * currRate);
 
       let ageDays = 0;
@@ -2654,12 +2661,13 @@ export default function SalesAnalysis() {
 
   const handleDespatchExport = () => {
     const headers = [
-      "#", "Customer", "Part No", "Description", "Pending Planned Qty", "Planned Qty",
+      "#", "Plan Date", "Customer", "Part No", "Description", "Pending Planned Qty", "Planned Qty",
       "Available Qty", "Despatch Qty", "Inv No", "Inv Dt", "Inv Value", "Status"
     ];
 
     const rows = filteredDespatchPlan.map((row, idx) => [
       idx + 1,
+      formatToDdMmYyyy(row.despatchPlanDate || row.planDate || row.date) || "",
       row.customer,
       row.partNo,
       row.description,
@@ -2689,12 +2697,17 @@ export default function SalesAnalysis() {
   };
 
   const poTotals = useMemo(() => {
+    const seenLineKeys = new Set();
     return filteredPoLedger.reduce(
       (acc, row) => {
-        acc.totQty += Number(row.qty) || 0;
-        acc.totVal += Number(row.value) || 0;
-        acc.totPendQty += Number(row.pendingQty) || 0;
-        acc.totPendVal += Number(row.pendingValue) || 0;
+        const lineKey = `${row.apoNo || ""}::${row.poNo || ""}::${row.poSlNo || ""}::${row.partNo || row.partDesc || ""}`;
+        if (!seenLineKeys.has(lineKey)) {
+          seenLineKeys.add(lineKey);
+          acc.totQty += Number(row.qty) || 0;
+          acc.totVal += Number(row.value) || 0;
+          acc.totPendQty += Number(row.pendingQty) || 0;
+          acc.totPendVal += Number(row.pendingValue) || 0;
+        }
         return acc;
       },
       { totQty: 0, totVal: 0, totPendQty: 0, totPendVal: 0 }
@@ -4108,6 +4121,7 @@ export default function SalesAnalysis() {
     };
 
     if (processedPoLedger && processedPoLedger.length > 0) {
+      const seenLineKeys = new Set();
       processedPoLedger.forEach((r) => {
         if (appliedSelectedCustomers.length > 0 && !appliedSelectedCustomers.includes(r.custName)) {
           return;
@@ -4124,9 +4138,12 @@ export default function SalesAnalysis() {
             desc = "—";
           }
         }
-        const poQty = Number(r.qty) || 0;
+        const lineKey = `${r.apoNo || ""}::${r.poNo || ""}::${r.poSlNo || ""}::${pNo}`;
+        const isFirst = !seenLineKeys.has(lineKey);
+        seenLineKeys.add(lineKey);
+        const poQty = isFirst ? (Number(r.qty) || 0) : 0;
         const salQty = Number(r.dcQty) || 0;
-        const pendQty = r.pendingQty !== undefined ? Number(r.pendingQty) : Math.max(0, poQty - salQty);
+        const pendQty = isFirst ? (r.pendingQty !== undefined ? Number(r.pendingQty) : Math.max(0, poQty - salQty)) : 0;
         addPoRow(r.custName, pNo, desc, poQty, salQty, pendQty, r.poDate, r.dcDate || r.poDate);
       });
     } else if (invoiceRows && invoiceRows.length > 0) {
@@ -4248,6 +4265,7 @@ export default function SalesAnalysis() {
 
     // 2. Process PO Ledger (Schedule Qty & Schedule Value)
     if (processedPoLedger && processedPoLedger.length > 0) {
+      const seenLineKeys = new Set();
       processedPoLedger.forEach((r) => {
         if (appliedSelectedCustomers.length > 0 && !appliedSelectedCustomers.includes(r.custName)) {
           return;
@@ -4264,6 +4282,10 @@ export default function SalesAnalysis() {
             desc = "—";
           }
         }
+        const lineKey = `${r.apoNo || ""}::${r.poNo || ""}::${r.poSlNo || ""}::${pNo}`;
+        if (seenLineKeys.has(lineKey)) return;
+        seenLineKeys.add(lineKey);
+
         const item = getOrCreate(r.custName, pNo, desc);
         const mKey = getMonthKeyHelper(r.dcDate || r.poDate);
         const q = Number(r.qty) || 0;
@@ -7637,8 +7659,9 @@ export default function SalesAnalysis() {
           <table className="sa-table sa-despatch-table">
             <thead>
               <tr>
-                <th>Part No</th>
-                <th>Description</th>
+                <th style={{ minWidth: "90px" }}>Plan Date</th>
+                <th style={{ minWidth: "120px" }}>Part No</th>
+                <th style={{ minWidth: "240px" }}>Description</th>
                 <th className="sa-num">Pending Planned Qty</th>
                 <th className="sa-num">Planned Qty</th>
                 <th className="sa-num">Available Qty</th>
@@ -7653,8 +7676,9 @@ export default function SalesAnalysis() {
               {loading ? (
                 [...Array(5)].map((_, idx) => (
                   <tr key={idx}>
-                    <td><div className="sa-skeleton" style={{ width: '80px', height: '12px' }} /></td>
-                    <td><div className="sa-skeleton" style={{ width: '140px', height: '12px' }} /></td>
+                    <td><div className="sa-skeleton" style={{ width: '75px', height: '12px' }} /></td>
+                    <td><div className="sa-skeleton" style={{ width: '100px', height: '12px' }} /></td>
+                    <td><div className="sa-skeleton" style={{ width: '220px', height: '12px' }} /></td>
                     <td className="sa-num"><div className="sa-skeleton" style={{ width: '40px', height: '12px', marginLeft: 'auto' }} /></td>
                     <td className="sa-num"><div className="sa-skeleton" style={{ width: '40px', height: '12px', marginLeft: 'auto' }} /></td>
                     <td className="sa-num"><div className="sa-skeleton" style={{ width: '40px', height: '12px', marginLeft: 'auto' }} /></td>
@@ -7667,7 +7691,7 @@ export default function SalesAnalysis() {
                 ))
               ) : filteredDespatchPlan.length === 0 ? (
                 <tr>
-                  <td colSpan="10" style={{ textAlign: "center", padding: "32px 24px", color: "#64748b" }}>
+                  <td colSpan="11" style={{ textAlign: "center", padding: "32px 24px", color: "#64748b" }}>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
                       <span>No matching despatch planning records found</span>
                       {hasActiveDespatchFilters && (
@@ -7699,7 +7723,7 @@ export default function SalesAnalysis() {
                         onClick={() => toggleDespatchGroup(customerName)}
                         title={isCollapsed ? `Click to expand ${customerName}` : `Click to collapse ${customerName}`}
                       >
-                        <td colSpan="10" className="sa-despatch-group-title">
+                        <td colSpan="11" className="sa-despatch-group-title">
                           <div className="sa-despatch-group-title-content">
                             <div className="sa-despatch-group-left">
                               <span className={`sa-despatch-chevron-box ${isCollapsed ? "is-collapsed" : ""}`}>
@@ -7742,6 +7766,11 @@ export default function SalesAnalysis() {
                         const statusMeta = getDespatchStatusMeta(row);
                         return (
                           <tr key={`${customerName}-${rowIdx}`} className="sa-despatch-row" style={{ animationDelay: `${rowIdx * 30}ms` }}>
+                            <td>
+                              <span className="sa-plan-date-tag">
+                                {formatToDdMmYyyy(row.despatchPlanDate || row.planDate || row.date) || "—"}
+                              </span>
+                            </td>
                             <td><span className="sa-part-no-tag">{row.partNo}</span></td>
                             <td className="sa-despatch-desc-cell" title={row.description}>{row.description}</td>
                             <td className="sa-num">
@@ -10058,6 +10087,19 @@ export default function SalesAnalysis() {
                   </span>
                 </th>
                 <th
+                  className={`sa-sortable${traceSortField === "invQty" ? " sa-sorted" : ""}`}
+                  onClick={() => handleTraceSort("invQty")}
+                  title="Sort by Invoice Qty"
+                  style={{ textAlign: "right" }}
+                >
+                  <span className="sa-trace-th-content" style={{ justifyContent: "flex-end" }}>
+                    INV QTY
+                    <span className={`sa-trace-sort-icon ${traceSortField === "invQty" ? "active" : "idle"}`}>
+                      {traceSortField === "invQty" ? (traceSortAsc ? "▲" : "▼") : "▲▼"}
+                    </span>
+                  </span>
+                </th>
+                <th
                   className={`sa-sortable${traceSortField === "dcNo" ? " sa-sorted" : ""}`}
                   onClick={() => handleTraceSort("dcNo")}
                   title="Sort by DC No"
@@ -10078,6 +10120,19 @@ export default function SalesAnalysis() {
                     DC DATE
                     <span className={`sa-trace-sort-icon ${traceSortField === "dcDate" ? "active" : "idle"}`}>
                       {traceSortField === "dcDate" ? (traceSortAsc ? "▲" : "▼") : "▲▼"}
+                    </span>
+                  </span>
+                </th>
+                <th
+                  className={`sa-sortable${traceSortField === "dcQty" ? " sa-sorted" : ""}`}
+                  onClick={() => handleTraceSort("dcQty")}
+                  title="Sort by DC Qty"
+                  style={{ textAlign: "right" }}
+                >
+                  <span className="sa-trace-th-content" style={{ justifyContent: "flex-end" }}>
+                    DC QTY
+                    <span className={`sa-trace-sort-icon ${traceSortField === "dcQty" ? "active" : "idle"}`}>
+                      {traceSortField === "dcQty" ? (traceSortAsc ? "▲" : "▼") : "▲▼"}
                     </span>
                   </span>
                 </th>
@@ -10116,15 +10171,17 @@ export default function SalesAnalysis() {
                     <td><div className="sa-skeleton" style={{ width: '220px', height: '12px' }} /></td>
                     <td><div className="sa-skeleton" style={{ width: '80px', height: '12px' }} /></td>
                     <td><div className="sa-skeleton" style={{ width: '65px', height: '12px' }} /></td>
+                    <td style={{ textAlign: "right" }}><div className="sa-skeleton" style={{ width: '55px', height: '12px', marginLeft: 'auto' }} /></td>
                     <td><div className="sa-skeleton" style={{ width: '80px', height: '12px' }} /></td>
                     <td><div className="sa-skeleton" style={{ width: '65px', height: '12px' }} /></td>
+                    <td style={{ textAlign: "right" }}><div className="sa-skeleton" style={{ width: '55px', height: '12px', marginLeft: 'auto' }} /></td>
                     <td><div className="sa-skeleton" style={{ width: '80px', height: '12px' }} /></td>
                     <td><div className="sa-skeleton" style={{ width: '80px', height: '12px' }} /></td>
                   </tr>
                 ))
               ) : sortedTraceability.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="sa-trace-empty">
+                  <td colSpan={11} className="sa-trace-empty">
                     <div className="sa-trace-empty-content">
                       <Inbox size={32} className="sa-trace-empty-icon" />
                       <h4>No matching traceability records found</h4>
@@ -10153,8 +10210,10 @@ export default function SalesAnalysis() {
                     </td>
                     <td><strong className="sa-trace-inv">{row.invNo}</strong></td>
                     <td className="sa-date">{formatToDdMmYyyy(row.invDate)}</td>
+                    <td className="sa-num" style={{ textAlign: "right" }}>{formatQty(row.invQty)}</td>
                     <td>{row.dcNo}</td>
                     <td className="sa-date">{formatToDdMmYyyy(row.dcDate)}</td>
+                    <td className="sa-num" style={{ textAlign: "right" }}>{formatQty(row.dcQty)}</td>
                     <td><span className="sa-trace-po">{row.grnPo}</span></td>
                     <td><span className="sa-trace-code">{row.rcNo}</span></td>
                   </tr>
@@ -10340,7 +10399,12 @@ export default function SalesAnalysis() {
                 <th className="sa-num sa-sortable" onClick={() => handlePoSort("ageDays")}>
                   Age Days {poSortField === "ageDays" && (poSortAsc ? "▲" : "▼")}
                 </th>
-                <th>Invoice No & Dt</th>
+                <th className="sa-sortable" onClick={() => handlePoSort("invNo")}>
+                  Inv No {poSortField === "invNo" && (poSortAsc ? "▲" : "▼")}
+                </th>
+                <th className="sa-sortable" onClick={() => handlePoSort("invDate")}>
+                  Inv Dt {poSortField === "invDate" && (poSortAsc ? "▲" : "▼")}
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -10367,7 +10431,7 @@ export default function SalesAnalysis() {
                       <td className="sa-num">₹{formatExact(row.rate)}</td>
                       <td className="sa-num"><strong>₹{formatExact(row.value)}</strong></td>
                       <td>
-                        {row.dcNo === "—" ? (
+                        {!row.dcNo || row.dcNo === "—" ? (
                           <span className="sa-dash-gray">—</span>
                         ) : (
                           <strong className="sa-po-dc-code">{row.dcNo}</strong>
@@ -10401,10 +10465,17 @@ export default function SalesAnalysis() {
                         )}
                       </td>
                       <td>
-                        {row.invNoDt === "—" ? (
+                        {!row.invNo || row.invNo === "—" ? (
                           <span className="sa-dash-gray">—</span>
                         ) : (
-                          <span className="sa-po-inv-details">{formatToDdMmYyyy(row.invNoDt)}</span>
+                          <strong className="sa-po-inv-code">{row.invNo}</strong>
+                        )}
+                      </td>
+                      <td className="sa-date">
+                        {!row.invDate || row.invDate === "—" ? (
+                          <span className="sa-dash-gray">—</span>
+                        ) : (
+                          formatToDdMmYyyy(row.invDate)
                         )}
                       </td>
                     </tr>
@@ -10412,7 +10483,7 @@ export default function SalesAnalysis() {
                 })
               ) : (
                 <tr>
-                  <td colSpan={20} style={{ textAlign: "center", color: "#94a3b8", padding: "2rem" }}>
+                  <td colSpan={21} style={{ textAlign: "center", color: "#94a3b8", padding: "2rem" }}>
                     No purchase orders found matching your search.
                   </td>
                 </tr>
@@ -10457,6 +10528,7 @@ export default function SalesAnalysis() {
                       ₹{formatExact(poTotals.totPendVal)}
                     </span>
                   </td>
+                  <td></td>
                   <td></td>
                   <td></td>
                 </tr>

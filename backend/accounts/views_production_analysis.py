@@ -27,6 +27,9 @@ def _get_idle_union_sql_and_params(request, conn, from_date, to_date):
     try:
         shift = _resolve_shift_db_name(cursor, shift_parsed) if shift_parsed else None
         branches, branch_params = _build_accepted_vs_non_accepted_branches(cursor, from_date, to_date, include_machine_idle_entry=False)
+        has_t_cnc_m = table_exists(cursor, "CncProd_TouchMas")
+        has_t_conv_m = table_exists(cursor, "ConvProd_TouchMas")
+        has_t_rod_m = table_exists(cursor, "ConvRodProd_TouchMas")
     finally:
         cursor.close()
 
@@ -51,15 +54,33 @@ def _get_idle_union_sql_and_params(request, conn, from_date, to_date):
         op_list = [item.strip() for item in operator_raw.split(",") if item.strip()]
         if op_list:
             placeholders = ",".join(["?"] * len(op_list))
+            op_tables = [
+                ("ProductionEntry", "proddate"),
+                ("ConvProductionEntry", "entrydate"),
+                ("ConvProductionEntryRod", "entrydate"),
+            ]
+            if has_t_cnc_m:
+                op_tables.append(("CncProd_TouchMas", "proddate"))
+            if has_t_conv_m:
+                op_tables.append(("ConvProd_TouchMas", "proddate"))
+            if has_t_rod_m:
+                op_tables.append(("ConvRodProd_TouchMas", "proddate"))
+
+            subqueries = []
+            for tbl, dt_col in op_tables:
+                subqueries.append(f"""
+                    SELECT DISTINCT LTRIM(RTRIM(CAST(macno AS NVARCHAR(512))))
+                    FROM {tbl}
+                    WHERE {dt_col} >= ? AND {dt_col} < DATEADD(DAY, 1, ?) AND deleted = 0
+                      AND LTRIM(RTRIM(CAST(oprname AS NVARCHAR(512)))) IN ({placeholders})
+                """)
+                idle_params.extend([from_date, to_date] + op_list)
+
             idle_outer_filters.append(f"""
                 AND LTRIM(RTRIM(CAST(A.MacNo AS NVARCHAR(512)))) IN (
-                    SELECT DISTINCT LTRIM(RTRIM(CAST(macno AS NVARCHAR(512))))
-                    FROM ProductionEntry
-                    WHERE proddate >= ? AND proddate < DATEADD(DAY, 1, ?) AND deleted = 0
-                      AND LTRIM(RTRIM(CAST(oprname AS NVARCHAR(512)))) IN ({placeholders})
+                    {" UNION ".join(subqueries)}
                 )
             """)
-            idle_params.extend([from_date, to_date] + op_list)
 
     if mac_type:
         if mac_type == "CNC":
@@ -414,13 +435,11 @@ def production_analysis_report(request):
                     else:
                         operator = [op_val]
 
-            _prepare_filtered_temp_tables(cursor, request, from_date, to_date)
+            has_touch_cnc, has_touch_conv, has_touch_rod = _prepare_filtered_temp_tables(cursor, request, from_date, to_date)
             mac_filter_sql, mac_filter_params, shift_filter_sql, shift_filter_params = _get_mac_filter_sql(request, cursor)
             mac_filter_sql_alias, _, _, _ = _get_mac_filter_sql(request, cursor, table_alias="M")
         finally:
             cursor.close()
-
-
 
         def run_query(sql, params=None):
             """Execute a single query and return the first row, or None on error."""
@@ -434,8 +453,455 @@ def production_analysis_report(request):
             finally:
                 cur.close()
 
+        # Touch SQL snippets for un-taken records (ProdTaken = 0)
+        t_cnc_prod = """
+            UNION ALL
+            SELECT COALESCE(CTD.okqty, 0) AS Qty
+            FROM CncProd_TouchDet CTD
+            INNER JOIN #FilteredTouchCNC F ON CTD.TchEntryNo = F.TchEntryNo AND CTD.RowNo = F.RowNo
+        """ if has_touch_cnc else ""
+
+        t_conv_prod = """
+            UNION ALL
+            SELECT COALESCE(VTD.qty, 0) AS Qty
+            FROM ConvProd_TouchDet VTD
+            INNER JOIN #FilteredTouchConv F ON VTD.TchEntryNo = F.TchEntryNo AND VTD.RowNo = F.RowNo
+        """ if has_touch_conv else ""
+
+        t_rod_prod = """
+            UNION ALL
+            SELECT COALESCE(RTD.qty, 0) AS Qty
+            FROM ConvRodProd_TouchDet RTD
+            INNER JOIN #FilteredTouchRod F ON RTD.TchEntryNo = F.TchEntryNo AND RTD.RowNo = F.RowNo
+        """ if has_touch_rod else ""
+
+        t_cnc_ok = """
+            UNION ALL
+            SELECT COALESCE(CTD.okqty, 0) AS InspOkQty
+            FROM CncProd_TouchDet CTD
+            INNER JOIN #FilteredTouchCNC F ON CTD.TchEntryNo = F.TchEntryNo AND CTD.RowNo = F.RowNo
+        """ if has_touch_cnc else ""
+
+        t_conv_ok = """
+            UNION ALL
+            SELECT COALESCE(VTD.qty, 0) AS InspOkQty
+            FROM ConvProd_TouchDet VTD
+            INNER JOIN #FilteredTouchConv F ON VTD.TchEntryNo = F.TchEntryNo AND VTD.RowNo = F.RowNo
+        """ if has_touch_conv else ""
+
+        t_rod_ok = """
+            UNION ALL
+            SELECT COALESCE(RTD.qty, 0) AS InspOkQty
+            FROM ConvRodProd_TouchDet RTD
+            INNER JOIN #FilteredTouchRod F ON RTD.TchEntryNo = F.TchEntryNo AND RTD.RowNo = F.RowNo
+        """ if has_touch_rod else ""
+
+        t_rod_rej = """
+            UNION ALL
+            SELECT ISNULL(RTD.ScrapQty, 0) AS RejQty
+            FROM ConvRodProd_TouchDet RTD
+            INNER JOIN #FilteredTouchRod F ON RTD.TchEntryNo = F.TchEntryNo AND RTD.RowNo = F.RowNo
+        """ if has_touch_rod else ""
+
+        t_cnc_oee = """
+            UNION ALL
+            SELECT CASE WHEN CTD.OAEFF IS NOT NULL AND CTD.QFNEW IS NOT NULL THEN (CTD.OAEFF * CTD.QFNEW) ELSE COALESCE(CTD.OEENEW, CTD.OAEFF, 0) END AS OEE
+            FROM CncProd_TouchDet CTD
+            INNER JOIN #FilteredTouchCNC F ON CTD.TchEntryNo = F.TchEntryNo AND CTD.RowNo = F.RowNo
+            WHERE (CTD.OAEFF IS NOT NULL OR CTD.OEENEW IS NOT NULL OR CTD.QFNEW IS NOT NULL)
+        """ if has_touch_cnc else ""
+
+        t_conv_oee = """
+            UNION ALL
+            SELECT COALESCE(VTD.OAEFF, VTD.OEENEW, 0) AS OEE
+            FROM ConvProd_TouchDet VTD
+            INNER JOIN #FilteredTouchConv F ON VTD.TchEntryNo = F.TchEntryNo AND VTD.RowNo = F.RowNo
+            WHERE (VTD.OAEFF IS NOT NULL OR VTD.OEENEW IS NOT NULL)
+        """ if has_touch_conv else ""
+
+        t_rod_oee = """
+            UNION ALL
+            SELECT COALESCE(RTD.OAEFF, RTD.OEENEW, 0) AS OEE
+            FROM ConvRodProd_TouchDet RTD
+            INNER JOIN #FilteredTouchRod F ON RTD.TchEntryNo = F.TchEntryNo AND RTD.RowNo = F.RowNo
+            WHERE (RTD.OAEFF IS NOT NULL OR RTD.OEENEW IS NOT NULL)
+        """ if has_touch_rod else ""
+
+        t_cnc_hours = """
+            UNION ALL
+            SELECT 
+                CASE 
+                    WHEN CTD.runto >= CTD.runfrom THEN DATEDIFF(SECOND, CTD.runfrom, CTD.runto) 
+                    ELSE DATEDIFF(SECOND, CTD.runfrom, DATEADD(DAY, 1, CTD.runto)) 
+                END AS TotalRunSeconds 
+            FROM CncProd_TouchDet CTD
+            INNER JOIN #FilteredTouchCNC F ON CTD.TchEntryNo = F.TchEntryNo AND CTD.RowNo = F.RowNo
+            WHERE CTD.runfrom IS NOT NULL AND CTD.runto IS NOT NULL
+        """ if has_touch_cnc else ""
+
+        t_conv_hours = """
+            UNION ALL
+            SELECT 
+                CASE 
+                    WHEN VTD.runtimesecs IS NOT NULL AND VTD.runtimesecs > 0 THEN CAST(VTD.runtimesecs AS INT)
+                    WHEN VTD.runto >= VTD.runfrom THEN DATEDIFF(SECOND, VTD.runfrom, VTD.runto) 
+                    ELSE DATEDIFF(SECOND, VTD.runfrom, DATEADD(DAY, 1, VTD.runto)) 
+                END AS TotalRunSeconds 
+            FROM ConvProd_TouchDet VTD
+            INNER JOIN #FilteredTouchConv F ON VTD.TchEntryNo = F.TchEntryNo AND VTD.RowNo = F.RowNo
+            WHERE (VTD.runtimesecs IS NOT NULL AND VTD.runtimesecs > 0) OR (VTD.runfrom IS NOT NULL AND VTD.runto IS NOT NULL)
+        """ if has_touch_conv else ""
+
+        t_rod_hours = """
+            UNION ALL
+            SELECT 
+                CASE 
+                    WHEN RTD.runtimesecs IS NOT NULL AND RTD.runtimesecs > 0 THEN CAST(RTD.runtimesecs AS INT)
+                    WHEN RTD.runto >= RTD.runfrom THEN DATEDIFF(SECOND, RTD.runfrom, RTD.runto) 
+                    ELSE DATEDIFF(SECOND, RTD.runfrom, DATEADD(DAY, 1, RTD.runto)) 
+                END AS TotalRunSeconds 
+            FROM ConvRodProd_TouchDet RTD
+            INNER JOIN #FilteredTouchRod F ON RTD.TchEntryNo = F.TchEntryNo AND RTD.RowNo = F.RowNo
+            WHERE (RTD.runtimesecs IS NOT NULL AND RTD.runtimesecs > 0) OR (RTD.runfrom IS NOT NULL AND RTD.runto IS NOT NULL)
+        """ if has_touch_rod else ""
+
+        t_cnc_setting = """
+            UNION ALL
+            SELECT 
+                CASE 
+                    WHEN CTD.setto >= CTD.setfrom THEN DATEDIFF(SECOND, CTD.setfrom, CTD.setto) 
+                    ELSE DATEDIFF(SECOND, CTD.setfrom, DATEADD(DAY, 1, CTD.setto)) 
+                END AS SettingSeconds 
+            FROM CncProd_TouchDet CTD
+            INNER JOIN #FilteredTouchCNC F ON CTD.TchEntryNo = F.TchEntryNo AND CTD.RowNo = F.RowNo
+            WHERE CTD.setfrom IS NOT NULL AND CTD.setto IS NOT NULL
+        """ if has_touch_cnc else ""
+
+        t_conv_setting = """
+            UNION ALL
+            SELECT 
+                CASE 
+                    WHEN VTD.settimesecs IS NOT NULL AND VTD.settimesecs > 0 THEN CAST(VTD.settimesecs AS INT)
+                    WHEN VTD.setto >= VTD.setfrom THEN DATEDIFF(SECOND, VTD.setfrom, VTD.setto) 
+                    ELSE DATEDIFF(SECOND, VTD.setfrom, DATEADD(DAY, 1, VTD.setto)) 
+                END AS SettingSeconds 
+            FROM ConvProd_TouchDet VTD
+            INNER JOIN #FilteredTouchConv F ON VTD.TchEntryNo = F.TchEntryNo AND VTD.RowNo = F.RowNo
+            WHERE (VTD.settimesecs IS NOT NULL AND VTD.settimesecs > 0) OR (VTD.setfrom IS NOT NULL AND VTD.setto IS NOT NULL)
+        """ if has_touch_conv else ""
+
+        t_rod_setting = """
+            UNION ALL
+            SELECT 
+                CASE 
+                    WHEN RTD.settimesecs IS NOT NULL AND RTD.settimesecs > 0 THEN CAST(RTD.settimesecs AS INT)
+                    WHEN RTD.setto >= RTD.setfrom THEN DATEDIFF(SECOND, RTD.setfrom, RTD.setto) 
+                    ELSE DATEDIFF(SECOND, RTD.setfrom, DATEADD(DAY, 1, RTD.setto)) 
+                END AS SettingSeconds 
+            FROM ConvRodProd_TouchDet RTD
+            INNER JOIN #FilteredTouchRod F ON RTD.TchEntryNo = F.TchEntryNo AND RTD.RowNo = F.RowNo
+            WHERE (RTD.settimesecs IS NOT NULL AND RTD.settimesecs > 0) OR (RTD.setfrom IS NOT NULL AND RTD.setto IS NOT NULL)
+        """ if has_touch_rod else ""
+
+        t_cnc_man_eff = """
+            UNION ALL 
+            SELECT CAST(CTD.OPREFF AS FLOAT) AS OperEff 
+            FROM CncProd_TouchDet CTD
+            INNER JOIN CncProd_TouchMas CTM ON CTD.TchEntryNo = CTM.TchEntryNo
+            INNER JOIN #FilteredTouchCNC F ON CTD.TchEntryNo = F.TchEntryNo AND CTD.RowNo = F.RowNo
+            WHERE CTD.OPREFF IS NOT NULL
+              AND CTM.oprname IS NOT NULL AND LTRIM(RTRIM(CTM.oprname)) <> ''
+        """ if has_touch_cnc else ""
+
+        t_conv_man_eff = """
+            UNION ALL 
+            SELECT CAST(VTD.EFF AS FLOAT) AS OperEff 
+            FROM ConvProd_TouchDet VTD
+            INNER JOIN ConvProd_TouchMas VTM ON VTD.TchEntryNo = VTM.TchEntryNo
+            INNER JOIN #FilteredTouchConv F ON VTD.TchEntryNo = F.TchEntryNo AND VTD.RowNo = F.RowNo
+            WHERE VTD.EFF IS NOT NULL
+              AND VTM.oprname IS NOT NULL AND LTRIM(RTRIM(VTM.oprname)) <> ''
+        """ if has_touch_conv else ""
+
+        t_rod_man_eff = """
+            UNION ALL 
+            SELECT CAST(RTD.EFF AS FLOAT) AS OperEff 
+            FROM ConvRodProd_TouchDet RTD
+            INNER JOIN ConvRodProd_TouchMas RTM ON RTD.TchEntryNo = RTM.TchEntryNo
+            INNER JOIN #FilteredTouchRod F ON RTD.TchEntryNo = F.TchEntryNo AND RTD.RowNo = F.RowNo
+            WHERE RTD.EFF IS NOT NULL
+              AND RTM.oprname IS NOT NULL AND LTRIM(RTRIM(RTM.oprname)) <> ''
+        """ if has_touch_rod else ""
+
+        t_cnc_shift_summary = """
+            UNION ALL 
+            SELECT CTM.shift, CTM.proddate, SUM(ISNULL(CTD.okqty,0)) AS ShiftQty 
+            FROM CncProd_TouchDet CTD
+            INNER JOIN CncProd_TouchMas CTM ON CTD.TchEntryNo = CTM.TchEntryNo
+            INNER JOIN #FilteredTouchCNC F ON CTD.TchEntryNo = F.TchEntryNo AND CTD.RowNo = F.RowNo
+            GROUP BY CTM.shift, CTM.proddate
+        """ if has_touch_cnc else ""
+
+        t_conv_shift_summary = """
+            UNION ALL 
+            SELECT VTM.shift, VTM.proddate AS entrydate, SUM(ISNULL(VTD.qty,0)) AS ShiftQty 
+            FROM ConvProd_TouchDet VTD
+            INNER JOIN ConvProd_TouchMas VTM ON VTD.TchEntryNo = VTM.TchEntryNo
+            INNER JOIN #FilteredTouchConv F ON VTD.TchEntryNo = F.TchEntryNo AND VTD.RowNo = F.RowNo
+            GROUP BY VTM.shift, VTM.proddate
+        """ if has_touch_conv else ""
+
+        t_rod_shift_summary = """
+            UNION ALL 
+            SELECT RTM.shift, RTM.proddate AS entrydate, SUM(ISNULL(RTD.qty,0)) AS ShiftQty 
+            FROM ConvRodProd_TouchDet RTD
+            INNER JOIN ConvRodProd_TouchMas RTM ON RTD.TchEntryNo = RTM.TchEntryNo
+            INNER JOIN #FilteredTouchRod F ON RTD.TchEntryNo = F.TchEntryNo AND RTD.RowNo = F.RowNo
+            GROUP BY RTM.shift, RTM.proddate
+        """ if has_touch_rod else ""
+
+        t_cnc_active_mac = """
+            UNION SELECT CTM.macno FROM CncProd_TouchDet CTD INNER JOIN CncProd_TouchMas CTM ON CTD.TchEntryNo = CTM.TchEntryNo INNER JOIN #FilteredTouchCNC F ON CTD.TchEntryNo = F.TchEntryNo AND CTD.RowNo = F.RowNo WHERE CTM.macno IS NOT NULL
+        """ if has_touch_cnc else ""
+
+        t_conv_active_mac = """
+            UNION SELECT VTM.macno FROM ConvProd_TouchDet VTD INNER JOIN ConvProd_TouchMas VTM ON VTD.TchEntryNo = VTM.TchEntryNo INNER JOIN #FilteredTouchConv F ON VTD.TchEntryNo = F.TchEntryNo AND VTD.RowNo = F.RowNo WHERE VTM.macno IS NOT NULL
+        """ if has_touch_conv else ""
+
+        t_rod_active_mac = """
+            UNION SELECT RTM.macno FROM ConvRodProd_TouchDet RTD INNER JOIN ConvRodProd_TouchMas RTM ON RTD.TchEntryNo = RTM.TchEntryNo INNER JOIN #FilteredTouchRod F ON RTD.TchEntryNo = F.TchEntryNo AND RTD.RowNo = F.RowNo WHERE RTM.macno IS NOT NULL
+        """ if has_touch_rod else ""
+
+        t_cnc_mac_metrics = """
+            UNION ALL
+            SELECT CTM.macno, CASE WHEN CTD.OAEFF IS NOT NULL AND CTD.QFNEW IS NOT NULL THEN (CTD.OAEFF * CTD.QFNEW) ELSE COALESCE(CTD.OEENEW, CTD.OAEFF, 0) END AS OEE, CTD.OPREFF AS OperEff
+            FROM CncProd_TouchDet CTD
+            INNER JOIN CncProd_TouchMas CTM ON CTD.TchEntryNo = CTM.TchEntryNo
+            INNER JOIN #FilteredTouchCNC F ON CTD.TchEntryNo = F.TchEntryNo AND CTD.RowNo = F.RowNo
+            WHERE CTM.macno IS NOT NULL
+        """ if has_touch_cnc else ""
+
+        t_conv_mac_metrics = """
+            UNION ALL
+            SELECT VTM.macno, COALESCE(VTD.OAEFF, VTD.OEENEW, 0) AS OEE, VTD.EFF AS OperEff
+            FROM ConvProd_TouchDet VTD
+            INNER JOIN ConvProd_TouchMas VTM ON VTD.TchEntryNo = VTM.TchEntryNo
+            INNER JOIN #FilteredTouchConv F ON VTD.TchEntryNo = F.TchEntryNo AND VTD.RowNo = F.RowNo
+            WHERE VTM.macno IS NOT NULL
+        """ if has_touch_conv else ""
+
+        t_rod_mac_metrics = """
+            UNION ALL
+            SELECT RTM.macno, COALESCE(RTD.OAEFF, RTD.OEENEW, 0) AS OEE, RTD.EFF AS OperEff
+            FROM ConvRodProd_TouchDet RTD
+            INNER JOIN ConvRodProd_TouchMas RTM ON RTD.TchEntryNo = RTM.TchEntryNo
+            INNER JOIN #FilteredTouchRod F ON RTD.TchEntryNo = F.TchEntryNo AND RTD.RowNo = F.RowNo
+            WHERE RTM.macno IS NOT NULL
+        """ if has_touch_rod else ""
+
+        t_cnc_mac_run_details = """
+            UNION ALL
+            SELECT 
+                CTM.macno, 
+                CASE WHEN CTD.runto < CTD.runfrom THEN DATEDIFF(SECOND, CTD.runfrom, DATEADD(DAY, 1, CTD.runto)) ELSE DATEDIFF(SECOND, CTD.runfrom, CTD.runto) END AS RunTimeSecs,
+                28800 AS ShiftTimeSecs,
+                CASE WHEN CTD.idlTime IS NOT NULL AND DATEDIFF(SECOND, 0, CTD.idlTime) > 0 THEN DATEDIFF(SECOND, 0, CTD.idlTime) ELSE 0 END AS IdleTimeSecs
+            FROM CncProd_TouchDet CTD
+            INNER JOIN CncProd_TouchMas CTM ON CTD.TchEntryNo = CTM.TchEntryNo
+            INNER JOIN #FilteredTouchCNC F ON CTD.TchEntryNo = F.TchEntryNo AND CTD.RowNo = F.RowNo
+            WHERE CTM.macno IS NOT NULL
+        """ if has_touch_cnc else ""
+
+        t_conv_mac_run_details = """
+            UNION ALL
+            SELECT 
+                VTM.macno, 
+                CASE WHEN VTD.runtimesecs IS NOT NULL AND VTD.runtimesecs > 0 THEN CAST(VTD.runtimesecs AS INT) WHEN VTD.runto < VTD.runfrom THEN DATEDIFF(SECOND, VTD.runfrom, DATEADD(DAY, 1, VTD.runto)) ELSE DATEDIFF(SECOND, VTD.runfrom, VTD.runto) END AS RunTimeSecs,
+                COALESCE(NULLIF(VTD.shifttimesecs, 0), 28800) AS ShiftTimeSecs,
+                DATEDIFF(SECOND, 0, ISNULL(VTD.idlTime, '1900-01-01 00:00:00')) AS IdleTimeSecs
+            FROM ConvProd_TouchDet VTD
+            INNER JOIN ConvProd_TouchMas VTM ON VTD.TchEntryNo = VTM.TchEntryNo
+            INNER JOIN #FilteredTouchConv F ON VTD.TchEntryNo = F.TchEntryNo AND VTD.RowNo = F.RowNo
+            WHERE VTM.macno IS NOT NULL
+        """ if has_touch_conv else ""
+
+        t_rod_mac_run_details = """
+            UNION ALL
+            SELECT 
+                RTM.macno, 
+                CASE WHEN RTD.runtimesecs IS NOT NULL AND RTD.runtimesecs > 0 THEN CAST(RTD.runtimesecs AS INT) WHEN RTD.runto < RTD.runfrom THEN DATEDIFF(SECOND, RTD.runfrom, DATEADD(DAY, 1, RTD.runto)) ELSE DATEDIFF(SECOND, RTD.runfrom, RTD.runto) END AS RunTimeSecs,
+                COALESCE(NULLIF(RTD.shifttimesecs, 0), 28800) AS ShiftTimeSecs,
+                DATEDIFF(SECOND, 0, ISNULL(RTD.idlTime, '1900-01-01 00:00:00')) AS IdleTimeSecs
+            FROM ConvRodProd_TouchDet RTD
+            INNER JOIN ConvRodProd_TouchMas RTM ON RTD.TchEntryNo = RTM.TchEntryNo
+            INNER JOIN #FilteredTouchRod F ON RTD.TchEntryNo = F.TchEntryNo AND RTD.RowNo = F.RowNo
+            WHERE RTM.macno IS NOT NULL
+        """ if has_touch_rod else ""
+
+        t_cnc_mac_prod_qty = """
+            UNION ALL SELECT CTM.macno, CTD.okqty AS qty FROM CncProd_TouchDet CTD INNER JOIN CncProd_TouchMas CTM ON CTD.TchEntryNo = CTM.TchEntryNo INNER JOIN #FilteredTouchCNC F ON CTD.TchEntryNo = F.TchEntryNo AND CTD.RowNo = F.RowNo WHERE CTM.macno IS NOT NULL
+        """ if has_touch_cnc else ""
+
+        t_conv_mac_prod_qty = """
+            UNION ALL SELECT VTM.macno, VTD.qty FROM ConvProd_TouchDet VTD INNER JOIN ConvProd_TouchMas VTM ON VTD.TchEntryNo = VTM.TchEntryNo INNER JOIN #FilteredTouchConv F ON VTD.TchEntryNo = F.TchEntryNo AND VTD.RowNo = F.RowNo WHERE VTM.macno IS NOT NULL
+        """ if has_touch_conv else ""
+
+        t_rod_mac_prod_qty = """
+            UNION ALL SELECT RTM.macno, RTD.qty FROM ConvRodProd_TouchDet RTD INNER JOIN ConvRodProd_TouchMas RTM ON RTD.TchEntryNo = RTM.TchEntryNo INNER JOIN #FilteredTouchRod F ON RTD.TchEntryNo = F.TchEntryNo AND RTD.RowNo = F.RowNo WHERE RTM.macno IS NOT NULL
+        """ if has_touch_rod else ""
+
+        t_rod_mac_rej_qty = """
+            UNION ALL SELECT RTM.macno, ISNULL(RTD.ScrapQty, 0) AS RejQty FROM ConvRodProd_TouchDet RTD INNER JOIN ConvRodProd_TouchMas RTM ON RTD.TchEntryNo = RTM.TchEntryNo INNER JOIN #FilteredTouchRod F ON RTD.TchEntryNo = F.TchEntryNo AND RTD.RowNo = F.RowNo WHERE RTM.macno IS NOT NULL
+        """ if has_touch_rod else ""
+
+        t_conv_mac_rwk_qty = """
+            UNION ALL SELECT VTM.macno, ISNULL(VTD.Rework, 0) AS RwkQty FROM ConvProd_TouchDet VTD INNER JOIN ConvProd_TouchMas VTM ON VTD.TchEntryNo = VTM.TchEntryNo INNER JOIN #FilteredTouchConv F ON VTD.TchEntryNo = F.TchEntryNo AND VTD.RowNo = F.RowNo WHERE VTM.macno IS NOT NULL
+        """ if has_touch_conv else ""
+
+        t_cnc_overall_util = """
+            UNION ALL
+            SELECT 
+                CASE WHEN CTD.runto < CTD.runfrom THEN DATEDIFF(SECOND, CTD.runfrom, DATEADD(DAY, 1, CTD.runto)) ELSE DATEDIFF(SECOND, CTD.runfrom, CTD.runto) END AS RunTimeSecs,
+                CASE WHEN CTD.idlTime IS NOT NULL AND DATEDIFF(SECOND, 0, CTD.idlTime) > 0 THEN DATEDIFF(SECOND, 0, CTD.idlTime) ELSE 0 END AS IdleTimeSecs
+            FROM CncProd_TouchDet CTD
+            INNER JOIN #FilteredTouchCNC F ON CTD.TchEntryNo = F.TchEntryNo AND CTD.RowNo = F.RowNo
+        """ if has_touch_cnc else ""
+
+        t_conv_overall_util = """
+            UNION ALL
+            SELECT 
+                CASE WHEN VTD.runtimesecs IS NOT NULL AND VTD.runtimesecs > 0 THEN CAST(VTD.runtimesecs AS INT) WHEN VTD.runto < VTD.runfrom THEN DATEDIFF(SECOND, VTD.runfrom, DATEADD(DAY, 1, VTD.runto)) ELSE DATEDIFF(SECOND, VTD.runfrom, VTD.runto) END AS RunTimeSecs,
+                DATEDIFF(SECOND, 0, ISNULL(VTD.idlTime, '1900-01-01 00:00:00')) AS IdleTimeSecs
+            FROM ConvProd_TouchDet VTD
+            INNER JOIN #FilteredTouchConv F ON VTD.TchEntryNo = F.TchEntryNo AND VTD.RowNo = F.RowNo
+        """ if has_touch_conv else ""
+
+        t_rod_overall_util = """
+            UNION ALL
+            SELECT 
+                CASE WHEN RTD.runtimesecs IS NOT NULL AND RTD.runtimesecs > 0 THEN CAST(RTD.runtimesecs AS INT) WHEN RTD.runto < RTD.runfrom THEN DATEDIFF(SECOND, RTD.runfrom, DATEADD(DAY, 1, RTD.runto)) ELSE DATEDIFF(SECOND, RTD.runfrom, RTD.runto) END AS RunTimeSecs,
+                DATEDIFF(SECOND, 0, ISNULL(RTD.idlTime, '1900-01-01 00:00:00')) AS IdleTimeSecs
+            FROM ConvRodProd_TouchDet RTD
+            INNER JOIN #FilteredTouchRod F ON RTD.TchEntryNo = F.TchEntryNo AND RTD.RowNo = F.RowNo
+        """ if has_touch_rod else ""
+
+        t_cnc_mac_eff = """
+            UNION ALL
+            SELECT 
+                CAST(CTD.TchEntryNo AS NVARCHAR(100)) + '_' + CAST(CTD.RowNo AS NVARCHAR(20)) AS EntryID,
+                MAX(CASE WHEN CTD.runto < CTD.runfrom THEN DATEDIFF(SECOND, CTD.runfrom, DATEADD(DAY, 1, CTD.runto)) ELSE DATEDIFF(SECOND, CTD.runfrom, CTD.runto) END) AS RunTimeSecs,
+                MAX(CASE WHEN CTD.idlTime IS NOT NULL AND DATEDIFF(SECOND, 0, CTD.idlTime) > 0 THEN DATEDIFF(SECOND, 0, CTD.idlTime) ELSE 0 END) AS IdleTimeSecs
+            FROM CncProd_TouchDet CTD
+            INNER JOIN #FilteredTouchCNC F ON CTD.TchEntryNo = F.TchEntryNo AND CTD.RowNo = F.RowNo
+            GROUP BY CTD.TchEntryNo, CTD.RowNo
+        """ if has_touch_cnc else ""
+
+        t_conv_mac_eff = """
+            UNION ALL
+            SELECT 
+                CAST(VTD.TchEntryNo AS NVARCHAR(100)) + '_' + CAST(VTD.RowNo AS NVARCHAR(20)) AS EntryID,
+                MAX(CASE 
+                    WHEN VTD.runtimesecs IS NOT NULL AND VTD.runtimesecs > 0 THEN CAST(VTD.runtimesecs AS INT)
+                    WHEN VTD.runto >= VTD.runfrom THEN DATEDIFF(SECOND, VTD.runfrom, VTD.runto) 
+                    ELSE DATEDIFF(SECOND, VTD.runfrom, DATEADD(DAY, 1, VTD.runto)) 
+                END) AS RunTimeSecs,
+                MAX(DATEDIFF(SECOND, 0, ISNULL(VTD.idlTime, '1900-01-01 00:00:00'))) AS IdleTimeSecs
+            FROM ConvProd_TouchDet VTD
+            INNER JOIN #FilteredTouchConv F ON VTD.TchEntryNo = F.TchEntryNo AND VTD.RowNo = F.RowNo
+            GROUP BY VTD.TchEntryNo, VTD.RowNo
+        """ if has_touch_conv else ""
+
+        t_rod_mac_eff = """
+            UNION ALL
+            SELECT 
+                CAST(RTD.TchEntryNo AS NVARCHAR(100)) + '_' + CAST(RTD.RowNo AS NVARCHAR(20)) AS EntryID,
+                MAX(CASE 
+                    WHEN RTD.runtimesecs IS NOT NULL AND RTD.runtimesecs > 0 THEN CAST(RTD.runtimesecs AS INT)
+                    WHEN RTD.runto >= RTD.runfrom THEN DATEDIFF(SECOND, RTD.runfrom, RTD.runto) 
+                    ELSE DATEDIFF(SECOND, RTD.runfrom, DATEADD(DAY, 1, RTD.runto)) 
+                END) AS RunTimeSecs,
+                MAX(DATEDIFF(SECOND, 0, ISNULL(RTD.idlTime, '1900-01-01 00:00:00'))) AS IdleTimeSecs
+            FROM ConvRodProd_TouchDet RTD
+            INNER JOIN #FilteredTouchRod F ON RTD.TchEntryNo = F.TchEntryNo AND RTD.RowNo = F.RowNo
+            GROUP BY RTD.TchEntryNo, RTD.RowNo
+        """ if has_touch_rod else ""
+
+        t_cnc_oee_trend = """
+            UNION ALL
+            SELECT CTM.proddate AS entrydate, CASE WHEN CTD.OAEFF IS NOT NULL AND CTD.QFNEW IS NOT NULL THEN (CTD.OAEFF * CTD.QFNEW) ELSE COALESCE(CTD.OEENEW, CTD.OAEFF, 0) END AS OEENEW
+            FROM CncProd_TouchDet CTD
+            INNER JOIN CncProd_TouchMas CTM ON CTD.TchEntryNo = CTM.TchEntryNo
+            INNER JOIN #FilteredTouchCNC F ON CTD.TchEntryNo = F.TchEntryNo AND CTD.RowNo = F.RowNo
+            WHERE (CTD.OAEFF IS NOT NULL OR CTD.OEENEW IS NOT NULL OR CTD.QFNEW IS NOT NULL)
+        """ if has_touch_cnc else ""
+
+        t_conv_oee_trend = """
+            UNION ALL
+            SELECT VTM.proddate AS entrydate, VTD.OEENEW
+            FROM ConvProd_TouchDet VTD
+            INNER JOIN ConvProd_TouchMas VTM ON VTD.TchEntryNo = VTM.TchEntryNo
+            INNER JOIN #FilteredTouchConv F ON VTD.TchEntryNo = F.TchEntryNo AND VTD.RowNo = F.RowNo
+            WHERE VTD.OEENEW IS NOT NULL
+        """ if has_touch_conv else ""
+
+        t_rod_oee_trend = """
+            UNION ALL
+            SELECT RTM.proddate AS entrydate, RTD.OEENEW
+            FROM ConvRodProd_TouchDet RTD
+            INNER JOIN ConvRodProd_TouchMas RTM ON RTD.TchEntryNo = RTM.TchEntryNo
+            INNER JOIN #FilteredTouchRod F ON RTD.TchEntryNo = F.TchEntryNo AND RTD.RowNo = F.RowNo
+            WHERE RTD.OEENEW IS NOT NULL
+        """ if has_touch_rod else ""
+
+        t_cnc_eff_trend = """
+            UNION ALL
+            SELECT 
+                CAST(CTD.TchEntryNo AS NVARCHAR(100)) + '_' + CAST(CTD.RowNo AS NVARCHAR(20)) AS EntryID,
+                CTM.proddate AS entrydate,
+                MAX(CASE WHEN CTD.runto < CTD.runfrom THEN DATEDIFF(SECOND, CTD.runfrom, DATEADD(DAY, 1, CTD.runto)) ELSE DATEDIFF(SECOND, CTD.runfrom, CTD.runto) END) AS RunTimeSecs,
+                MAX(CASE WHEN CTD.idlTime IS NOT NULL AND DATEDIFF(SECOND, 0, CTD.idlTime) > 0 THEN DATEDIFF(SECOND, 0, CTD.idlTime) ELSE 0 END) AS IdleTimeSecs
+            FROM CncProd_TouchDet CTD
+            INNER JOIN CncProd_TouchMas CTM ON CTD.TchEntryNo = CTM.TchEntryNo
+            INNER JOIN #FilteredTouchCNC F ON CTD.TchEntryNo = F.TchEntryNo AND CTD.RowNo = F.RowNo
+            GROUP BY CTD.TchEntryNo, CTD.RowNo, CTM.proddate
+        """ if has_touch_cnc else ""
+
+        t_conv_eff_trend = """
+            UNION ALL
+            SELECT 
+                CAST(VTD.TchEntryNo AS NVARCHAR(100)) + '_' + CAST(VTD.RowNo AS NVARCHAR(20)) AS EntryID,
+                VTM.proddate AS entrydate,
+                MAX(CASE 
+                    WHEN VTD.runtimesecs IS NOT NULL AND VTD.runtimesecs > 0 THEN CAST(VTD.runtimesecs AS INT)
+                    WHEN VTD.runto >= VTD.runfrom THEN DATEDIFF(SECOND, VTD.runfrom, VTD.runto) 
+                    ELSE DATEDIFF(SECOND, VTD.runfrom, DATEADD(DAY, 1, VTD.runto)) 
+                END) AS RunTimeSecs,
+                MAX(DATEDIFF(SECOND, 0, ISNULL(VTD.idlTime, '1900-01-01 00:00:00'))) AS IdleTimeSecs
+            FROM ConvProd_TouchDet VTD
+            INNER JOIN ConvProd_TouchMas VTM ON VTD.TchEntryNo = VTM.TchEntryNo
+            INNER JOIN #FilteredTouchConv F ON VTD.TchEntryNo = F.TchEntryNo AND VTD.RowNo = F.RowNo
+            GROUP BY VTD.TchEntryNo, VTD.RowNo, VTM.proddate
+        """ if has_touch_conv else ""
+
+        t_rod_eff_trend = """
+            UNION ALL
+            SELECT 
+                CAST(RTD.TchEntryNo AS NVARCHAR(100)) + '_' + CAST(RTD.RowNo AS NVARCHAR(20)) AS EntryID,
+                RTM.proddate AS entrydate,
+                MAX(CASE 
+                    WHEN RTD.runtimesecs IS NOT NULL AND RTD.runtimesecs > 0 THEN CAST(RTD.runtimesecs AS INT)
+                    WHEN RTD.runto >= RTD.runfrom THEN DATEDIFF(SECOND, RTD.runfrom, RTD.runto) 
+                    ELSE DATEDIFF(SECOND, RTD.runfrom, DATEADD(DAY, 1, RTD.runto)) 
+                END) AS RunTimeSecs,
+                MAX(DATEDIFF(SECOND, 0, ISNULL(RTD.idlTime, '1900-01-01 00:00:00'))) AS IdleTimeSecs
+            FROM ConvRodProd_TouchDet RTD
+            INNER JOIN ConvRodProd_TouchMas RTM ON RTD.TchEntryNo = RTM.TchEntryNo
+            INNER JOIN #FilteredTouchRod F ON RTD.TchEntryNo = F.TchEntryNo AND RTD.RowNo = F.RowNo
+            GROUP BY RTD.TchEntryNo, RTD.RowNo, RTM.proddate
+        """ if has_touch_rod else ""
+
         # ── Query 1: Total Production Qty ─────────────────────────────
-        total_prod_query = """
+        total_prod_query = f"""
         SELECT COALESCE(SUM(Qty), 0) AS TotalProductionQty
         FROM (
             SELECT COALESCE(okqty, 0) AS Qty FROM ProductionEntry WHERE prodid IN (SELECT prodid FROM #FilteredPE)
@@ -443,51 +909,61 @@ def production_analysis_report(request):
             SELECT COALESCE(qty, 0) AS Qty FROM ConvProductionEntry WHERE entryno IN (SELECT entryno FROM #FilteredCPE)
             UNION ALL
             SELECT COALESCE(qty, 0) AS Qty FROM ConvProductionEntryRod WHERE entryno IN (SELECT entryno FROM #FilteredCPR)
+            {t_cnc_prod}
+            {t_conv_prod}
+            {t_rod_prod}
         ) AS A
         """
         row = run_query(total_prod_query)
         if row and row[0] is not None: result["totalProductionQty"] = int(row[0])
 
         # ── Query 2: OK / Accepted Qty ────────────────────────────────
-        ok_qty_query = """
+        ok_qty_query = f"""
         SELECT COALESCE(SUM(InspOkQty), 0) AS TotalInspectionOkQty
         FROM (
             SELECT COALESCE((SELECT SUM(COALESCE(I.okqty, 0)) FROM InterInspectionEntry I WHERE TRY_CAST(I.prodid AS INT) = P.prodid AND I.deleted = 0), 0) AS InspOkQty
             FROM ProductionEntry P WHERE P.prodid IN (SELECT prodid FROM #FilteredPE)
             UNION ALL SELECT COALESCE(C.qty, 0) AS InspOkQty FROM ConvProductionEntry C WHERE C.entryno IN (SELECT entryno FROM #FilteredCPE)
             UNION ALL SELECT COALESCE(R.qty, 0) AS InspOkQty FROM ConvProductionEntryRod R WHERE R.entryno IN (SELECT entryno FROM #FilteredCPR)
+            {t_cnc_ok}
+            {t_conv_ok}
+            {t_rod_ok}
         ) AS A
         """
         row = run_query(ok_qty_query)
         if row and row[0] is not None: result["okAcceptedQty"] = int(row[0])
 
         # ── Query 3: Rejection Qty ────────────────────────────────────
-        rej_qty_query = """
+        rej_qty_query = f"""
         SELECT COALESCE(SUM(RejQty), 0) AS TotalRejectionQty
         FROM (
             SELECT COALESCE((SELECT SUM(COALESCE(RJ.qty, 0)) FROM InterInspectionEntry I INNER JOIN Insp_RejectionEntry RJ ON I.inter_inspno = RJ.inter_inspno WHERE TRY_CAST(I.prodid AS INT) = P.prodid AND I.deleted = 0 AND RJ.deleted = 0), 0) AS RejQty
             FROM ProductionEntry P WHERE P.prodid IN (SELECT prodid FROM #FilteredPE)
             UNION ALL SELECT 0 AS RejQty FROM ConvProductionEntry C WHERE C.entryno IN (SELECT entryno FROM #FilteredCPE)
             UNION ALL SELECT ISNULL(R.ScrapQty, 0) AS RejQty FROM ConvProductionEntryRod R WHERE R.entryno IN (SELECT entryno FROM #FilteredCPR)
+            {t_rod_rej}
         ) AS A
         """
         row = run_query(rej_qty_query)
         if row and row[0] is not None: result["rejectionQty"] = int(row[0])
 
         # ── Query 4: Overall OEE ──────────────────────────────────────
-        oee_query = """
+        oee_query = f"""
         SELECT CAST(AVG(CAST(OEE AS FLOAT)) AS DECIMAL(18,2)) AS Overall_OEE
         FROM (
             SELECT CASE WHEN OAEFF IS NOT NULL AND QFNEW IS NOT NULL THEN (OAEFF * QFNEW) ELSE COALESCE(OEENEW, OAEFF, 0) END AS OEE FROM ProductionEntry WHERE prodid IN (SELECT prodid FROM #FilteredPE) AND (OAEFF IS NOT NULL OR OEENEW IS NOT NULL OR QFNEW IS NOT NULL)
             UNION ALL SELECT COALESCE(OAEFF, OEENEW, 0) AS OEE FROM ConvProductionEntry WHERE entryno IN (SELECT entryno FROM #FilteredCPE) AND (OAEFF IS NOT NULL OR OEENEW IS NOT NULL)
             UNION ALL SELECT COALESCE(OAEFF, OEENEW, 0) AS OEE FROM ConvProductionEntryRod WHERE entryno IN (SELECT entryno FROM #FilteredCPR) AND (OAEFF IS NOT NULL OR OEENEW IS NOT NULL)
+            {t_cnc_oee}
+            {t_conv_oee}
+            {t_rod_oee}
         ) A
         """
         row = run_query(oee_query)
         if row and row[0] is not None: result["overallOee"] = round(float(row[0]), 2)
 
         # ── Query 5: Production Hours (Machine Running Hrs) ───────────
-        hours_query = """
+        hours_query = f"""
         SELECT COALESCE(SUM(TotalRunSeconds), 0) AS TotalRunSeconds
         FROM (
             SELECT 
@@ -526,6 +1002,9 @@ def production_analysis_report(request):
               AND CPR.deleted = 0
               AND CPR.starttime IS NOT NULL 
               AND CPR.endtime IS NOT NULL
+            {t_cnc_hours}
+            {t_conv_hours}
+            {t_rod_hours}
         ) A
         """
         row = run_query(hours_query)
@@ -594,7 +1073,7 @@ def production_analysis_report(request):
         result["idleAcceptedHours"] = round(idle_accepted_seconds / 3600.0, 2)
 
         # ── Query 8: Total Setting Hours ──────────────────────────────
-        setting_hours_query = """
+        setting_hours_query = f"""
         SELECT COALESCE(SUM(SettingSeconds), 0) AS TotalSettingSeconds
         FROM (
             SELECT 
@@ -631,6 +1110,9 @@ def production_analysis_report(request):
               AND CPR.deleted = 0
               AND CPR.setfrom IS NOT NULL 
               AND CPR.setto IS NOT NULL
+            {t_cnc_setting}
+            {t_conv_setting}
+            {t_rod_setting}
         ) A
         """
         row = run_query(setting_hours_query)
@@ -648,7 +1130,7 @@ def production_analysis_report(request):
         result["totalMachineHours"] = result["totProductionHours"]
 
         # ── Query 9: Man Efficiency (Operator Eff: PE.OPREFF, CPE.eff, CPR.eff) ──
-        man_efficiency_query = """
+        man_efficiency_query = f"""
         SELECT CAST(AVG(CAST(A.OperEff AS FLOAT)) AS DECIMAL(18,2)) AS Overall_ManEfficiency
         FROM (
             SELECT CAST(OPREFF AS FLOAT) AS OperEff 
@@ -668,18 +1150,24 @@ def production_analysis_report(request):
             WHERE entryno IN (SELECT entryno FROM #FilteredCPR) 
               AND eff IS NOT NULL
               AND oprname IS NOT NULL AND LTRIM(RTRIM(oprname)) <> ''
+            {t_cnc_man_eff}
+            {t_conv_man_eff}
+            {t_rod_man_eff}
         ) A
         """
         row = run_query(man_efficiency_query)
         if row and row[0] is not None: result["manEfficiency"] = round(float(row[0]), 2)
 
         # ── Query 10: Daily Production Summary ───────────────────────
-        shift_summary_query = """
+        shift_summary_query = f"""
         SELECT COUNT(*) AS TotalShifts, CAST(AVG(CAST(ShiftQty AS FLOAT)) AS DECIMAL(18,2)) AS AvgProdPerShift, MAX(ShiftQty) AS PeakShiftOutput, MIN(ShiftQty) AS LowestShiftOutput
         FROM (
             SELECT P.shift, P.proddate, SUM(ISNULL(P.okqty,0)) AS ShiftQty FROM ProductionEntry P WHERE P.prodid IN (SELECT prodid FROM #FilteredPE) GROUP BY P.shift, P.proddate
             UNION ALL SELECT C.shift, C.entrydate, SUM(ISNULL(C.qty,0)) AS ShiftQty FROM ConvProductionEntry C WHERE C.entryno IN (SELECT entryno FROM #FilteredCPE) GROUP BY C.shift, C.entrydate
             UNION ALL SELECT R.shift, R.entrydate, SUM(ISNULL(R.qty,0)) AS ShiftQty FROM ConvProductionEntryRod R WHERE R.entryno IN (SELECT entryno FROM #FilteredCPR) GROUP BY R.shift, R.entrydate
+            {t_cnc_shift_summary}
+            {t_conv_shift_summary}
+            {t_rod_shift_summary}
         ) AS AllShifts
         """
         row = run_query(shift_summary_query)
@@ -689,12 +1177,15 @@ def production_analysis_report(request):
             result["peakShiftOutput"]   = int(row[2] or 0)
             result["lowestShiftOutput"] = int(row[3] or 0)
 
-        active_mac_query = """
+        active_mac_query = f"""
         SELECT COUNT(DISTINCT macno) AS ActiveMachines
         FROM (
             SELECT macno FROM ProductionEntry WHERE prodid IN (SELECT prodid FROM #FilteredPE) AND macno IS NOT NULL
             UNION SELECT macno FROM ConvProductionEntry WHERE entryno IN (SELECT entryno FROM #FilteredCPE) AND macno IS NOT NULL
             UNION SELECT macno FROM ConvProductionEntryRod WHERE entryno IN (SELECT entryno FROM #FilteredCPR) AND macno IS NOT NULL
+            {t_cnc_active_mac}
+            {t_conv_active_mac}
+            {t_rod_active_mac}
         ) AS ActiveMacs
         """
         row = run_query(active_mac_query)
@@ -727,6 +1218,9 @@ def production_analysis_report(request):
                 SELECT macno, COALESCE(OAEFF, OEENEW, 0) AS OEE, eff AS OperEff FROM ConvProductionEntry WHERE entryno IN (SELECT entryno FROM #FilteredCPE)
                 UNION ALL
                 SELECT macno, COALESCE(OAEFF, OEENEW, 0) AS OEE, eff AS OperEff FROM ConvProductionEntryRod WHERE entryno IN (SELECT entryno FROM #FilteredCPR)
+                {t_cnc_mac_metrics}
+                {t_conv_mac_metrics}
+                {t_rod_mac_metrics}
             ) A
             GROUP BY MacNo
         ),
@@ -760,6 +1254,9 @@ def production_analysis_report(request):
                     DATEDIFF(SECOND, 0, ISNULL(IdleTime, '1900-01-01 00:00:00')) AS IdleTimeSecs
                 FROM ConvProductionEntryRod 
                 WHERE entryno IN (SELECT entryno FROM #FilteredCPR) AND macno IS NOT NULL
+                {t_cnc_mac_run_details}
+                {t_conv_mac_run_details}
+                {t_rod_mac_run_details}
             ) A
         ),
         MachineUtilizations AS
@@ -788,6 +1285,9 @@ def production_analysis_report(request):
                 SELECT macno, okqty AS qty FROM ProductionEntry WHERE prodid IN (SELECT prodid FROM #FilteredPE) AND macno IS NOT NULL
                 UNION ALL SELECT macno, qty FROM ConvProductionEntry WHERE entryno IN (SELECT entryno FROM #FilteredCPE) AND macno IS NOT NULL
                 UNION ALL SELECT macno, ProdQty AS qty FROM ConvProductionEntryRod WHERE entryno IN (SELECT entryno FROM #FilteredCPR) AND macno IS NOT NULL
+                {t_cnc_mac_prod_qty}
+                {t_conv_mac_prod_qty}
+                {t_rod_mac_prod_qty}
             ) A
             GROUP BY macno
         ),
@@ -807,6 +1307,7 @@ def production_analysis_report(request):
                 UNION ALL
                 
                 SELECT macno, ISNULL(ScrapQty, 0) AS RejQty FROM ConvProductionEntryRod WHERE entryno IN (SELECT entryno FROM #FilteredCPR) AND macno IS NOT NULL
+                {t_rod_mac_rej_qty}
             ) B
             GROUP BY macno
         ),
@@ -826,6 +1327,7 @@ def production_analysis_report(request):
                 UNION ALL
                 
                 SELECT macno, 0 AS RwkQty FROM ConvProductionEntryRod WHERE entryno IN (SELECT entryno FROM #FilteredCPR) AND macno IS NOT NULL
+                {t_conv_mac_rwk_qty}
             ) C
             GROUP BY macno
         ),
@@ -938,7 +1440,7 @@ def production_analysis_report(request):
 
         # ── Query 11: Machine & Operator Efficiency ───────────────────
         # Formula logic: Production hours / Running hours * 100
-        overall_util_query = """
+        overall_util_query = f"""
         SELECT 
             CASE 
                 WHEN SUM(CAST(RunTimeSecs AS FLOAT)) > 0 
@@ -973,6 +1475,9 @@ def production_analysis_report(request):
                 DATEDIFF(SECOND, 0, ISNULL(IdleTime, '1900-01-01 00:00:00')) AS IdleTimeSecs
             FROM ConvProductionEntryRod 
             WHERE entryno IN (SELECT entryno FROM #FilteredCPR)
+            {t_cnc_overall_util}
+            {t_conv_overall_util}
+            {t_rod_overall_util}
         ) A
         """
         row = run_query(overall_util_query)
@@ -985,7 +1490,7 @@ def production_analysis_report(request):
         # ── Query 11b: Machine Efficiency ─────────────────────────────
         # Formula logic: sum(machine Utilization as per the record entry) / count of the record entry
         # in three production tables: ProductionEntry (prodid), ConvProductionEntry (entryno), and ConvProductionEntryRod (entryno)
-        mac_eff_query = """
+        mac_eff_query = f"""
         WITH RecordEntries AS
         (
             SELECT 
@@ -1023,6 +1528,9 @@ def production_analysis_report(request):
             FROM ConvProductionEntryRod CPR
             WHERE CPR.entryno IN (SELECT entryno FROM #FilteredCPR)
             GROUP BY CPR.entryno
+            {t_cnc_mac_eff}
+            {t_conv_mac_eff}
+            {t_rod_mac_eff}
         ),
         RecordUtilization AS
         (
@@ -1082,7 +1590,7 @@ def production_analysis_report(request):
             result["machineRejection"] = 0.0
 
         # ── Query 12: Month Wise OEE Trend ───────────────────────────
-        oee_trend_query = """
+        oee_trend_query = f"""
         SELECT FORMAT(A.entrydate, 'MMM yy') AS MonthLabel,
                DATEPART(YEAR, A.entrydate) * 100 + DATEPART(MONTH, A.entrydate) AS YearMonth,
                AVG(CAST(A.OEENEW AS FLOAT)) AS AvgOEE
@@ -1090,6 +1598,9 @@ def production_analysis_report(request):
             SELECT proddate AS entrydate, CASE WHEN OAEFF IS NOT NULL AND QFNEW IS NOT NULL THEN (OAEFF * QFNEW) ELSE COALESCE(OEENEW, OAEFF, 0) END AS OEENEW FROM ProductionEntry WHERE prodid IN (SELECT prodid FROM #FilteredPE) AND (OAEFF IS NOT NULL OR OEENEW IS NOT NULL OR QFNEW IS NOT NULL)
             UNION ALL SELECT entrydate, OEENEW FROM ConvProductionEntry WHERE entryno IN (SELECT entryno FROM #FilteredCPE) AND OEENEW IS NOT NULL
             UNION ALL SELECT entrydate, OEENEW FROM ConvProductionEntryRod WHERE entryno IN (SELECT entryno FROM #FilteredCPR) AND OEENEW IS NOT NULL
+            {t_cnc_oee_trend}
+            {t_conv_oee_trend}
+            {t_rod_oee_trend}
         ) A
         GROUP BY FORMAT(A.entrydate, 'MMM yy'), DATEPART(YEAR, A.entrydate) * 100 + DATEPART(MONTH, A.entrydate)
         ORDER BY YearMonth
@@ -1144,7 +1655,7 @@ def production_analysis_report(request):
         result["macAddedTrend"] = mac_added_trend
 
         # ── Query 14: Machine Efficiency% Trend (based on Record Entry Machine Utilization) ──
-        eff_trend_query = """
+        eff_trend_query = f"""
         WITH RecordEntries AS
         (
             SELECT 
@@ -1185,6 +1696,9 @@ def production_analysis_report(request):
             FROM ConvProductionEntryRod CPR
             WHERE CPR.entryno IN (SELECT entryno FROM #FilteredCPR)
             GROUP BY CPR.entryno, CPR.entrydate
+            {t_cnc_eff_trend}
+            {t_conv_eff_trend}
+            {t_rod_eff_trend}
         ),
         RecordUtilization AS
         (
@@ -1251,19 +1765,21 @@ def production_analysis_report(request):
 # ─────────────────────────────────────────────────────────────────────────────
 def _prepare_filtered_temp_tables(cursor, request, from_date, to_date):
     """
-    Creates and populates #FilteredPE, #FilteredCPE, and #FilteredCPR temp tables
-    based on machine, shift, operator, mac_type, mac_group, and search filters.
+    Creates and populates #FilteredPE, #FilteredCPE, #FilteredCPR, #FilteredTouchCNC,
+    #FilteredTouchConv, and #FilteredTouchRod temp tables based on machine, shift,
+    operator, mac_type, mac_group, and search filters.
+    Only touch records with ProdTaken = 0 (and deleted = 0) are populated.
     """
-    try: cursor.execute("DROP TABLE #FilteredPE")
-    except: pass
-    try: cursor.execute("DROP TABLE #FilteredCPE")
-    except: pass
-    try: cursor.execute("DROP TABLE #FilteredCPR")
-    except: pass
+    for tbl in ["#FilteredPE", "#FilteredCPE", "#FilteredCPR", "#FilteredTouchCNC", "#FilteredTouchConv", "#FilteredTouchRod"]:
+        try: cursor.execute(f"DROP TABLE {tbl}")
+        except: pass
 
     cursor.execute("CREATE TABLE #FilteredPE (prodid INT PRIMARY KEY)")
     cursor.execute("CREATE TABLE #FilteredCPE (entryno NVARCHAR(100) PRIMARY KEY)")
     cursor.execute("CREATE TABLE #FilteredCPR (entryno NVARCHAR(100) PRIMARY KEY)")
+    cursor.execute("CREATE TABLE #FilteredTouchCNC (TchEntryNo NVARCHAR(100), RowNo INT, PRIMARY KEY(TchEntryNo, RowNo))")
+    cursor.execute("CREATE TABLE #FilteredTouchConv (TchEntryNo NVARCHAR(100), RowNo INT, PRIMARY KEY(TchEntryNo, RowNo))")
+    cursor.execute("CREATE TABLE #FilteredTouchRod (TchEntryNo NVARCHAR(100), RowNo INT, PRIMARY KEY(TchEntryNo, RowNo))")
 
     from .views_idle_time_report import _parse_machine, _parse_shift, _resolve_shift_db_name
 
@@ -1399,6 +1915,128 @@ def _prepare_filtered_temp_tables(cursor, request, from_date, to_date):
     """ + " ".join(cpr_clauses)
     cursor.execute(cpr_sql, cpr_params)
 
+    # Build clauses and insert for CncProd_TouchDet (ProdTaken = 0)
+    has_touch_cnc = table_exists(cursor, "CncProd_TouchDet") and table_exists(cursor, "CncProd_TouchMas")
+    if has_touch_cnc:
+        tcnc_clauses = []
+        tcnc_params = [from_date, to_date]
+        if machine:
+            placeholders = ",".join(["?"] * len(machine))
+            tcnc_clauses.append(f"AND CTM.macno IN ({placeholders})")
+            tcnc_params.extend(machine)
+        if shift:
+            tcnc_clauses.append("AND CTM.shift = ?")
+            tcnc_params.append(shift)
+        if operator:
+            placeholders = ",".join(["?"] * len(operator))
+            tcnc_clauses.append(f"AND CTM.oprname IN ({placeholders})")
+            tcnc_params.extend(operator)
+        if mac_type:
+            if mac_type == "CNC":
+                tcnc_clauses.append("AND MM.cnc = 1")
+            elif mac_type in ("CON", "CONV"):
+                tcnc_clauses.append("AND 1 = 0")
+        if mac_group:
+            tcnc_clauses.append("AND MM.MacGroup = ?")
+            tcnc_params.append(mac_group)
+        if search:
+            tcnc_clauses.append("AND (CTD.partno LIKE ? OR ISNULL(PD.process, CTD.process) LIKE ? OR CTM.oprname LIKE ? OR CTM.macno LIKE ?)")
+            tcnc_params.extend([f"%{search}%"] * 4)
+
+        tcnc_sql = """
+        INSERT INTO #FilteredTouchCNC (TchEntryNo, RowNo)
+        SELECT DISTINCT CTD.TchEntryNo, CTD.RowNo
+        FROM CncProd_TouchDet CTD
+        INNER JOIN CncProd_TouchMas CTM ON CTD.TchEntryNo = CTM.TchEntryNo
+        LEFT JOIN ProcessDet PD ON CTD.process = PD.pcode AND PD.deleted = 0
+        LEFT JOIN MacMaster MM ON CTM.macno = MM.macno AND MM.deleted = 0
+        WHERE ISNULL(CTD.deleted, 0) = 0 AND ISNULL(CTM.deleted, 0) = 0 AND ISNULL(CTD.ProdTaken, 0) = 0
+          AND CTM.proddate BETWEEN ? AND ?
+        """ + " ".join(tcnc_clauses)
+        cursor.execute(tcnc_sql, tcnc_params)
+
+    # Build clauses and insert for ConvProd_TouchDet (ProdTaken = 0)
+    has_touch_conv = table_exists(cursor, "ConvProd_TouchDet") and table_exists(cursor, "ConvProd_TouchMas")
+    if has_touch_conv:
+        tconv_clauses = []
+        tconv_params = [from_date, to_date]
+        if machine:
+            placeholders = ",".join(["?"] * len(machine))
+            tconv_clauses.append(f"AND VTM.macno IN ({placeholders})")
+            tconv_params.extend(machine)
+        if shift:
+            tconv_clauses.append("AND VTM.shift = ?")
+            tconv_params.append(shift)
+        if operator:
+            placeholders = ",".join(["?"] * len(operator))
+            tconv_clauses.append(f"AND VTM.oprname IN ({placeholders})")
+            tconv_params.extend(operator)
+        if mac_type:
+            if mac_type == "CNC":
+                tconv_clauses.append("AND 1 = 0")
+            elif mac_type in ("CON", "CONV"):
+                tconv_clauses.append("AND (MM.cnc = 0 OR MM.cnc IS NULL)")
+        if mac_group:
+            tconv_clauses.append("AND MM.MacGroup = ?")
+            tconv_params.append(mac_group)
+        if search:
+            tconv_clauses.append("AND (VTD.partno LIKE ? OR ISNULL(PD.process, VTD.process) LIKE ? OR VTM.oprname LIKE ? OR VTM.macno LIKE ?)")
+            tconv_params.extend([f"%{search}%"] * 4)
+
+        tconv_sql = """
+        INSERT INTO #FilteredTouchConv (TchEntryNo, RowNo)
+        SELECT DISTINCT VTD.TchEntryNo, VTD.RowNo
+        FROM ConvProd_TouchDet VTD
+        INNER JOIN ConvProd_TouchMas VTM ON VTD.TchEntryNo = VTM.TchEntryNo
+        LEFT JOIN ProcessDet PD ON VTD.process = PD.pcode AND PD.deleted = 0
+        LEFT JOIN MacMaster MM ON VTM.macno = MM.macno AND MM.deleted = 0
+        WHERE ISNULL(VTD.deleted, 0) = 0 AND ISNULL(VTM.deleted, 0) = 0 AND ISNULL(VTD.ProdTaken, 0) = 0
+          AND VTM.proddate BETWEEN ? AND ?
+        """ + " ".join(tconv_clauses)
+        cursor.execute(tconv_sql, tconv_params)
+
+    # Build clauses and insert for ConvRodProd_TouchDet (ProdTaken = 0)
+    has_touch_rod = table_exists(cursor, "ConvRodProd_TouchDet") and table_exists(cursor, "ConvRodProd_TouchMas")
+    if has_touch_rod:
+        trod_clauses = []
+        trod_params = [from_date, to_date]
+        if machine:
+            placeholders = ",".join(["?"] * len(machine))
+            trod_clauses.append(f"AND RTM.macno IN ({placeholders})")
+            trod_params.extend(machine)
+        if shift:
+            trod_clauses.append("AND RTM.shift = ?")
+            trod_params.append(shift)
+        if operator:
+            placeholders = ",".join(["?"] * len(operator))
+            trod_clauses.append(f"AND RTM.oprname IN ({placeholders})")
+            trod_params.extend(operator)
+        if mac_type:
+            if mac_type == "CNC":
+                trod_clauses.append("AND 1 = 0")
+            elif mac_type in ("CON", "CONV"):
+                trod_clauses.append("AND (MM.cnc = 0 OR MM.cnc IS NULL)")
+        if mac_group:
+            trod_clauses.append("AND MM.MacGroup = ?")
+            trod_params.append(mac_group)
+        if search:
+            trod_clauses.append("AND (RTD.partno LIKE ? OR ISNULL(PD.process, RTD.process) LIKE ? OR RTM.oprname LIKE ? OR RTM.macno LIKE ?)")
+            trod_params.extend([f"%{search}%"] * 4)
+
+        trod_sql = """
+        INSERT INTO #FilteredTouchRod (TchEntryNo, RowNo)
+        SELECT DISTINCT RTD.TchEntryNo, RTD.RowNo
+        FROM ConvRodProd_TouchDet RTD
+        INNER JOIN ConvRodProd_TouchMas RTM ON RTD.TchEntryNo = RTM.TchEntryNo
+        LEFT JOIN ProcessDet PD ON RTD.process = PD.pcode AND PD.deleted = 0
+        LEFT JOIN MacMaster MM ON RTM.macno = MM.macno AND MM.deleted = 0
+        WHERE ISNULL(RTD.deleted, 0) = 0 AND ISNULL(RTM.deleted, 0) = 0 AND ISNULL(RTD.ProdTaken, 0) = 0
+          AND RTM.proddate BETWEEN ? AND ?
+        """ + " ".join(trod_clauses)
+        cursor.execute(trod_sql, trod_params)
+
+    return (has_touch_cnc, has_touch_conv, has_touch_rod)
+
 
 def _get_mac_filter_sql(request, cursor, table_alias=""):
     from .views_idle_time_report import _parse_machine, _parse_shift, _resolve_shift_db_name
@@ -1466,7 +2104,7 @@ def production_value_report(request):
 
         cur = conn.cursor()
         try:
-            _prepare_filtered_temp_tables(cur, request, from_date, to_date)
+            has_touch_cnc, has_touch_conv, has_touch_rod = _prepare_filtered_temp_tables(cur, request, from_date, to_date)
         except Exception as te:
             logger.error(f"production_value_report temp table prep error: {te}", exc_info=True)
             cur.close()
@@ -1502,7 +2140,46 @@ def production_value_report(request):
         except Exception as ce:
             logger.warning(f"production_value_report MhrInputs fetch warning: {ce}")
 
-        value_query = """
+        t_cnc_val = """
+            UNION ALL
+            SELECT
+                CTM.macno,
+                CTM.proddate AS entrydate,
+                CASE WHEN CTD.runto < CTD.runfrom THEN DATEDIFF(SECOND, CTD.runfrom, DATEADD(DAY, 1, CTD.runto)) ELSE DATEDIFF(SECOND, CTD.runfrom, CTD.runto) END AS RunTimeSecs,
+                CASE WHEN CTD.idlTime IS NOT NULL AND DATEDIFF(SECOND, 0, CTD.idlTime) > 0 THEN DATEDIFF(SECOND, 0, CTD.idlTime) ELSE 0 END AS IdleTimeSecs
+            FROM CncProd_TouchDet CTD
+            INNER JOIN CncProd_TouchMas CTM ON CTD.TchEntryNo = CTM.TchEntryNo
+            INNER JOIN #FilteredTouchCNC FTC ON CTD.TchEntryNo = FTC.TchEntryNo AND CTD.RowNo = FTC.RowNo
+            WHERE CTM.macno IS NOT NULL
+        """ if has_touch_cnc else ""
+
+        t_conv_val = """
+            UNION ALL
+            SELECT
+                VTM.macno,
+                VTM.proddate AS entrydate,
+                CASE WHEN VTD.runtimesecs IS NOT NULL AND VTD.runtimesecs > 0 THEN CAST(VTD.runtimesecs AS INT) WHEN VTD.runto < VTD.runfrom THEN DATEDIFF(SECOND, VTD.runfrom, DATEADD(DAY, 1, VTD.runto)) ELSE DATEDIFF(SECOND, VTD.runfrom, VTD.runto) END AS RunTimeSecs,
+                DATEDIFF(SECOND, 0, ISNULL(VTD.idlTime, '1900-01-01 00:00:00')) AS IdleTimeSecs
+            FROM ConvProd_TouchDet VTD
+            INNER JOIN ConvProd_TouchMas VTM ON VTD.TchEntryNo = VTM.TchEntryNo
+            INNER JOIN #FilteredTouchConv FTV ON VTD.TchEntryNo = FTV.TchEntryNo AND VTD.RowNo = FTV.RowNo
+            WHERE VTM.macno IS NOT NULL
+        """ if has_touch_conv else ""
+
+        t_rod_val = """
+            UNION ALL
+            SELECT
+                RTM.macno,
+                RTM.proddate AS entrydate,
+                CASE WHEN RTD.runtimesecs IS NOT NULL AND RTD.runtimesecs > 0 THEN CAST(RTD.runtimesecs AS INT) WHEN RTD.runto < RTD.runfrom THEN DATEDIFF(SECOND, RTD.runfrom, DATEADD(DAY, 1, RTD.runto)) ELSE DATEDIFF(SECOND, RTD.runfrom, RTD.runto) END AS RunTimeSecs,
+                DATEDIFF(SECOND, 0, ISNULL(RTD.idlTime, '1900-01-01 00:00:00')) AS IdleTimeSecs
+            FROM ConvRodProd_TouchDet RTD
+            INNER JOIN ConvRodProd_TouchMas RTM ON RTD.TchEntryNo = RTM.TchEntryNo
+            INNER JOIN #FilteredTouchRod FTR ON RTD.TchEntryNo = FTR.TchEntryNo AND RTD.RowNo = FTR.RowNo
+            WHERE RTM.macno IS NOT NULL
+        """ if has_touch_rod else ""
+
+        value_query = f"""
         SELECT A.macno AS MacName, ISNULL(M.RatePerHr, 0) AS RatePerHr, FORMAT(A.entrydate, 'MMM yy') AS MonthLabel,
                DATEPART(YEAR, A.entrydate) * 100 + DATEPART(MONTH, A.entrydate) AS YearMonth,
                SUM(CASE WHEN (A.RunTimeSecs - A.IdleTimeSecs) > 0 THEN (A.RunTimeSecs - A.IdleTimeSecs) ELSE 0 END) AS TotProdSeconds,
@@ -1549,6 +2226,9 @@ def production_value_report(request):
                 DATEDIFF(SECOND, 0, ISNULL(CPR.IdleTime, '1900-01-01 00:00:00')) AS IdleTimeSecs
             FROM ConvProductionEntryRod CPR 
             WHERE CPR.entryno IN (SELECT entryno FROM #FilteredCPR) AND CPR.macno IS NOT NULL AND CPR.deleted = 0
+            {t_cnc_val}
+            {t_conv_val}
+            {t_rod_val}
         ) A
         LEFT JOIN MacMaster M ON M.macno = A.macno AND M.deleted = 0
         GROUP BY A.macno, ISNULL(M.RatePerHr, 0), FORMAT(A.entrydate, 'MMM yy'), DATEPART(YEAR, A.entrydate) * 100 + DATEPART(MONTH, A.entrydate)
@@ -1917,13 +2597,157 @@ def daily_production_details(request):
 
         cur = conn.cursor()
         try:
-            _prepare_filtered_temp_tables(cur, request, from_date, to_date)
+            has_touch_cnc, has_touch_conv, has_touch_rod = _prepare_filtered_temp_tables(cur, request, from_date, to_date)
         except Exception as te:
             logger.error(f"daily_production_details temp table prep error: {te}", exc_info=True)
             cur.close()
             return Response({"status": "error", "message": str(te), "data": []}, status=500)
 
-        sql = """
+        touch_cnc_cte = """
+, TouchCNCData AS
+(
+    SELECT
+        CAST(CTD.TchEntryNo AS VARCHAR(50)) AS RefNo,
+        CTM.proddate AS ProdDate,
+        CTM.macno AS Machine,
+        CTM.shift,
+        CTM.oprname AS OperatorName,
+        CTD.partno AS PartNo,
+        COALESCE(PD.process, PD2.process, CTD.process) AS ProcessName,
+
+        CASE
+            WHEN DATEDIFF(SECOND,'1900-01-01',ISNULL(PN.cycletime, CTD.cycletime)) > 0
+            THEN CAST(
+                (
+                    CASE
+                        WHEN CTD.runto >= CTD.runfrom
+                        THEN DATEDIFF(SECOND,CTD.runfrom,CTD.runto)
+                        ELSE DATEDIFF(SECOND,CTD.runfrom,DATEADD(DAY,1,CTD.runto))
+                    END
+                )
+                /
+                NULLIF(DATEDIFF(SECOND,'1900-01-01',ISNULL(PN.cycletime, CTD.cycletime)), 0)
+            AS DECIMAL(18,0))
+            ELSE 0
+        END AS TargetQty,
+
+        ISNULL(CTD.okqty,0) AS OKQty,
+        ISNULL(CTD.OPREFF,0) AS EffPct,
+        ISNULL(CASE WHEN CTD.OAEFF IS NOT NULL AND CTD.QFNEW IS NOT NULL THEN (CTD.OAEFF * CTD.QFNEW) ELSE COALESCE(CTD.OEENEW, CTD.OAEFF, 0) END, 0) AS OEEPct,
+        CAST(
+            CASE 
+                WHEN CTD.setfrom IS NOT NULL AND CTD.setto IS NOT NULL
+                THEN 
+                    CASE 
+                        WHEN CTD.setto >= CTD.setfrom 
+                        THEN DATEDIFF(SECOND, CTD.setfrom, CTD.setto)
+                        ELSE DATEDIFF(SECOND, CTD.setfrom, DATEADD(DAY, 1, CTD.setto))
+                    END 
+                ELSE 0
+            END / 3600.0 AS DECIMAL(18,2)
+        ) AS SettingTime,
+        CAST(1.00 AS DECIMAL(18,2)) AS DefaultSettingTime
+
+    FROM CncProd_TouchDet CTD
+    INNER JOIN CncProd_TouchMas CTM ON CTD.TchEntryNo = CTM.TchEntryNo
+    INNER JOIN #FilteredTouchCNC F ON CTD.TchEntryNo = F.TchEntryNo AND CTD.RowNo = F.RowNo
+    LEFT JOIN ProgramNo PN ON CTD.prgno = PN.prgno AND CTM.macno = PN.macno AND PN.deleted = 0
+    LEFT JOIN ProcessDet PD ON CTD.process = PD.pcode AND PD.deleted = 0
+    LEFT JOIN ProcessDet PD2 ON PN.process = PD2.pcode AND PD2.deleted = 0
+)
+""" if has_touch_cnc else ""
+
+        touch_conv_cte = """
+, TouchConvData AS
+(
+    SELECT
+        CAST(VTD.TchEntryNo AS VARCHAR(50)) AS RefNo,
+        VTM.proddate AS ProdDate,
+        VTM.macno AS Machine,
+        VTM.shift,
+        VTM.oprname AS OperatorName,
+        VTD.partno AS PartNo,
+        PD.process AS ProcessName,
+
+        CAST(
+            (ISNULL(VTD.runtimesecs,0) / 3600.0)
+            * ISNULL(PT.qtyperhour,0)
+        AS DECIMAL(18,0)) AS TargetQty,
+
+        ISNULL(VTD.qty,0) AS OKQty,
+        ISNULL(VTD.EFF,0) AS EffPct,
+        ISNULL(VTD.OEENEW,0) AS OEEPct,
+        CAST(
+            CASE 
+                WHEN VTD.settimesecs IS NOT NULL AND VTD.settimesecs > 0 THEN CAST(VTD.settimesecs AS INT)
+                WHEN VTD.setfrom IS NOT NULL AND VTD.setto IS NOT NULL
+                THEN 
+                    CASE 
+                        WHEN VTD.setto >= VTD.setfrom 
+                        THEN DATEDIFF(SECOND, VTD.setfrom, VTD.setto)
+                        ELSE DATEDIFF(SECOND, VTD.setfrom, DATEADD(DAY, 1, VTD.setto))
+                    END 
+                ELSE 0
+            END / 3600.0 AS DECIMAL(18,2)
+        ) AS SettingTime,
+        CAST(1.00 AS DECIMAL(18,2)) AS DefaultSettingTime
+
+    FROM ConvProd_TouchDet VTD
+    INNER JOIN ConvProd_TouchMas VTM ON VTD.TchEntryNo = VTM.TchEntryNo
+    INNER JOIN #FilteredTouchConv F ON VTD.TchEntryNo = F.TchEntryNo AND VTD.RowNo = F.RowNo
+    LEFT JOIN ProcessDet PD ON VTD.process = PD.pcode AND PD.deleted = 0
+    LEFT JOIN ProcessTime PT ON VTD.partno = PT.partno AND VTD.process = PT.process AND VTM.macno = PT.macno AND PT.deleted = 0
+)
+""" if has_touch_conv else ""
+
+        touch_rod_cte = """
+, TouchConvRodData AS
+(
+    SELECT
+        CAST(RTD.TchEntryNo AS VARCHAR(50)) AS RefNo,
+        RTM.proddate AS ProdDate,
+        RTM.macno AS Machine,
+        RTM.shift,
+        RTM.oprname AS OperatorName,
+        RTD.partno AS PartNo,
+        PD.process AS ProcessName,
+
+        CAST(
+            (ISNULL(RTD.runtimesecs,0) / 3600.0)
+            * ISNULL(PT.qtyperhour,0)
+        AS DECIMAL(18,0)) AS TargetQty,
+
+        ISNULL(RTD.qty,0) AS OKQty,
+        ISNULL(RTD.OAEFF,0) AS EffPct,
+        ISNULL(RTD.OEENEW,0) AS OEEPct,
+        CAST(
+            CASE 
+                WHEN RTD.settimesecs IS NOT NULL AND RTD.settimesecs > 0 THEN CAST(RTD.settimesecs AS INT)
+                WHEN RTD.setfrom IS NOT NULL AND RTD.setto IS NOT NULL
+                THEN 
+                    CASE 
+                        WHEN RTD.setto >= RTD.setfrom 
+                        THEN DATEDIFF(SECOND, RTD.setfrom, RTD.setto)
+                        ELSE DATEDIFF(SECOND, RTD.setfrom, DATEADD(DAY, 1, RTD.setto))
+                    END 
+                ELSE 0
+            END / 3600.0 AS DECIMAL(18,2)
+        ) AS SettingTime,
+        CAST(1.00 AS DECIMAL(18,2)) AS DefaultSettingTime
+
+    FROM ConvRodProd_TouchDet RTD
+    INNER JOIN ConvRodProd_TouchMas RTM ON RTD.TchEntryNo = RTM.TchEntryNo
+    INNER JOIN #FilteredTouchRod F ON RTD.TchEntryNo = F.TchEntryNo AND RTD.RowNo = F.RowNo
+    LEFT JOIN ProcessDet PD ON RTD.process = PD.pcode AND PD.deleted = 0
+    LEFT JOIN ProcessTime PT ON RTD.partno = PT.partno AND RTD.process = PT.process AND RTM.macno = PT.macno AND PT.deleted = 0
+)
+""" if has_touch_rod else ""
+
+        t_cnc_details_union = "\n    UNION ALL\n    SELECT * FROM TouchCNCData" if has_touch_cnc else ""
+        t_conv_details_union = "\n    UNION ALL\n    SELECT * FROM TouchConvData" if has_touch_conv else ""
+        t_rod_details_union = "\n    UNION ALL\n    SELECT * FROM TouchConvRodData" if has_touch_rod else ""
+
+        sql = f"""
 ;WITH RejData AS
 (
     SELECT
@@ -2086,7 +2910,7 @@ ConvRodData AS
        AND PT.deleted = 0
 
     WHERE CPR.entryno IN (SELECT entryno FROM #FilteredCPR)
-),
+){touch_cnc_cte}{touch_conv_cte}{touch_rod_cte},
 
 FinalData AS
 (
@@ -2094,7 +2918,7 @@ FinalData AS
     UNION ALL
     SELECT * FROM ConvProductionData
     UNION ALL
-    SELECT * FROM ConvRodData
+    SELECT * FROM ConvRodData{t_cnc_details_union}{t_conv_details_union}{t_rod_details_union}
 )
 
 SELECT
@@ -2210,6 +3034,9 @@ def machine_card_data(request, macno):
         from .views_idle_time_report import _parse_shift, _resolve_shift_db_name
 
         cursor = conn.cursor()
+        has_touch_cnc = table_exists(cursor, "CncProd_TouchDet") and table_exists(cursor, "CncProd_TouchMas")
+        has_touch_conv = table_exists(cursor, "ConvProd_TouchDet") and table_exists(cursor, "ConvProd_TouchMas")
+        has_touch_rod = table_exists(cursor, "ConvRodProd_TouchDet") and table_exists(cursor, "ConvRodProd_TouchMas")
         shift_parsed = _parse_shift(shift_raw)
         shift = _resolve_shift_db_name(cursor, shift_parsed) if shift_parsed else None
         cursor.close()
@@ -2221,6 +3048,13 @@ def machine_card_data(request, macno):
         extra_conv_params = []
         extra_rod_params = []
 
+        touch_cnc_extra_where = ""
+        touch_conv_extra_where = ""
+        touch_rod_extra_where = ""
+        extra_touch_cnc_params = []
+        extra_touch_conv_params = []
+        extra_touch_rod_params = []
+
         if shift:
             cnc_extra_where += " AND PE.shift = ?"
             extra_cnc_params.append(shift)
@@ -2228,6 +3062,15 @@ def machine_card_data(request, macno):
             extra_conv_params.append(shift)
             rod_extra_where += " AND CR.shift = ?"
             extra_rod_params.append(shift)
+            if has_touch_cnc:
+                touch_cnc_extra_where += " AND CTM.shift = ?"
+                extra_touch_cnc_params.append(shift)
+            if has_touch_conv:
+                touch_conv_extra_where += " AND VTM.shift = ?"
+                extra_touch_conv_params.append(shift)
+            if has_touch_rod:
+                touch_rod_extra_where += " AND RTM.shift = ?"
+                extra_touch_rod_params.append(shift)
 
         ops = None
         if operator_raw:
@@ -2242,6 +3085,15 @@ def machine_card_data(request, macno):
                     extra_conv_params.extend(ops)
                     rod_extra_where += f" AND CR.oprname IN ({placeholders})"
                     extra_rod_params.extend(ops)
+                    if has_touch_cnc:
+                        touch_cnc_extra_where += f" AND CTM.oprname IN ({placeholders})"
+                        extra_touch_cnc_params.extend(ops)
+                    if has_touch_conv:
+                        touch_conv_extra_where += f" AND VTM.oprname IN ({placeholders})"
+                        extra_touch_conv_params.extend(ops)
+                    if has_touch_rod:
+                        touch_rod_extra_where += f" AND RTM.oprname IN ({placeholders})"
+                        extra_touch_rod_params.extend(ops)
 
         if search:
             search_pat = f"%{search}%"
@@ -2251,16 +3103,37 @@ def machine_card_data(request, macno):
             extra_conv_params.extend([search_pat, search_pat, search_pat])
             rod_extra_where += " AND (CR.partno LIKE ? OR CR.process LIKE ? OR CR.oprname LIKE ?)"
             extra_rod_params.extend([search_pat, search_pat, search_pat])
+            if has_touch_cnc:
+                touch_cnc_extra_where += " AND (CTD.partno LIKE ? OR CTD.process LIKE ? OR CTM.oprname LIKE ?)"
+                extra_touch_cnc_params.extend([search_pat, search_pat, search_pat])
+            if has_touch_conv:
+                touch_conv_extra_where += " AND (VTD.partno LIKE ? OR VTD.process LIKE ? OR VTM.oprname LIKE ?)"
+                extra_touch_conv_params.extend([search_pat, search_pat, search_pat])
+            if has_touch_rod:
+                touch_rod_extra_where += " AND (RTD.partno LIKE ? OR RTD.process LIKE ? OR RTM.oprname LIKE ?)"
+                extra_touch_rod_params.extend([search_pat, search_pat, search_pat])
 
         if mac_type:
             if mac_type == "CNC":
                 cnc_extra_where += " AND MM.cnc = 1"
                 conv_extra_where += " AND 1 = 0"
                 rod_extra_where += " AND 1 = 0"
+                if has_touch_cnc:
+                    touch_cnc_extra_where += " AND MM.cnc = 1"
+                if has_touch_conv:
+                    touch_conv_extra_where += " AND 1 = 0"
+                if has_touch_rod:
+                    touch_rod_extra_where += " AND 1 = 0"
             elif mac_type in ("CON", "CONV"):
                 cnc_extra_where += " AND 1 = 0"
                 conv_extra_where += " AND (MM.cnc = 0 OR MM.cnc IS NULL)"
                 rod_extra_where += " AND (MM.cnc = 0 OR MM.cnc IS NULL)"
+                if has_touch_cnc:
+                    touch_cnc_extra_where += " AND 1 = 0"
+                if has_touch_conv:
+                    touch_conv_extra_where += " AND (MM.cnc = 0 OR MM.cnc IS NULL)"
+                if has_touch_rod:
+                    touch_rod_extra_where += " AND (MM.cnc = 0 OR MM.cnc IS NULL)"
 
         if mac_group:
             cnc_extra_where += " AND MM.MacGroup = ?"
@@ -2269,6 +3142,134 @@ def machine_card_data(request, macno):
             extra_conv_params.append(mac_group)
             rod_extra_where += " AND MM.MacGroup = ?"
             extra_rod_params.append(mac_group)
+            if has_touch_cnc:
+                touch_cnc_extra_where += " AND MM.MacGroup = ?"
+                extra_touch_cnc_params.append(mac_group)
+            if has_touch_conv:
+                touch_conv_extra_where += " AND MM.MacGroup = ?"
+                extra_touch_conv_params.append(mac_group)
+            if has_touch_rod:
+                touch_rod_extra_where += " AND MM.MacGroup = ?"
+                extra_touch_rod_params.append(mac_group)
+
+        touch_cnc_cte = f"""
+        , TouchCNCEntries AS
+        (
+            SELECT
+                'CNC'                                                          AS Source,
+                CAST(CTD.TchEntryNo AS VARCHAR(50))                            AS EntryID,
+                CTM.proddate                                                   AS EntryDate,
+                CTM.shift                                                      AS Shift,
+                CTM.macno                                                      AS MacNo,
+                CTD.partno                                                     AS PartNo,
+                COALESCE(PD.process, PD2.process, CTD.process)                 AS Process,
+                CTM.oprname                                                    AS OprName,
+                CTD.runfrom                                                    AS StartTime,
+                CTD.runto                                                      AS EndTime,
+                CTD.okqty                                                      AS OkQty,
+                CAST(NULL AS INT)                                              AS RejQty,
+                CAST(NULL AS INT)                                              AS ReworkQty,
+                CASE WHEN CTD.runto < CTD.runfrom THEN DATEDIFF(SECOND, CTD.runfrom, DATEADD(DAY, 1, CTD.runto)) ELSE DATEDIFF(SECOND, CTD.runfrom, CTD.runto) END AS RunTimeSecs,
+                CASE WHEN CTD.idlTime IS NOT NULL AND DATEDIFF(SECOND, 0, CTD.idlTime) > 0 THEN DATEDIFF(SECOND, 0, CTD.idlTime) ELSE 0 END AS IdleTimeSecs,
+                28800                                                          AS ShiftTimeSecs,
+                COALESCE(CASE WHEN CTD.OAEFF IS NOT NULL AND CTD.QFNEW IS NOT NULL THEN (CTD.OAEFF * CTD.QFNEW) ELSE CTD.OEENEW END, CTD.OAEFF, 0) AS OEE,
+                CTD.OPREFF                                                     AS OperEff
+            FROM CncProd_TouchDet CTD
+            INNER JOIN CncProd_TouchMas CTM
+                ON CTD.TchEntryNo = CTM.TchEntryNo
+            LEFT JOIN LatestProgram PN
+                ON CTD.prgno = PN.prgno AND CTM.macno = PN.macno AND PN.rn = 1
+            LEFT JOIN ProcessDet PD
+                ON CTD.process = PD.pcode AND PD.deleted = 0
+            LEFT JOIN ProcessDet PD2
+                ON PN.process = PD2.pcode AND PD2.deleted = 0
+            LEFT JOIN MacMaster MM
+                ON CTM.macno = MM.macno AND MM.deleted = 0
+            WHERE ISNULL(CTD.deleted, 0) = 0
+              AND ISNULL(CTM.deleted, 0) = 0
+              AND ISNULL(CTD.ProdTaken, 0) = 0
+              AND CTM.macno = ?
+              AND CTM.proddate >= ? AND CTM.proddate < DATEADD(DAY, 1, ?) {touch_cnc_extra_where}
+        )
+        """ if has_touch_cnc else ""
+
+        touch_conv_cte = f"""
+        , TouchConvEntries AS
+        (
+            SELECT
+                'Conventional'                                                  AS Source,
+                CAST(VTD.TchEntryNo AS VARCHAR(50))                            AS EntryID,
+                VTM.proddate                                                   AS EntryDate,
+                VTM.shift                                                      AS Shift,
+                VTM.macno                                                      AS MacNo,
+                VTD.partno                                                     AS PartNo,
+                COALESCE(PD.process, VTD.process)                              AS Process,
+                VTM.oprname                                                    AS OprName,
+                VTD.runfrom                                                    AS StartTime,
+                VTD.runto                                                      AS EndTime,
+                VTD.qty                                                        AS OkQty,
+                CAST(NULL AS INT)                                              AS RejQty,
+                VTD.Rework                                                     AS ReworkQty,
+                CASE WHEN VTD.runtimesecs IS NOT NULL AND VTD.runtimesecs > 0 THEN CAST(VTD.runtimesecs AS INT) WHEN VTD.runto < VTD.runfrom THEN DATEDIFF(SECOND, VTD.runfrom, DATEADD(DAY, 1, VTD.runto)) ELSE DATEDIFF(SECOND, VTD.runfrom, VTD.runto) END AS RunTimeSecs,
+                CASE WHEN VTD.idlTime IS NOT NULL AND DATEDIFF(SECOND, 0, VTD.idlTime) > 0 THEN DATEDIFF(SECOND, 0, VTD.idlTime) ELSE 0 END AS IdleTimeSecs,
+                COALESCE(NULLIF(VTD.shifttimesecs, 0), 28800)                  AS ShiftTimeSecs,
+                COALESCE(VTD.OEENEW, VTD.OAEFF, VTD.EFF, 0)                    AS OEE,
+                VTD.EFF                                                        AS OperEff
+            FROM ConvProd_TouchDet VTD
+            INNER JOIN ConvProd_TouchMas VTM
+                ON VTD.TchEntryNo = VTM.TchEntryNo
+            LEFT JOIN ProcessDet PD
+                ON VTD.process = PD.pcode AND PD.deleted = 0
+            LEFT JOIN MacMaster MM
+                ON VTM.macno = MM.macno AND MM.deleted = 0
+            WHERE ISNULL(VTD.deleted, 0) = 0
+              AND ISNULL(VTM.deleted, 0) = 0
+              AND ISNULL(VTD.ProdTaken, 0) = 0
+              AND VTM.macno = ?
+              AND VTM.proddate >= ? AND VTM.proddate < DATEADD(DAY, 1, ?) {touch_conv_extra_where}
+        )
+        """ if has_touch_conv else ""
+
+        touch_rod_cte = f"""
+        , TouchRodEntries AS
+        (
+            SELECT
+                'Rod'                                                           AS Source,
+                CAST(RTD.TchEntryNo AS VARCHAR(50))                            AS EntryID,
+                RTM.proddate                                                   AS EntryDate,
+                RTM.shift                                                      AS Shift,
+                RTM.macno                                                      AS MacNo,
+                RTD.partno                                                     AS PartNo,
+                COALESCE(PD.process, RTD.process)                              AS Process,
+                RTM.oprname                                                    AS OprName,
+                RTD.runfrom                                                    AS StartTime,
+                RTD.runto                                                      AS EndTime,
+                RTD.qty                                                        AS OkQty,
+                RTD.ScrapQty                                                   AS RejQty,
+                CAST(NULL AS INT)                                              AS ReworkQty,
+                CASE WHEN RTD.runtimesecs IS NOT NULL AND RTD.runtimesecs > 0 THEN CAST(RTD.runtimesecs AS INT) WHEN RTD.runto < RTD.runfrom THEN DATEDIFF(SECOND, RTD.runfrom, DATEADD(DAY, 1, RTD.runto)) ELSE DATEDIFF(SECOND, RTD.runfrom, RTD.runto) END AS RunTimeSecs,
+                CASE WHEN RTD.idlTime IS NOT NULL AND DATEDIFF(SECOND, 0, RTD.idlTime) > 0 THEN DATEDIFF(SECOND, 0, RTD.idlTime) ELSE 0 END AS IdleTimeSecs,
+                COALESCE(NULLIF(RTD.shifttimesecs, 0), 28800)                  AS ShiftTimeSecs,
+                COALESCE(RTD.OEENEW, RTD.OAEFF, RTD.EFF, 0)                    AS OEE,
+                RTD.EFF                                                        AS OperEff
+            FROM ConvRodProd_TouchDet RTD
+            INNER JOIN ConvRodProd_TouchMas RTM
+                ON RTD.TchEntryNo = RTM.TchEntryNo
+            LEFT JOIN ProcessDet PD
+                ON RTD.process = PD.pcode AND PD.deleted = 0
+            LEFT JOIN MacMaster MM
+                ON RTM.macno = MM.macno AND MM.deleted = 0
+            WHERE ISNULL(RTD.deleted, 0) = 0
+              AND ISNULL(RTM.deleted, 0) = 0
+              AND ISNULL(RTD.ProdTaken, 0) = 0
+              AND RTM.macno = ?
+              AND RTM.proddate >= ? AND RTM.proddate < DATEADD(DAY, 1, ?) {touch_rod_extra_where}
+        )
+        """ if has_touch_rod else ""
+
+        touch_cnc_union = "\n            UNION ALL\n            SELECT * FROM TouchCNCEntries" if has_touch_cnc else ""
+        touch_conv_union = "\n            UNION ALL\n            SELECT * FROM TouchConvEntries" if has_touch_conv else ""
+        touch_rod_union = "\n            UNION ALL\n            SELECT * FROM TouchRodEntries" if has_touch_rod else ""
 
         query = f"""
         WITH LatestProgram AS
@@ -2365,14 +3366,14 @@ def machine_card_data(request, macno):
             WHERE CR.deleted = 0
               AND CR.macno = ?
               AND CR.entrydate >= ? AND CR.entrydate < DATEADD(DAY, 1, ?) {rod_extra_where}
-        ),
+        ){touch_cnc_cte}{touch_conv_cte}{touch_rod_cte},
         AllEntries AS
         (
             SELECT * FROM CNCEntries
             UNION ALL
             SELECT * FROM ConvEntries
             UNION ALL
-            SELECT * FROM RodEntries
+            SELECT * FROM RodEntries{touch_cnc_union}{touch_conv_union}{touch_rod_union}
         )
         SELECT
             ROUND(AVG(CAST(OEE     AS FLOAT)) OVER (), 2)          AS Card_OEE_Pct,
@@ -2407,7 +3408,17 @@ def machine_card_data(request, macno):
 
         cursor = conn.cursor()
         try:
-            params = [macno, from_date, to_date] + extra_cnc_params + [macno, from_date, to_date] + extra_conv_params + [macno, from_date, to_date] + extra_rod_params
+            params = (
+                [macno, from_date, to_date] + extra_cnc_params +
+                [macno, from_date, to_date] + extra_conv_params +
+                [macno, from_date, to_date] + extra_rod_params
+            )
+            if has_touch_cnc:
+                params.extend([macno, from_date, to_date] + extra_touch_cnc_params)
+            if has_touch_conv:
+                params.extend([macno, from_date, to_date] + extra_touch_conv_params)
+            if has_touch_rod:
+                params.extend([macno, from_date, to_date] + extra_touch_rod_params)
             cursor.execute(query, params)
             rows = cursor.fetchall()
             if rows:
@@ -2468,15 +3479,58 @@ def machine_card_data(request, macno):
                             ops = [x.strip() for x in op_val.split(",") if x.strip()]
                             if ops:
                                 placeholders = ",".join(["?"] * len(ops))
-                                mac_idle_where.append(f"""
-                                    LTRIM(RTRIM(CAST(A.MacNo AS NVARCHAR(512)))) IN (
+                                op_subqueries = [
+                                    f"""
                                         SELECT DISTINCT LTRIM(RTRIM(CAST(macno AS NVARCHAR(512))))
                                         FROM ProductionEntry
                                         WHERE proddate >= ? AND proddate < DATEADD(DAY, 1, ?) AND deleted = 0
                                           AND LTRIM(RTRIM(CAST(oprname AS NVARCHAR(512)))) IN ({placeholders})
+                                    """,
+                                    f"""
+                                        SELECT DISTINCT LTRIM(RTRIM(CAST(macno AS NVARCHAR(512))))
+                                        FROM ConvProductionEntry
+                                        WHERE entrydate >= ? AND entrydate < DATEADD(DAY, 1, ?) AND deleted = 0
+                                          AND LTRIM(RTRIM(CAST(oprname AS NVARCHAR(512)))) IN ({placeholders})
+                                    """,
+                                    f"""
+                                        SELECT DISTINCT LTRIM(RTRIM(CAST(macno AS NVARCHAR(512))))
+                                        FROM ConvProductionEntryRod
+                                        WHERE entrydate >= ? AND entrydate < DATEADD(DAY, 1, ?) AND deleted = 0
+                                          AND LTRIM(RTRIM(CAST(oprname AS NVARCHAR(512)))) IN ({placeholders})
+                                    """
+                                ]
+                                op_sub_params = [from_date, to_date] + ops + [from_date, to_date] + ops + [from_date, to_date] + ops
+                                if has_touch_cnc:
+                                    op_subqueries.append(f"""
+                                        SELECT DISTINCT LTRIM(RTRIM(CAST(macno AS NVARCHAR(512))))
+                                        FROM CncProd_TouchMas
+                                        WHERE proddate >= ? AND proddate < DATEADD(DAY, 1, ?) AND deleted = 0
+                                          AND LTRIM(RTRIM(CAST(oprname AS NVARCHAR(512)))) IN ({placeholders})
+                                    """)
+                                    op_sub_params.extend([from_date, to_date] + ops)
+                                if has_touch_conv:
+                                    op_subqueries.append(f"""
+                                        SELECT DISTINCT LTRIM(RTRIM(CAST(macno AS NVARCHAR(512))))
+                                        FROM ConvProd_TouchMas
+                                        WHERE proddate >= ? AND proddate < DATEADD(DAY, 1, ?) AND deleted = 0
+                                          AND LTRIM(RTRIM(CAST(oprname AS NVARCHAR(512)))) IN ({placeholders})
+                                    """)
+                                    op_sub_params.extend([from_date, to_date] + ops)
+                                if has_touch_rod:
+                                    op_subqueries.append(f"""
+                                        SELECT DISTINCT LTRIM(RTRIM(CAST(macno AS NVARCHAR(512))))
+                                        FROM ConvRodProd_TouchMas
+                                        WHERE proddate >= ? AND proddate < DATEADD(DAY, 1, ?) AND deleted = 0
+                                          AND LTRIM(RTRIM(CAST(oprname AS NVARCHAR(512)))) IN ({placeholders})
+                                    """)
+                                    op_sub_params.extend([from_date, to_date] + ops)
+
+                                mac_idle_where.append(f"""
+                                    LTRIM(RTRIM(CAST(A.MacNo AS NVARCHAR(512)))) IN (
+                                        {" UNION ".join(op_subqueries)}
                                     )
                                 """)
-                                mac_idle_params.extend([from_date, to_date] + ops)
+                                mac_idle_params.extend(op_sub_params)
 
                     if mac_type:
                         if mac_type == "CNC":
@@ -2615,14 +3669,23 @@ def production_analysis_filters(request):
         # 2. Fetch Operators
         operators = []
         try:
-            op_sql = """
+            touch_ops = []
+            if table_exists(cursor, "CncProd_TouchMas"):
+                touch_ops.append("SELECT oprname FROM CncProd_TouchMas WHERE deleted = 0 AND oprname IS NOT NULL AND LTRIM(RTRIM(oprname)) <> ''")
+            if table_exists(cursor, "ConvProd_TouchMas"):
+                touch_ops.append("SELECT oprname FROM ConvProd_TouchMas WHERE deleted = 0 AND oprname IS NOT NULL AND LTRIM(RTRIM(oprname)) <> ''")
+            if table_exists(cursor, "ConvRodProd_TouchMas"):
+                touch_ops.append("SELECT oprname FROM ConvRodProd_TouchMas WHERE deleted = 0 AND oprname IS NOT NULL AND LTRIM(RTRIM(oprname)) <> ''")
+            touch_ops_sql = ("\n                UNION\n                " + "\n                UNION\n                ".join(touch_ops)) if touch_ops else ""
+
+            op_sql = f"""
             SELECT DISTINCT LTRIM(RTRIM(oprname)) AS OperatorName
             FROM (
                 SELECT oprname FROM ProductionEntry WHERE deleted = 0 AND oprname IS NOT NULL AND LTRIM(RTRIM(oprname)) <> ''
                 UNION
                 SELECT oprname FROM ConvProductionEntry WHERE deleted = 0 AND oprname IS NOT NULL AND LTRIM(RTRIM(oprname)) <> ''
                 UNION
-                SELECT oprname FROM ConvProductionEntryRod WHERE deleted = 0 AND oprname IS NOT NULL AND LTRIM(RTRIM(oprname)) <> ''
+                SELECT oprname FROM ConvProductionEntryRod WHERE deleted = 0 AND oprname IS NOT NULL AND LTRIM(RTRIM(oprname)) <> ''{touch_ops_sql}
             ) A
             ORDER BY OperatorName
             """
@@ -2657,14 +3720,23 @@ def production_analysis_filters(request):
                             "label": ui_label
                         })
             else:
-                shift_sql = """
+                touch_shifts = []
+                if table_exists(cursor, "CncProd_TouchMas"):
+                    touch_shifts.append("SELECT shift FROM CncProd_TouchMas WHERE deleted = 0 AND shift IS NOT NULL AND LTRIM(RTRIM(shift)) <> ''")
+                if table_exists(cursor, "ConvProd_TouchMas"):
+                    touch_shifts.append("SELECT shift FROM ConvProd_TouchMas WHERE deleted = 0 AND shift IS NOT NULL AND LTRIM(RTRIM(shift)) <> ''")
+                if table_exists(cursor, "ConvRodProd_TouchMas"):
+                    touch_shifts.append("SELECT shift FROM ConvRodProd_TouchMas WHERE deleted = 0 AND shift IS NOT NULL AND LTRIM(RTRIM(shift)) <> ''")
+                touch_shifts_sql = ("\n                    UNION\n                    " + "\n                    UNION\n                    ".join(touch_shifts)) if touch_shifts else ""
+
+                shift_sql = f"""
                 SELECT DISTINCT LTRIM(RTRIM(shift))
                 FROM (
                     SELECT shift FROM ProductionEntry WHERE deleted = 0 AND shift IS NOT NULL AND LTRIM(RTRIM(shift)) <> ''
                     UNION
                     SELECT shift FROM ConvProductionEntry WHERE deleted = 0 AND shift IS NOT NULL AND LTRIM(RTRIM(shift)) <> ''
                     UNION
-                    SELECT shift FROM ConvProductionEntryRod WHERE deleted = 0 AND shift IS NOT NULL AND LTRIM(RTRIM(shift)) <> ''
+                    SELECT shift FROM ConvProductionEntryRod WHERE deleted = 0 AND shift IS NOT NULL AND LTRIM(RTRIM(shift)) <> ''{touch_shifts_sql}
                 ) A
                 """
                 cursor.execute(shift_sql)

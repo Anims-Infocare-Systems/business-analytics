@@ -2577,7 +2577,14 @@ SELECT
     MAX(ISNULL(PD.Description, N'')) AS Description,
     UC.ComboDate AS PlanDate,
     SUM(ISNULL(P.PlanQty,0)) AS PlanQty,
-    COALESCE(NULLIF(SUM(ISNULL(P.AvailableQty,0)), 0), MAX(ISNULL(RCS.FinalInspQty, 0) + ISNULL(PCS.FinalInspQty, 0)), 0) AS AvailableQty,
+    CASE
+        WHEN MAX(P.CID) IS NOT NULL 
+             AND MAX(D.InvNo) IS NOT NULL 
+             AND LTRIM(RTRIM(MAX(D.InvNo))) NOT IN ('', '-', '—')
+            THEN SUM(ISNULL(P.AvailableQty, 0))
+        ELSE
+            ISNULL(MAX(ISNULL(RCS.FinalInspQty, 0) + ISNULL(PCS.FinalInspQty, 0)), 0)
+    END AS AvailableQty,
     SUM(ISNULL(P.PlanReqQty,0)) AS PlanReqQty,
     SUM(ISNULL(D.DispatchQty,0)) AS DispatchQty,
 
@@ -2597,7 +2604,8 @@ SELECT
     END AS DispatchStatus,
     MAX(D.InvNo) AS InvNo,
     MAX(D.InvDate) AS InvDate,
-    SUM(ISNULL(D.InvValue, 0)) AS InvValue
+    SUM(ISNULL(D.InvValue, 0)) AS InvValue,
+    MAX(P.PlanDate) AS DespatchPlanDate
 
 FROM UNIQUE_COMBINATIONS UC
 
@@ -2658,9 +2666,12 @@ ORDER BY
             inv_no = str(row[11]) if row[11] else "—"
             inv_date = str(row[12]) if row[12] else "—"
             inv_value = float(row[13] or 0)
+            despatch_plan_date = str(row[14])[:10] if (len(row) > 14 and row[14]) else ""
 
             rows.append({
                 "date": plan_date,
+                "planDate": despatch_plan_date or plan_date,
+                "despatchPlanDate": despatch_plan_date,
                 "customer": customer,
                 "partNoDesc": part_no_desc,
                 "partNo": part_no,
@@ -2718,49 +2729,38 @@ def sales_analysis_po_ledger(request):
         search_sql, search_params = _build_search_sql(cursor, search_q, "In_PoDet", "PD")
 
         sql = f"""
-        WITH DC_SUMMARY AS (
+        WITH DC_TOTALS AS (
             SELECT 
                 Apono, partno, poslno,
-                SUM(dcQty) AS dcQty,
-                STRING_AGG(CAST(dcno AS NVARCHAR(MAX)), ', ') WITHIN GROUP (ORDER BY dcno) AS dcNo,
-                STRING_AGG(CAST(ISNULL(CONVERT(VARCHAR(10), CAST(dcDate AS DATE), 23), '') AS NVARCHAR(MAX)), ', ') WITHIN GROUP (ORDER BY dcno) AS dcDate
+                SUM(okqty) AS TotalDcQty
             FROM (
-                SELECT 
-                    d.Apono, d.partno, d.poslno, d.dcno, m.dcdate AS dcDate,
-                    SUM(ISNULL(d.okqty, 0)) AS dcQty
-                FROM (
-                    SELECT Apono, partno, poslno, dcno, okqty FROM DcInSubDet WHERE deleted = 0
-                    UNION ALL
-                    SELECT Apono, partno, poslno, dcno, okqty FROM DcInSubDetAssmPoDet WHERE deleted = 0
-                ) d
-                INNER JOIN DC_Mas m ON d.dcno = m.dcno
-                WHERE m.deleted = 0
-                GROUP BY d.Apono, d.partno, d.poslno, d.dcno, m.dcdate
-            ) dist_dc
+                SELECT Apono, partno, poslno, dcno, okqty FROM DcInSubDet WHERE deleted = 0
+                UNION ALL
+                SELECT Apono, partno, poslno, dcno, okqty FROM DcInSubDetAssmPoDet WHERE deleted = 0
+            ) d_all
             GROUP BY Apono, partno, poslno
         ),
-        BILL_SUMMARY AS (
-            SELECT Apono, partno, poslno,
-                STRING_AGG(CAST(bm_invno AS NVARCHAR(MAX)), ', ') WITHIN GROUP (ORDER BY invdt, invno) AS InvNo,
-                STRING_AGG(CAST(ISNULL(CONVERT(VARCHAR(10), CAST(invdt AS DATE), 23), '') AS NVARCHAR(MAX)), ', ') WITHIN GROUP (ORDER BY invdt, invno) AS InvDate,
-                STRING_AGG(CAST(InvDetail AS NVARCHAR(MAX)), ', ') WITHIN GROUP (ORDER BY invdt, invno) AS InvDetails
+        DC_BILL_DET AS (
+            SELECT 
+                d.Apono,
+                d.partno,
+                d.poslno,
+                d.dcno,
+                CAST(m.dcdate AS DATE) AS dcDate,
+                SUM(ISNULL(d.okqty, 0)) AS dcQty,
+                MAX(bm.invno) AS InvNo,
+                CAST(MAX(bm.invdt) AS DATE) AS InvDate,
+                MAX(CAST(bm.invno AS NVARCHAR(MAX)) + 
+                    CASE WHEN bm.invdt IS NOT NULL THEN ' (' + CONVERT(VARCHAR(10), CAST(bm.invdt AS DATE), 103) + ')' ELSE '' END) AS InvDetails
             FROM (
-                SELECT DISTINCT 
-                    d.Apono, d.partno, d.poslno,
-                    bm.invno, bm.invdt,
-                    bm.invno AS bm_invno,
-                    CAST(bm.invno AS NVARCHAR(MAX)) + 
-                    CASE WHEN bm.invdt IS NOT NULL THEN ' (' + CONVERT(VARCHAR(10), CAST(bm.invdt AS DATE), 103) + ')' ELSE '' END AS InvDetail
-                FROM (
-                    SELECT Apono, partno, poslno, dcno FROM DcInSubDet WHERE deleted = 0
-                    UNION ALL
-                    SELECT Apono, partno, poslno, dcno FROM DcInSubDetAssmPoDet WHERE deleted = 0
-                ) d
-                INNER JOIN Bill_DcOrdDet bdo ON d.dcno = bdo.dcno
-                INNER JOIN Bill_Mas bm ON bdo.invno = bm.invno
-                WHERE bdo.deleted = 0 AND bm.deleted = 0 {btype_sql}
-            ) dist_inv
-            GROUP BY Apono, partno, poslno
+                SELECT Apono, partno, poslno, dcno, okqty FROM DcInSubDet WHERE deleted = 0
+                UNION ALL
+                SELECT Apono, partno, poslno, dcno, okqty FROM DcInSubDetAssmPoDet WHERE deleted = 0
+            ) d
+            INNER JOIN DC_Mas m ON d.dcno = m.dcno AND m.deleted = 0
+            LEFT JOIN Bill_DcOrdDet bdo ON d.dcno = bdo.dcno AND bdo.deleted = 0
+            LEFT JOIN Bill_Mas bm ON bdo.invno = bm.invno AND bm.deleted = 0 {btype_sql}
+            GROUP BY d.Apono, d.partno, d.poslno, d.dcno, CAST(m.dcdate AS DATE)
         )
         SELECT 
             PM.type AS POType,
@@ -2775,23 +2775,24 @@ def sales_analysis_po_ledger(request):
             ISNULL(PD.PoShotCloseQty, 0) AS ShortCloseQty,
             ISNULL(PD.rate, 0) AS Rate,
             ISNULL(D.dcQty, 0) AS DcQty,
-            D.dcNo,
-            D.dcDate AS DcDate,
-            B.InvNo,
-            B.InvDate,
-            B.InvDetails AS InvNoDt,
+            ISNULL(D.dcno, '') AS DcNo,
+            ISNULL(CONVERT(VARCHAR(10), D.dcDate, 23), '') AS DcDate,
+            ISNULL(D.InvNo, '') AS InvNo,
+            ISNULL(CONVERT(VARCHAR(10), D.InvDate, 23), '') AS InvDate,
+            ISNULL(D.InvDetails, '') AS InvNoDt,
             ISNULL(PD.ShotClsReason, '') AS ShotCloseReason,
             ISNULL(PD.amt, 0) AS Amt,
-            CASE WHEN ISNULL(PD.CurrRate, 0) = 0 THEN 1 ELSE PD.CurrRate END AS CurrRate
+            CASE WHEN ISNULL(PD.CurrRate, 0) = 0 THEN 1 ELSE PD.CurrRate END AS CurrRate,
+            ISNULL(DT.TotalDcQty, 0) AS TotalDcQty
         FROM In_PoMas PM
-        INNER JOIN In_PoDet PD ON PM.PONO = PD.PONO
+        INNER JOIN In_PoDet PD ON PM.Apono = PD.Apono
         {cust_join}
-        LEFT JOIN DC_SUMMARY D ON D.Apono = PM.Apono AND D.partno = PD.itcode AND D.poslno = PD.poslno
-        LEFT JOIN BILL_SUMMARY B ON B.Apono = PM.Apono AND B.partno = PD.itcode AND B.poslno = PD.poslno
+        LEFT JOIN DC_TOTALS DT ON DT.Apono = PM.Apono AND DT.partno = PD.itcode AND DT.poslno = PD.poslno
+        LEFT JOIN DC_BILL_DET D ON D.Apono = PM.Apono AND D.partno = PD.itcode AND D.poslno = PD.poslno
         WHERE PM.Deleted = 0 AND PD.Deleted = 0
           AND CAST(PM.podt AS DATE) BETWEEN ? AND ?
           {search_sql}
-        ORDER BY PM.podt DESC, PM.Apono;
+        ORDER BY PM.podt DESC, PM.Apono, PD.itcode, D.dcDate, D.dcno;
         """
 
         cursor.execute(sql, [start_date, end_date] + list(btype_p) + search_params)
@@ -2820,6 +2821,7 @@ def sales_analysis_po_ledger(request):
             curr_rate = float(row[19] or 1) if len(row) > 19 and row[19] is not None else 1
             if curr_rate == 0:
                 curr_rate = 1
+            total_dc_qty = float(row[20] or 0) if len(row) > 20 else dc_qty
 
             rows.append({
                 "type": po_type,
@@ -2828,6 +2830,8 @@ def sales_analysis_po_ledger(request):
                 "poDate": po_date,
                 "custName": customer_name,
                 "partDesc": part_desc,
+                "partNo": part_no,
+                "description": description,
                 "poSlNo": po_sl_no,
                 "qty": qty,
                 "shortCloseQty": short_close_qty,
@@ -2838,6 +2842,7 @@ def sales_analysis_po_ledger(request):
                 "dcNo": dc_no,
                 "dcDate": dc_date,
                 "dcQty": dc_qty,
+                "totalDcQty": total_dc_qty,
                 "invNo": inv_no,
                 "invDate": inv_date,
                 "invNoDt": inv_no_dt
@@ -2890,91 +2895,116 @@ def sales_analysis_traceability(request):
             extra_params.append(f"%{inv_q}%")
 
         sql = f"""
+    WITH GRN_DET AS (
+        SELECT 
+            dcno, partno,
+            STRING_AGG(grn_val, ', ') AS grnNos
+        FROM (
+            SELECT DISTINCT 
+                dcno, 
+                partno,
+                COALESCE(
+                    NULLIF(LTRIM(RTRIM(grnno)), ''),
+                    NULLIF(LTRIM(RTRIM(Apono)), '')
+                ) AS grn_val
+            FROM DcInSubDet
+            WHERE deleted = 0 
+              AND (LTRIM(RTRIM(ISNULL(grnno, ''))) <> '' OR LTRIM(RTRIM(ISNULL(Apono, ''))) <> '')
+        ) G
+        GROUP BY dcno, partno
+    ),
+    PO_DET AS (
+        SELECT dcno, partno, STRING_AGG(pono, ', ') AS poNos
+        FROM (
+            SELECT DISTINCT dcno, partno, NULLIF(LTRIM(RTRIM(pono)), '') AS pono
+            FROM DcInSubDetAssmPoDet
+            WHERE deleted = 0 AND LTRIM(RTRIM(pono)) <> ''
+        ) P
+        GROUP BY dcno, partno
+    ),
+    RC_DET AS (
+        SELECT dcno, PartNo, STRING_AGG(RouCardNo, ', ') AS routeCards
+        FROM (
+            SELECT DISTINCT dcno, PartNo, NULLIF(LTRIM(RTRIM(RouCardNo)), '') AS RouCardNo
+            FROM Dc_RouCardDet
+            WHERE deleted = 0 AND LTRIM(RTRIM(RouCardNo)) <> ''
+        ) R
+        GROUP BY dcno, PartNo
+    )
     SELECT
-        COALESCE(CA.CName, CM.CName) AS [Customer Name],
-        COALESCE(DCD.PartNoDesc, BD_AGG.PartNoDesc, N'—') AS [PartNo - Description],
+        COALESCE(CA.CName, CM.CName, N'—') AS [Customer Name],
+        COALESCE(DD.partno, BD.itcode, N'—') AS [PartNo],
+        COALESCE(DD.description, BD.itdesc, N'—') AS [Description],
         BM.invno AS [Invoice No],
         BM.invdt AS [Invoice Date],
+        COALESCE(NULLIF(BD.qty, 0), NULLIF(DD.okqty, 0), NULLIF(ISNULL(DD.matrej, 0) + ISNULL(DD.macrej, 0), 0), 0) AS [InvQty],
         BDO.dcno AS [DC No],
         BDO.dcdt AS [DC Date],
-        CASE
-            WHEN BM.btype = 'Labour'
-                THEN DAP.PONos
-            ELSE
-                DIS.APONos
-        END AS [GRN/PO No],
-        RC.RouteCards AS [Route Card No]
+        CASE 
+            WHEN DD.dcno IS NOT NULL 
+                THEN ISNULL(DD.okqty, 0) + ISNULL(DD.matrej, 0) + ISNULL(DD.macrej, 0)
+            ELSE ISNULL(BD.qty, 0)
+        END AS [DcQty],
+        COALESCE(NULLIF(GD.grnNos, ''), NULLIF(PD.poNos, ''), N'—') AS [GRN/PO No],
+        COALESCE(RD.routeCards, N'—') AS [Route Card No]
     FROM Bill_Mas BM
-    LEFT JOIN CustAliasMast CA
-        ON BM.cid = CA.Id
-       AND CA.Deleted = 0
-    LEFT JOIN CustMast CM
-        ON BM.cid = CM.Id
-       AND CM.Deleted = 0
-    INNER JOIN Bill_DcOrdDet BDO
-        ON BM.invno = BDO.invno
-       AND BDO.deleted = 0
-    LEFT JOIN (
-        SELECT dcno, 
-               STRING_AGG(
-                   NULLIF(
-                       LTRIM(RTRIM(partno)) + 
-                       CASE WHEN NULLIF(LTRIM(RTRIM(description)), '') IS NOT NULL 
-                            THEN ' - ' + LTRIM(RTRIM(description)) 
-                            ELSE '' 
-                       END, 
-                   ''), 
-               ', ') AS PartNoDesc
-        FROM DC_Det 
-        WHERE deleted = 0 
-        GROUP BY dcno
-    ) DCD ON BDO.dcno = DCD.dcno
-    LEFT JOIN (
-        SELECT invno,
-               STRING_AGG(
-                   NULLIF(
-                       LTRIM(RTRIM(itcode)) + 
-                       CASE WHEN NULLIF(LTRIM(RTRIM(itdesc)), '') IS NOT NULL 
-                            THEN ' - ' + LTRIM(RTRIM(itdesc)) 
-                            ELSE '' 
-                       END, 
-                   ''), 
-               ', ') AS PartNoDesc
-        FROM Bill_Det
-        WHERE deleted = 0
-        GROUP BY invno
-    ) BD_AGG ON BM.invno = BD_AGG.invno
-    LEFT JOIN (
-        SELECT dcno, STRING_AGG(NULLIF(LTRIM(RTRIM(Apono)), ''), ', ') AS APONos
-        FROM DcInSubDet WHERE deleted = 0 GROUP BY dcno
-    ) DIS ON BDO.dcno = DIS.dcno
-    LEFT JOIN (
-        SELECT dcno, STRING_AGG(NULLIF(LTRIM(RTRIM(pono)), ''), ', ') AS PONos
-        FROM DcInSubDetAssmPoDet WHERE deleted = 0 GROUP BY dcno
-    ) DAP ON BDO.dcno = DAP.dcno
-    LEFT JOIN (
-        SELECT dcno, STRING_AGG(NULLIF(LTRIM(RTRIM(RouCardNo)), ''), ', ') AS RouteCards
-        FROM Dc_RouCardDet WHERE deleted = 0 GROUP BY dcno
-    ) RC ON BDO.dcno = RC.dcno
+    LEFT JOIN CustAliasMast CA ON BM.cid = CA.Id AND CA.Deleted = 0
+    LEFT JOIN CustMast CM ON BM.cid = CM.Id AND CM.Deleted = 0
+    INNER JOIN Bill_DcOrdDet BDO ON BM.invno = BDO.invno AND BDO.deleted = 0
+    LEFT JOIN DC_Det DD ON BDO.dcno = DD.dcno AND DD.deleted = 0
+    LEFT JOIN Bill_Det BD ON BM.invno = BD.invno AND BD.deleted = 0
+        AND (
+            DD.dcno IS NULL 
+            OR LTRIM(RTRIM(BD.itcode)) = LTRIM(RTRIM(DD.partno))
+            OR LTRIM(RTRIM(BD.itcode)) = LTRIM(RTRIM(DD.PrintPartNO))
+            OR LTRIM(RTRIM(DD.partno)) LIKE LTRIM(RTRIM(BD.itcode)) + '%'
+            OR LTRIM(RTRIM(BD.itcode)) LIKE LTRIM(RTRIM(DD.partno)) + '%'
+            OR (SUBSTRING(LTRIM(RTRIM(DD.partno)), 2, 4) = SUBSTRING(LTRIM(RTRIM(BD.itcode)), 2, 4) AND (DD.matrej = BD.qty OR DD.okqty = BD.qty))
+            OR (SELECT COUNT(*) FROM DC_Det d1 WHERE d1.dcno = BDO.dcno AND d1.deleted = 0) = 1
+        )
+    LEFT JOIN GRN_DET GD ON BDO.dcno = GD.dcno AND (
+        LTRIM(RTRIM(GD.partno)) = LTRIM(RTRIM(COALESCE(DD.partno, BD.itcode)))
+        OR LTRIM(RTRIM(GD.partno)) = LTRIM(RTRIM(DD.PrintPartNO))
+        OR (SELECT COUNT(*) FROM DcInSubDet dis1 WHERE dis1.dcno = BDO.dcno AND dis1.deleted = 0) = 1
+    )
+    LEFT JOIN PO_DET PD ON BDO.dcno = PD.dcno AND (
+        LTRIM(RTRIM(PD.partno)) = LTRIM(RTRIM(COALESCE(DD.partno, BD.itcode)))
+        OR (SELECT COUNT(*) FROM DcInSubDetAssmPoDet dap1 WHERE dap1.dcno = BDO.dcno AND dap1.deleted = 0) = 1
+    )
+    LEFT JOIN RC_DET RD ON BDO.dcno = RD.dcno AND (
+        LTRIM(RTRIM(RD.PartNo)) = LTRIM(RTRIM(COALESCE(DD.partno, BD.itcode)))
+        OR (SELECT COUNT(*) FROM Dc_RouCardDet rc1 WHERE rc1.dcno = BDO.dcno AND rc1.deleted = 0) = 1
+    )
     WHERE BM.deleted = 0
       AND CAST(BM.invdt AS DATE) BETWEEN ? AND ?
       {btype_sql}
       {search_sql}
       {extra_filter_sql}
-    ORDER BY BM.invdt DESC, BM.invno DESC, BDO.dcno;
+    ORDER BY BM.invdt DESC, BM.invno DESC, BDO.dcno, DD.partno;
     """
 
         all_params = [start_date, end_date] + list(btype_p) + search_params + extra_params
         cursor.execute(sql, all_params)
         for row in cursor.fetchall() or []:
             customer = str(row[0]) if row[0] else "—"
-            part_no_desc = str(row[1]) if row[1] else "—"
-            inv_no = str(row[2]) if row[2] else ""
-            inv_date = str(row[3])[:10] if row[3] else ""
-            dc_no = str(row[4]) if row[4] else ""
-            dc_date = str(row[5])[:10] if row[5] else ""
-            grn_po = str(row[6]) if row[6] else "—"
-            rc_no = str(row[7]) if row[7] else "—"
+            part_no = str(row[1]).strip() if row[1] else ""
+            description = str(row[2]).strip() if row[2] else ""
+            if part_no and description and description != "—" and part_no != "—":
+                part_no_desc = f"{part_no} - {description}"
+            elif part_no and part_no != "—":
+                part_no_desc = part_no
+            elif description and description != "—":
+                part_no_desc = description
+            else:
+                part_no_desc = "—"
+            inv_no = str(row[3]) if row[3] else ""
+            inv_date = str(row[4])[:10] if row[4] else ""
+            inv_qty = float(row[5] or 0)
+            dc_no = str(row[6]) if row[6] else ""
+            dc_date = str(row[7])[:10] if row[7] else ""
+            dc_qty = float(row[8] or 0)
+            grn_po = str(row[9]) if row[9] else "—"
+            rc_no = str(row[10]) if row[10] else "—"
 
             if rc_q and rc_q.lower() not in rc_no.lower():
                 continue
@@ -2983,11 +3013,15 @@ def sales_analysis_traceability(request):
 
             rows.append({
                 "customer": customer,
+                "partNo": part_no,
+                "description": description,
                 "partNoDesc": part_no_desc,
                 "invNo": inv_no,
                 "invDate": inv_date,
+                "invQty": inv_qty,
                 "dcNo": dc_no,
                 "dcDate": dc_date,
+                "dcQty": dc_qty,
                 "grnPo": grn_po,
                 "rcNo": rc_no
             })

@@ -482,6 +482,59 @@ def fetch_vendor_rate_masters(request=None, from_date="2026-08-01", to_date="202
         except Exception as e:
             print("[M-APPROVAL] Warning batch fetching TenantApprovals:", e)
 
+        # Batch fetch VenRate_MastRev for all vendor rate cards
+        revisions_map = {}
+        try:
+            all_parts = list({str(dict(zip(columns, rt)).get("PartNo") or "").strip() for rt in raw_rows if rt})
+            all_parts = [p for p in all_parts if p]
+            if all_parts:
+                part_placeholders = ",".join(["?"] * len(all_parts))
+                batch_rev_query = f"""
+                    SELECT LTRIM(RTRIM(cid)), LTRIM(RTRIM(PartNo)), Rate, RevNo, RevDate, EffDate, remarks, rowno
+                    FROM VenRate_MastRev
+                    WHERE LTRIM(RTRIM(PartNo)) IN ({part_placeholders}) AND ISNULL(deleted, 0) = 0
+                    ORDER BY RevDate DESC, rowno DESC
+                """
+                batch_rev_rows = []
+                if request:
+                    try:
+                        conn, _ = get_tenant_connection(request)
+                        cursor = conn.cursor()
+                        cursor.execute(batch_rev_query, all_parts)
+                        batch_rev_rows = cursor.fetchall()
+                        cursor.close()
+                        conn.close()
+                    except Exception as b_ex:
+                        print("[M-APPROVAL] Tenant batch fetch VenRate_MastRev warning:", b_ex)
+
+                if not batch_rev_rows:
+                    try:
+                        with connection.cursor() as cursor:
+                            local_batch_query = batch_rev_query.replace('?', '%s')
+                            cursor.execute(local_batch_query, all_parts)
+                            batch_rev_rows = cursor.fetchall()
+                    except Exception as fb_ex:
+                        pass
+
+                for br_row in batch_rev_rows:
+                    b_cid = str(br_row[0] or "").strip()
+                    b_part = str(br_row[1] or "").strip()
+                    rev_dt = br_row[4]
+                    rev_dt_str = rev_dt.strftime("%d/%m/%Y") if hasattr(rev_dt, "strftime") else str(rev_dt or "")
+                    rev_eff = br_row[5]
+                    rev_eff_str = rev_eff.strftime("%d/%m/%Y") if hasattr(rev_eff, "strftime") else str(rev_eff or "")
+                    rev_item = {
+                        "rate": float(br_row[2] or 0.0),
+                        "revNo": str(br_row[3] or ""),
+                        "revDate": rev_dt_str,
+                        "effFrom": rev_eff_str,
+                        "remarks": str(br_row[6] or "")
+                    }
+                    revisions_map.setdefault((b_cid, b_part), []).append(rev_item)
+                    revisions_map.setdefault(b_part, []).append(rev_item)
+        except Exception as ex:
+            print("[M-APPROVAL] Warning batch fetching VenRate_MastRev:", ex)
+
         cards = []
         for row_tuple in raw_rows:
             r = dict(zip(columns, row_tuple))
@@ -516,14 +569,17 @@ def fetch_vendor_rate_masters(request=None, from_date="2026-08-01", to_date="202
                 if not appr_by_str:
                     appr_by_str = "Manager"
 
-            # Query revision details (Detail Modal only)
-            revisions = []
-            if single_rowno:
+            # Query revision details
+            cid_str = str(r.get("cid") or "").strip()
+            part_str = part_no.strip()
+            revisions = list(revisions_map.get((cid_str, part_str)) or revisions_map.get(part_str) or [])
+
+            if not revisions and single_rowno:
                 try:
                     rev_query = """
                         SELECT Rate, RevNo, RevDate, EffDate, remarks
                         FROM VenRate_MastRev
-                        WHERE cid = ? AND PartNo = ? AND ISNULL(deleted, 0) = 0
+                        WHERE LTRIM(RTRIM(cid)) = LTRIM(RTRIM(?)) AND LTRIM(RTRIM(PartNo)) = LTRIM(RTRIM(?)) AND ISNULL(deleted, 0) = 0
                         ORDER BY RevDate DESC, rowno DESC
                     """
                     rev_rows = []
@@ -531,16 +587,20 @@ def fetch_vendor_rate_masters(request=None, from_date="2026-08-01", to_date="202
                         try:
                             conn, _ = get_tenant_connection(request)
                             cursor = conn.cursor()
-                            cursor.execute(rev_query, [r.get("cid"), part_no])
+                            cursor.execute(rev_query, [cid_str, part_str])
                             rev_rows = cursor.fetchall()
                             cursor.close()
                             conn.close()
                         except Exception:
                             pass
                     if not rev_rows:
-                        with connection.cursor() as cursor:
-                            cursor.execute(rev_query, [r.get("cid"), part_no])
-                            rev_rows = cursor.fetchall()
+                        try:
+                            with connection.cursor() as cursor:
+                                local_rev_query = rev_query.replace('?', '%s')
+                                cursor.execute(local_rev_query, [cid_str, part_str])
+                                rev_rows = cursor.fetchall()
+                        except Exception:
+                            pass
                 
                     for rev_row in rev_rows:
                         rev_dt = rev_row[2]
@@ -557,6 +617,12 @@ def fetch_vendor_rate_masters(request=None, from_date="2026-08-01", to_date="202
                 except Exception as rev_ex:
                     print(f"[M-APPROVAL] Revision fetch warning for {rc_no}:", rev_ex)
 
+            rate_val = float(r.get("Rate") or 0.0)
+            rate_per_kgs = float(r.get("RatePerKgs") or 0.0)
+            is_zero_rate = (rate_val == 0.0 and rate_per_kgs > 0.0)
+            disp_rate = rate_per_kgs if is_zero_rate else rate_val
+            disp_label = "Rate per KGS" if is_zero_rate else "Approval Rate"
+
             cards.append({
                 "id": f"vendor_rate:{rc_no}",
                 "poNo": rc_no,
@@ -564,8 +630,8 @@ def fetch_vendor_rate_masters(request=None, from_date="2026-08-01", to_date="202
                 "type": "Vendor Rate Master",
                 "status": "Approved" if is_appr else "Pending",
                 "vendor": str(r.get("CName") or "Unknown Vendor"),
-                "countLabel": "Approval Rate",
-                "countVal": float(r.get("Rate") or 0.0),
+                "countLabel": disp_label,
+                "countVal": disp_rate,
                 "docKind": "vendor_rate",
                 "approvedBy": appr_by_str,
                 "approvedDateTime": appr_dt_str,
@@ -581,8 +647,8 @@ def fetch_vendor_rate_masters(request=None, from_date="2026-08-01", to_date="202
                 "lastApprovedDate": appr_dt_str or "—",
                 "lastApprovedTime": "—",
                 "currentRate": {
-                    "rate": float(r.get("Rate") or 0.0),
-                    "ratePerKgs": float(r.get("RatePerKgs") or 0.0),
+                    "rate": rate_val,
+                    "ratePerKgs": rate_per_kgs,
                     "effDate": eff_dt_str,
                     "cycleTime": cycle_tm_str,
                     "leadDays": int(r.get("ProcLeadDays") or 0),
@@ -596,10 +662,10 @@ def fetch_vendor_rate_masters(request=None, from_date="2026-08-01", to_date="202
                         "codeNo": part_no,
                         "description": str(r.get("Description") or ""),
                         "process": str(r.get("IssueProcess") or "—"),
-                        "uom": "NOS",
+                        "uom": "KGS" if is_zero_rate else "NOS",
                         "qty": 1.0,
-                        "rate": float(r.get("Rate") or 0.0),
-                        "amount": float(r.get("Rate") or 0.0)
+                        "rate": disp_rate,
+                        "amount": disp_rate
                     }
                 ]
             })
@@ -1008,7 +1074,7 @@ def fetch_commercial_masters(request=None, from_date="2026-08-01", to_date="2026
                 "id": f"commercial:{cmno}",
                 "poNo": cmno,
                 "poDate": cmdt_str,
-                "type": "Commercial Master",
+                "type": "Product Commercial Master",
                 "status": "Approved" if is_appr else "Pending",
                 "vendor": str(r.get("CName") or ""),
                 "subType": str(r.get("btype") or "Customer Product"),
@@ -2045,6 +2111,16 @@ def mapproval_detail(request):
                 rowno = int(clean_no.split("|")[0].replace("APL", ""))
             except Exception:
                 pass
+        elif clean_no.startswith("APL") and clean_no.replace("APL", "").isdigit():
+            try:
+                rowno = int(clean_no.replace("APL", ""))
+            except Exception:
+                pass
+        elif clean_no.isdigit():
+            try:
+                rowno = int(clean_no)
+            except Exception:
+                pass
         if rowno is not None:
             cards = fetch_vendor_rate_masters(request, single_rowno=rowno)
         else:
@@ -2334,7 +2410,7 @@ def mapproval_detail(request):
     else:
         cards = fetch_product_route_cards(request, single_roucardno=invno)
 
-    found = next((c for c in cards if str(c.get("poNo")) == invno or str(c.get("id")) == f"{doc_kind}:{invno}" or str(c.get("id")) == invno or (doc_kind == 'customer_po' and c.get("apoNo") == invno.replace("customer_po:", "")) or (doc_kind == 'alt_rm' and (c.get("partNo") == invno or c.get("poNo") == invno.replace("alt_rm:", "")))), None)
+    found = next((c for c in cards if str(c.get("poNo")) == invno or str(c.get("id")) == f"{doc_kind}:{invno}" or str(c.get("id")) == invno or (doc_kind == 'customer_po' and c.get("apoNo") == invno.replace("customer_po:", "")) or (doc_kind == 'alt_rm' and (c.get("partNo") == invno or c.get("poNo") == invno.replace("alt_rm:", ""))) or (doc_kind == 'vendor_rate' and len(cards) == 1)), None)
 
     if not found:
         return Response({
@@ -2385,7 +2461,7 @@ def mapproval_approve(request):
     company_code = None
     user_name = "Manager"
     rc_date = None
-    rc_type = "Vendor Master" if is_vendor_master else ("Commercial Master" if is_commercial else ("Vendor Rate Master" if is_vendor_rate else ("Customer PO" if is_customer_po else ("Purchase Indent Approval" if is_purchase_indent else ("Alternate Raw Material" if is_alt_rm else "Product Route Card")))))
+    rc_type = "Vendor Master" if is_vendor_master else ("Product Commercial Master" if is_commercial else ("Vendor Rate Master" if is_vendor_rate else ("Customer PO" if is_customer_po else ("Purchase Indent Approval" if is_purchase_indent else ("Alternate Raw Material" if is_alt_rm else "Product Route Card")))))
 
     updated = False
     # 1) Attempt update via active tenant DB connection (pyodbc / SQL Server ERP DB)
@@ -2783,7 +2859,7 @@ def mapproval_modify(request):
         part_no = parts[2]
         proc_code = parts[3]
 
-    rc_type = "Vendor Master" if is_vendor_master else ("Commercial Master" if is_commercial else ("Vendor Rate Master" if is_vendor_rate else ("Customer PO" if is_customer_po else ("Purchase Indent Approval" if is_purchase_indent else ("Alternate Raw Material" if is_alt_rm else "Product Route Card")))))
+    rc_type = "Vendor Master" if is_vendor_master else ("Product Commercial Master" if is_commercial else ("Vendor Rate Master" if is_vendor_rate else ("Customer PO" if is_customer_po else ("Purchase Indent Approval" if is_purchase_indent else ("Alternate Raw Material" if is_alt_rm else "Product Route Card")))))
 
     tenant = None
     tenant_id = None

@@ -726,7 +726,8 @@ def eapproval_detail(request):
                     LTRIM(RTRIM(COALESCE(C.gstino, CA.gstino, N'')))    AS vendor_gstino,
                     LTRIM(RTRIM(COALESCE(C.Contact, CA.Contact, N'')))  AS vendor_contact,
                     LTRIM(RTRIM(COALESCE(C.Phone, CA.Phone, N'')))      AS vendor_phone,
-                    LTRIM(RTRIM(COALESCE(C.Email, CA.Email, N'')))      AS vendor_email
+                    LTRIM(RTRIM(COALESCE(C.Email, CA.Email, N'')))      AS vendor_email,
+                    ISNULL(C.IsBillTotAmtRoundOff, 0)                   AS is_bill_tot_amt_round_off
                 FROM POAmndMas P
                 {_CUST_JOIN_SQL.strip()}
                 WHERE ISNULL(P.deleted, 0) = 0
@@ -851,7 +852,8 @@ def eapproval_detail(request):
                     LTRIM(RTRIM(COALESCE(C.gstino, CA.gstino, N'')))    AS vendor_gstino,
                     LTRIM(RTRIM(COALESCE(C.Contact, CA.Contact, N'')))  AS vendor_contact,
                     LTRIM(RTRIM(COALESCE(C.Phone, CA.Phone, N'')))      AS vendor_phone,
-                    LTRIM(RTRIM(COALESCE(C.Email, CA.Email, N'')))      AS vendor_email
+                    LTRIM(RTRIM(COALESCE(C.Email, CA.Email, N'')))      AS vendor_email,
+                    ISNULL(C.IsBillTotAmtRoundOff, 0)                   AS is_bill_tot_amt_round_off
                 FROM POMas P
                 {_CUST_JOIN_SQL.strip()}
                 WHERE ISNULL(P.deleted, 0) = 0
@@ -970,12 +972,21 @@ def eapproval_detail(request):
     for item in raw_items:
         amt = _safe_float(item.get("amount", 0))
         line_sum += amt
+        dia_raw = item.get("dia")
+        if dia_raw is None:
+            dia_str = ""
+        elif isinstance(dia_raw, (int, float)):
+            dia_str = f"{dia_raw:g}" if dia_raw != 0 else ""
+        else:
+            dia_str = str(dia_raw).strip()
+            if dia_str in ("0", "0.0", "0.00", "0.000", "None", "NULL"):
+                dia_str = ""
         line_items.append({
             "sNo": int(item.get("sno", 0)) or len(line_items) + 1,
             "codeNo": str(item.get("code_no", "")).strip(),
             "description": str(item.get("description", "")).strip(),
             "hsnCode": str(item.get("hsn_code", "")).strip(),
-            "dia": item.get("dia"),
+            "dia": dia_str,
             "uom": str(item.get("uom", "")).strip(),
             "qty": _safe_float(item.get("qty", 0)),
             "qtyOthers": _safe_float(item.get("qty_kgs", 0)),
@@ -998,10 +1009,39 @@ def eapproval_detail(request):
     pacamtbf = _safe_float(header["pacamtbf"])
     pacamt = _safe_float(header["pacamt"])
 
+    # Check IsBillTotAmtRoundOff from CustMast (primary join or fallback by vendor name)
+    vendor_name = str(header.get("vendor_name") or "").strip()
+    is_round_off_enabled = bool(header.get("is_bill_tot_amt_round_off"))
+
+    if not is_round_off_enabled and vendor_name:
+        try:
+            cust_chk_sql = """
+                SELECT TOP 1 ISNULL(IsBillTotAmtRoundOff, 0)
+                FROM CustMast
+                WHERE ISNULL(Deleted, 0) = 0
+                  AND (
+                      LTRIM(RTRIM(acledgername)) = LTRIM(RTRIM(?))
+                      OR LTRIM(RTRIM(CName)) = LTRIM(RTRIM(?))
+                  )
+            """
+            cursor.execute(cust_chk_sql, [vendor_name, vendor_name])
+            crow = cursor.fetchone()
+            if crow is not None:
+                is_round_off_enabled = bool(crow[0])
+        except Exception as ex:
+            print("[E-APPROVAL] Warning querying CustMast.IsBillTotAmtRoundOff by name:", ex)
+
     # Base total amount: line_sum if line_sum > 0 else totamt
     base_amount = line_sum if line_sum > 0 else totamt
-    round_off = 0.0  # Round Off as 0 by default
-    grand_total = round(base_amount - disamt + pacamtbf + tax_sum + pacamt + round_off, 2)
+    raw_total = base_amount - disamt + pacamtbf + tax_sum + pacamt
+
+    if is_round_off_enabled:
+        rounded_total = float(round(raw_total))
+        round_off = round(rounded_total - raw_total, 2)
+        grand_total = round(rounded_total, 2)
+    else:
+        round_off = 0.0
+        grand_total = round(raw_total, 2)
 
     financial = {
         "totalAmount": round(base_amount, 2),
@@ -1011,10 +1051,10 @@ def eapproval_detail(request):
         "afterTaxPF": round(pacamt, 2),
         "taxes": tax_lines,
         "totalTaxAmount": round(tax_sum, 2),
-        "roundOff": 0.0,
+        "roundOff": round(round_off, 2),
         "grandTotal": round(grand_total, 2),
         "summaryRows": _build_financial_summary_rows(
-            base_amount, disamt, pacamtbf, pacamt, tax_lines, 0.0, grand_total
+            base_amount, disamt, pacamtbf, pacamt, tax_lines, round_off, grand_total
         ),
     }
 
@@ -1105,7 +1145,7 @@ def eapproval_detail(request):
         "discount": financial["discount"],
         "bfTaxPF": financial["beforeTaxPF"],
         "afTaxPF": financial["afterTaxPF"],
-        "roundOff": 0.0,
+        "roundOff": financial["roundOff"],
         "cgstPct": 0,
         "sgstPct": 0,
         "approvedBy": approved_by,
@@ -1124,7 +1164,6 @@ def _build_financial_summary_rows(totamt, disamt, pacamtbf, pacamt, tax_lines, r
         {"label": "Total Amount", "value": round(totamt, 2), "sub": False, "neg": False},
         {"label": "Discount", "value": round(disamt, 2), "sub": True, "neg": True},
         {"label": "Before Tax P & F", "value": round(pacamtbf, 2), "sub": True, "neg": False},
-        {"label": "After Tax P & F", "value": round(pacamt, 2), "sub": True, "neg": False},
     ]
     for t in tax_lines:
         rows.append({
@@ -1133,7 +1172,13 @@ def _build_financial_summary_rows(totamt, disamt, pacamtbf, pacamt, tax_lines, r
             "sub": False,
             "neg": False,
         })
-    rows.append({"label": "Round Off", "value": 0.0, "sub": True, "neg": False})
+    rows.append({"label": "After Tax P & F", "value": round(pacamt, 2), "sub": True, "neg": False})
+    rows.append({
+        "label": "Round Off",
+        "value": round(round_off, 2),
+        "sub": True,
+        "neg": round_off < 0,
+    })
     rows.append({"label": "Grand Total", "value": round(grand_total, 2), "sub": False, "neg": False, "grand": True})
     return rows
 
