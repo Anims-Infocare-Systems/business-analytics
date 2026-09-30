@@ -43,6 +43,7 @@ import {
     CURRENT_APP_VERSION,
     hasSeenTour,
     markTourAsSeen,
+    getTourStepsForVersion,
 } from "./versionToursData";
 import SpotlightGuide from "./SpotlightGuide";
 import SpotlightBeacon from "./SpotlightBeacon";
@@ -823,15 +824,7 @@ export default function DashboardLayout() {
     const handleStartTourFromPrompt = () => {
         markTourAsSeen(CURRENT_APP_VERSION, userName);
         setShowTourPrompt(false);
-        preTourExpandedStateRef.current = expanded;
-        preTourNavStateRef.current = { activeItem, activeSubItem, openMenu };
-        setExpanded(true); // Always un-collapse sidebar for tour
-        setActiveItem("Welcome");
-        setActiveSubItem(null);
-        setOpenMenu(null);
-        if (isMobile) setDrawerOpen(false);
-        setActiveTourVersion(CURRENT_APP_VERSION);
-        setIsTourActive(true);
+        handleStartTourFromSettings(CURRENT_APP_VERSION);
     };
 
     /* ── Spotlight Guide State & Handlers ────────────────── */
@@ -949,11 +942,22 @@ export default function DashboardLayout() {
         preTourExpandedStateRef.current = expanded;
         preTourNavStateRef.current = { activeItem, activeSubItem, openMenu };
         setExpanded(true); // Always un-collapse sidebar for tour
-        setActiveItem("Welcome");
-        setActiveSubItem(null);
-        setOpenMenu(null);
+        const steps = getTourStepsForVersion(ver);
+        const firstStep = steps[0];
+        if (firstStep && firstStep.navItem) {
+            setActiveItem(firstStep.navItem);
+            setActiveSubItem(firstStep.navSubItem || null);
+            setOpenMenu(firstStep.navItem);
+            writeNav({ activeItem: firstStep.navItem, activeSubItem: firstStep.navSubItem || null, openMenu: firstStep.navItem });
+        } else {
+            setActiveItem("Welcome");
+            setActiveSubItem(null);
+            setOpenMenu(null);
+            writeNav({ activeItem: "Welcome", activeSubItem: null, openMenu: null });
+        }
         if (isMobile) setDrawerOpen(false);
         setActiveTourVersion(ver);
+        setSettingsOpen(false);
         setIsTourActive(true);
     };
 
@@ -968,14 +972,17 @@ export default function DashboardLayout() {
                 setDrawerOpen(false);
             }
         }
-        if (stepIndex <= 3) {
-            // Keep on Welcome for header, profile, clock, and bento tiles
+        if (step.navItem) {
+            setActiveItem(step.navItem);
+            setActiveSubItem(step.navSubItem || null);
+            setOpenMenu(step.navItem);
+            writeNav({ activeItem: step.navItem, activeSubItem: step.navSubItem || null, openMenu: step.navItem });
+        } else if (step.autoOpenMenu) {
+            setOpenMenu(step.autoOpenMenu);
+        } else if (stepIndex <= 3 && !step.navItem) {
+            // Keep on Welcome for header, profile, clock, and bento tiles (versions like v2.4.0)
             setActiveItem("Welcome");
             setActiveSubItem(null);
-        }
-        if (step.autoOpenMenu) {
-            setOpenMenu(step.autoOpenMenu);
-        } else {
             setOpenMenu(null);
         }
     }, [isMobile]);

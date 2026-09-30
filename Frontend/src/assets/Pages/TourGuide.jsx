@@ -15,7 +15,9 @@ import {
     FiLayout,
     FiFileText,
     FiBarChart2,
-    FiAlertCircle
+    FiAlertCircle,
+    FiCalendar,
+    FiPackage
 } from "react-icons/fi";
 import { HiSparkles } from "react-icons/hi2";
 
@@ -32,6 +34,8 @@ function renderStepIcon(iconName) {
     if (key === "filespreadsheet" || key === "file") return <FiFileText className="tg-step-icon-svg" />;
     if (key === "barchart3" || key === "chart") return <FiBarChart2 className="tg-step-icon-svg" />;
     if (key === "shieldalert") return <FiAlertCircle className="tg-step-icon-svg" />;
+    if (key === "calendar") return <FiCalendar className="tg-step-icon-svg" />;
+    if (key === "package") return <FiPackage className="tg-step-icon-svg" />;
     return <span className="tg-step-icon-emoji">✨</span>;
 }
 
@@ -186,28 +190,32 @@ export default function TourGuide({
     useEffect(() => {
         if (!isOpen || isCelebrating || !currentStep) return;
 
-        let el = document.querySelector(currentStep.targetSelector);
-        if (!isElementVisible(el) && currentStep.fallbackSelector) {
-            el = document.querySelector(currentStep.fallbackSelector);
-        }
-
-        if (el) {
-            try {
-                el.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
-            } catch {
-                /* fallback */
+        const attemptScrollAndPosition = () => {
+            let el = document.querySelector(currentStep.targetSelector);
+            if (!isElementVisible(el) && currentStep.fallbackSelector) {
+                el = document.querySelector(currentStep.fallbackSelector);
             }
-        }
 
-        updateTargetPosition();
+            if (el) {
+                try {
+                    el.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+                } catch {
+                    /* fallback */
+                }
+            }
+
+            updateTargetPosition();
+        };
+
+        attemptScrollAndPosition();
 
         // Clear any prior timers
         retryTimersRef.current.forEach(clearTimeout);
         retryTimersRef.current = [];
 
-        // Staggered checks to accommodate CSS menu expand transitions & mobile drawer
-        [80, 180, 320, 460].forEach(delay => {
-            const t = setTimeout(updateTargetPosition, delay);
+        // Staggered checks to accommodate route transitions, table loading, CSS animations & mobile drawer
+        [80, 180, 320, 520, 850, 1200].forEach(delay => {
+            const t = setTimeout(attemptScrollAndPosition, delay);
             retryTimersRef.current.push(t);
         });
 
@@ -414,6 +422,15 @@ export default function TourGuide({
                             <div className="tg-spotlight-tip-banner">
                                 <HiSparkles size={15} className="tg-spotlight-sparkle-anim" />
                                 <span>Shortcut: Press <kbd className="tg-mini-kbd">Ctrl</kbd> + <kbd className="tg-mini-kbd">K</kbd> anywhere across the app to search instantly</span>
+                            </div>
+                        )}
+
+                        {currentStep.isExpandable && (
+                            <div className="tg-expandable-tip-banner">
+                                <span className="tg-expand-icon-wrap">⤢</span>
+                                <span>
+                                    <strong>Expandable View:</strong> Click the <strong>Maximize icon (⤢)</strong> on the top-right of the card to expand this table into a wide full-width workspace.
+                                </span>
                             </div>
                         )}
 

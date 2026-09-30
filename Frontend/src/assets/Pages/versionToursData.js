@@ -6,14 +6,227 @@
  * a new entry to the VERSION_REGISTRY array below.
  */
 
-export const CURRENT_APP_VERSION = "v2.4.0";
+export const CURRENT_APP_VERSION = "v2.5.0";
 
 export const VERSION_REGISTRY = [
     {
-        version: "v2.4.0",
-        label: "v2.4.0 (Latest Release)",
-        releaseDate: "September 2026",
+        version: "v2.5.0",
+        label: "v2.5.0 (Latest Release)",
+        releaseDate: "October 2026",
         isCurrent: true,
+        tagline: "Sales Intelligence, Real-Time Delivery Tracking & Rate History",
+        highlights: [
+            "Customer & Part-Wise Pending PO Backlog with 1-Click Table Expand",
+            "Multi-Month Delivery Schedule Analysis with Dual-View Expansion",
+            "Live Warehouse Despatch Planning & Fulfillment Status",
+            "Type-Filtered Customer & Part Revenue Performance",
+            "Part-Wise Rate Intelligence, Price Variance & Revision History"
+        ],
+        tourSteps: [
+            {
+                id: "sa-tour-pending-po",
+                targetSelector: "[data-spotlight='sa-pending-po-summary']",
+                fallbackSelector: ".sa-card--pending-po",
+                navItem: "Reports",
+                navSubItem: "Sales Analysis",
+                title: "Customer & Part-Wise Pending PO Summary",
+                category: "Order Backlog",
+                badge: "Step 1 of 5 • Expandable View",
+                iconName: "FileSpreadsheet",
+                placement: "bottom",
+                isExpandable: true,
+                description: "Track outstanding purchase order backlogs per customer and part number. Switch seamlessly between PO Date Wise and PO Schedule Wise views with instant customer search.",
+                subItems: [
+                    {
+                        title: "Expandable View Mode",
+                        desc: "Click the maximize icon (⤢) at the top-right of the card to expand this table from half-screen to full-screen width."
+                    },
+                    {
+                        title: "Backlog Balance Tracking",
+                        desc: "Compare ordered quantities (PO Qty) directly against actual dispatched units (Sal Qty) with live balance pills."
+                    }
+                ]
+            },
+            {
+                id: "sa-tour-schedule-analysis",
+                targetSelector: "[data-spotlight='sa-schedule-analysis']",
+                fallbackSelector: ".sa-card--sched-analysis",
+                navItem: "Reports",
+                navSubItem: "Sales Analysis",
+                title: "Customer & Part-Wise Schedule Analysis",
+                category: "Delivery Schedules",
+                badge: "Step 2 of 5 • Expandable View",
+                iconName: "Calendar",
+                placement: "bottom",
+                isExpandable: true,
+                description: "Multi-month dispatch matrix comparing promised delivery schedules against actual shipments across August and September with quantity and value metrics.",
+                subItems: [
+                    {
+                        title: "Expandable Side-by-Side Table",
+                        desc: "Toggle the maximize icon (⤢) to expand this card to full width for wide viewing of monthly quantity and value columns."
+                    },
+                    {
+                        title: "Schedule vs Actual Alignment",
+                        desc: "Inspect scheduled quantity and value side-by-side with actual invoiced quantity and revenue."
+                    }
+                ]
+            },
+            {
+                id: "sa-tour-despatch-plan",
+                targetSelector: "[data-spotlight='sa-despatch-plan']",
+                fallbackSelector: ".sa-card--despatch-plan",
+                navItem: "Reports",
+                navSubItem: "Sales Analysis",
+                title: "Despatch Planning Status",
+                category: "Warehouse & Shipping",
+                badge: "Step 3 of 5 • Live Auto-Sync",
+                iconName: "Zap",
+                placement: "top",
+                isExpandable: false,
+                description: "Real-time dispatch tracking pipeline aligning planned fulfillment dates with available stock, invoice generation, and status filters.",
+                subItems: [
+                    {
+                        title: "Live KPI & Status Badges",
+                        desc: "Displays live Total Invoice Value alongside dynamic status filters (Ready, In Production, Dispatched)."
+                    },
+                    {
+                        title: "One-Click CSV Export",
+                        desc: "Export scheduled shipping orders directly to CSV for plant logistics and dispatch teams."
+                    }
+                ]
+            },
+            {
+                id: "sa-tour-customer-part-wise",
+                targetSelector: "[data-spotlight='sa-customer-part-wise']",
+                fallbackSelector: ".sa-card--cust-part",
+                navItem: "Reports",
+                navSubItem: "Sales Analysis",
+                title: "Customer & Part-Wise Sales Analysis",
+                category: "Revenue Analysis",
+                badge: "Step 4 of 5 • Multi-Type Filter",
+                iconName: "TrendingUp",
+                placement: "top",
+                isExpandable: false,
+                description: "Granular revenue analysis dissecting customer billing across business channels and part lines with instant type filtering.",
+                subItems: [
+                    {
+                        title: "Invoice Type Filter",
+                        desc: "Segment transactions instantly by Commercial Sales, Labour Jobwork, or Export orders."
+                    },
+                    {
+                        title: "Account Revenue Share",
+                        desc: "Evaluate quantity volumes, average unit realizations, and aggregate line totals per account."
+                    }
+                ]
+            },
+            {
+                id: "sa-tour-part-wise-history",
+                targetSelector: "[data-spotlight='sa-part-wise-history']",
+                fallbackSelector: ".sales-part-wise-history-section, #sales-part-wise-history-section",
+                navItem: "Reports",
+                navSubItem: "Sales Analysis",
+                title: "Part-wise History & Rate Intelligence",
+                category: "Pricing Intelligence",
+                badge: "Step 5 of 5 • Pricing Analytics",
+                iconName: "Shield",
+                placement: "top",
+                isExpandable: false,
+                description: "Interactive pricing intelligence tracking historical price revisions, quotation trends, and price variance across parts and customers.",
+                subItems: [
+                    {
+                        title: "Active Catalog Search",
+                        desc: "Select any part from the quick-search dropdown to load its full pricing timeline."
+                    },
+                    {
+                        title: "Rate Variance KPI Banner",
+                        desc: "Live comparison of active rate vs base rate, percentage change, and cumulative revenue."
+                    }
+                ]
+            }
+        ],
+        tips: [
+            {
+                id: "tip-250-1",
+                title: "Maximize Side-by-Side Tables",
+                category: "Productivity",
+                type: "PRO TIP",
+                icon: "Maximize2",
+                summary: "Expand compact side-by-side PO and Schedule analysis cards into full-width wide data tables with one click.",
+                steps: [
+                    "Locate the Maximize button (⤢) at the top-right corner of the Pending PO Summary or Schedule Analysis card.",
+                    "Click it to expand the table across the entire width of your screen for effortless reading of all columns.",
+                    "Click again to restore the comfortable side-by-side view anytime."
+                ],
+                actionLabel: "Open Sales Analysis",
+                actionTarget: "Sales Analysis"
+            },
+            {
+                id: "tip-250-2",
+                title: "PO Date vs Schedule Wise Backlog",
+                category: "Reports",
+                type: "BEST PRACTICE",
+                icon: "Calendar",
+                summary: "Analyze customer purchase order backlogs sorted by initial PO issue date or committed delivery schedule.",
+                steps: [
+                    "Use the segmented toggle button on top of 'Pending PO Summary' to switch between 'Po Date Wise' and 'Po Sch Wise'.",
+                    "Filter by customer or part number using the instant search box.",
+                    "Inspect the highlighted orange balance pill to quickly identify unfulfilled purchase orders."
+                ],
+                actionLabel: "View Pending POs",
+                actionTarget: "Sales Analysis"
+            },
+            {
+                id: "tip-250-3",
+                title: "Live Despatch Planning & CSV Export",
+                category: "Operations",
+                type: "NEW FEATURE",
+                icon: "Zap",
+                summary: "Monitor live warehouse dispatch readiness and download formatted dispatch schedules for logistics teams.",
+                steps: [
+                    "Check the 'Live' auto-sync badge and live 'Total Inv Value' header in the Despatch Planning card.",
+                    "Filter rows by customer, part number, or delivery status pill.",
+                    "Click 'Export CSV' to generate and share dispatch checklists instantly."
+                ],
+                actionLabel: "Check Despatch Plan",
+                actionTarget: "Sales Analysis"
+            },
+            {
+                id: "tip-250-4",
+                title: "Channel & Invoice Type Segmentation",
+                category: "Reports",
+                type: "PRO TIP",
+                icon: "TrendingUp",
+                summary: "Isolate Commercial Sales, Labour Jobwork, and Export revenues in Customer & Part-Wise Sales Analysis.",
+                steps: [
+                    "Click the Type dropdown filter on the 'Customer & Part-Wise Sales Analysis' card header.",
+                    "Select Sales, Labour, or Export to recalculate line items and turnover totals dynamically.",
+                    "Combine with customer multi-select to audit specific account revenue channels."
+                ],
+                actionLabel: "Analyze Channels",
+                actionTarget: "Sales Analysis"
+            },
+            {
+                id: "tip-250-5",
+                title: "Part Rate Intelligence & Price Variance",
+                category: "Pricing",
+                type: "NEW FEATURE",
+                icon: "Shield",
+                summary: "Track unit rate revisions, quotation history, and historical price variances for any manufactured part.",
+                steps: [
+                    "Use the catalog search box in 'Part-wise History & Rate Intelligence' to pick any part number.",
+                    "Review the Hero KPI banner for active selling rate, base rate, and percentage variance.",
+                    "Inspect the chronological amendment ledger below for past revision dates, invoice counts, and buyers."
+                ],
+                actionLabel: "Explore Rate Intelligence",
+                actionTarget: "Sales Analysis"
+            }
+        ]
+    },
+    {
+        version: "v2.4.0",
+        label: "v2.4.0 (Previous Release)",
+        releaseDate: "September 2026",
+        isCurrent: false,
         tagline: "Dynamic Analytics, Intelligent KPI Dashboards & Streamlined Approvals",
         highlights: [
             "Spotlight Guide & Command Palette (Ctrl + K)",
