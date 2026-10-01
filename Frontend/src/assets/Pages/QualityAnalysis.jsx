@@ -4192,19 +4192,6 @@ export default function QualityAnalysis() {
         }
     }, [fetchQualityData, appliedDateRange.from, appliedDateRange.to, appliedSearchQuery, appliedCustomers, appliedParts, appliedOperators]);
 
-    // Auto-apply debounced search for Search Records input so partno searches update cards smoothly
-    useEffect(() => {
-        if (!initialMountRef.current) return;
-        const trimmed = searchQuery.trim();
-        if (trimmed === appliedSearchQuery.trim()) return;
-
-        const timer = setTimeout(() => {
-            setAppliedSearchQuery(trimmed);
-            fetchQualityData(appliedDateRange.from, appliedDateRange.to, trimmed, appliedCustomers, appliedParts, appliedOperators);
-        }, 400);
-
-        return () => clearTimeout(timer);
-    }, [searchQuery, appliedSearchQuery, appliedDateRange.from, appliedDateRange.to, appliedCustomers, appliedParts, appliedOperators, fetchQualityData]);
 
     const QA_CHART_FONT = "'Outfit', 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif";
     const QA_NUM_FONT = "'Plus Jakarta Sans', 'Outfit', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif";
@@ -8638,8 +8625,6 @@ export default function QualityAnalysis() {
                                     onClick={() => {
                                         if (isGlobalLoading) return;
                                         setSearchQuery("");
-                                        setAppliedSearchQuery("");
-                                        fetchQualityData(appliedDateRange.from, appliedDateRange.to, "", appliedCustomers, appliedParts, appliedOperators);
                                     }}
                                     style={{
                                         position: 'absolute',

@@ -19,10 +19,20 @@ _IDLE_UNION_SQL = """
         D.Shift,
         D.MacNo,
         ISNULL(D.reasons, N'Machine Idle Entry') AS Reason,
-        DATEDIFF(SECOND, '19000101', ISNULL(D.tottime, '19000101')) AS IdleSeconds,
-        CAST(NULL AS INT) AS IsEffCalc
+        CASE
+            WHEN D.stime IS NOT NULL AND D.etime IS NOT NULL
+            THEN CASE
+                WHEN D.etime >= D.stime THEN DATEDIFF(SECOND, D.stime, D.etime)
+                ELSE DATEDIFF(SECOND, D.stime, DATEADD(DAY, 1, D.etime))
+            END
+            WHEN D.tottime IS NOT NULL AND DATEDIFF(SECOND, '19000101', D.tottime) > 0
+            THEN DATEDIFF(SECOND, '19000101', D.tottime)
+            ELSE 0
+        END AS IdleSeconds,
+        CASE WHEN E.IsEffCalc = 1 THEN 1 WHEN E.IsEffCalc = 0 THEN 0 ELSE NULL END AS IsEffCalc
     FROM Machine_IdleEntryDet D
     INNER JOIN Machine_IdleEntryMas M ON D.prodid = M.prodid
+    LEFT JOIN MacIdle_IdleEntry E ON D.prodid = E.prodid AND D.RowNo = E.RowNo AND ISNULL(E.deleted, 0) = 0
     WHERE M.proddate >= ? AND M.proddate < DATEADD(DAY, 1, ?)
       AND ISNULL(M.deleted, 0) = 0
       AND ISNULL(D.deleted, 0) = 0
@@ -162,6 +172,255 @@ _IDLE_UNION_SQL = """
           WHERE CRI_CHK.entryno = R.entryno AND ISNULL(CRI_CHK.deleted, 0) = 0
       )
       AND R.IdleTime IS NOT NULL AND DATEDIFF(SECOND, '19000101', R.IdleTime) > 0
+
+    UNION ALL
+
+    -- 8. CNC Touch Idle Det (ProdTaken = 0)
+    SELECT
+        M.proddate AS EntryDate,
+        ISNULL(D.Shift, M.shift) AS Shift,
+        ISNULL(D.MacNo, M.macno) AS MacNo,
+        ISNULL(D.reasons, N'CNC Touch Idle Time') AS Reason,
+        CASE
+            WHEN D.stime IS NOT NULL AND D.etime IS NOT NULL
+            THEN CASE
+                WHEN D.etime >= D.stime THEN DATEDIFF(SECOND, D.stime, D.etime)
+                ELSE DATEDIFF(SECOND, D.stime, DATEADD(DAY, 1, D.etime))
+            END
+            WHEN D.tottime IS NOT NULL AND DATEDIFF(SECOND, '19000101', D.tottime) > 0
+            THEN DATEDIFF(SECOND, '19000101', D.tottime)
+            ELSE 0
+        END AS IdleSeconds,
+        CASE WHEN ISNULL(CAST(D.IsEffCalc AS INT), 0) = 1 THEN 1 ELSE 0 END AS IsEffCalc
+    FROM CncProd_TouchIdleDet D
+    INNER JOIN CncProd_TouchMas M ON D.TchEntryNo = M.TchEntryNo
+    WHERE M.proddate >= ? AND M.proddate < DATEADD(DAY, 1, ?)
+      AND ISNULL(M.deleted, 0) = 0
+      AND ISNULL(D.deleted, 0) = 0
+      AND ISNULL(D.ProdTaken, 0) = 0
+
+    UNION ALL
+
+    -- 9. CNC Touch Idle (ProdTaken = 0)
+    SELECT
+        M.proddate AS EntryDate,
+        ISNULL(I.shift, M.shift) AS Shift,
+        ISNULL(I.macno, M.macno) AS MacNo,
+        ISNULL(I.reasons, N'CNC Touch Idle Time') AS Reason,
+        CASE
+            WHEN I.tottime IS NOT NULL AND DATEDIFF(SECOND, '19000101', I.tottime) > 0
+            THEN DATEDIFF(SECOND, '19000101', I.tottime)
+            ELSE 0
+        END AS IdleSeconds,
+        CASE WHEN ISNULL(CAST(I.IsEffCalc AS INT), 0) = 1 THEN 1 ELSE 0 END AS IsEffCalc
+    FROM CncProd_TouchIdle I
+    INNER JOIN CncProd_TouchMas M ON I.TchEntryNo = M.TchEntryNo
+    WHERE M.proddate >= ? AND M.proddate < DATEADD(DAY, 1, ?)
+      AND ISNULL(M.deleted, 0) = 0
+      AND ISNULL(I.deleted, 0) = 0
+      AND ISNULL(I.ProdTaken, 0) = 0
+      AND NOT EXISTS (
+          SELECT 1 FROM CncProd_TouchIdleDet TID_CHK
+          WHERE TID_CHK.TchEntryNo = I.TchEntryNo
+            AND ISNULL(TID_CHK.deleted, 0) = 0
+            AND ISNULL(TID_CHK.ProdTaken, 0) = 0
+      )
+
+    UNION ALL
+
+    -- 10. CNC Touch Det Fallback (ProdTaken = 0)
+    SELECT
+        M.proddate AS EntryDate,
+        M.shift AS Shift,
+        M.macno AS MacNo,
+        N'CNC Touch Idle Time' AS Reason,
+        DATEDIFF(SECOND, '19000101', ISNULL(D.idlTime, '19000101')) AS IdleSeconds,
+        CAST(1 AS INT) AS IsEffCalc
+    FROM CncProd_TouchDet D
+    INNER JOIN CncProd_TouchMas M ON D.TchEntryNo = M.TchEntryNo
+    WHERE M.proddate >= ? AND M.proddate < DATEADD(DAY, 1, ?)
+      AND ISNULL(M.deleted, 0) = 0
+      AND ISNULL(D.deleted, 0) = 0
+      AND ISNULL(D.ProdTaken, 0) = 0
+      AND NOT EXISTS (
+          SELECT 1 FROM CncProd_TouchIdle TI_CHK
+          WHERE TI_CHK.TchEntryNo = D.TchEntryNo
+            AND ISNULL(TI_CHK.deleted, 0) = 0
+            AND ISNULL(TI_CHK.ProdTaken, 0) = 0
+      )
+      AND NOT EXISTS (
+          SELECT 1 FROM CncProd_TouchIdleDet TID_CHK
+          WHERE TID_CHK.TchEntryNo = D.TchEntryNo
+            AND ISNULL(TID_CHK.deleted, 0) = 0
+            AND ISNULL(TID_CHK.ProdTaken, 0) = 0
+      )
+      AND D.idlTime IS NOT NULL AND DATEDIFF(SECOND, '19000101', D.idlTime) > 0
+
+    UNION ALL
+
+    -- 11. Conv Touch Idle Det (ProdTaken = 0)
+    SELECT
+        M.proddate AS EntryDate,
+        ISNULL(D.Shift, M.shift) AS Shift,
+        ISNULL(D.MacNo, M.macno) AS MacNo,
+        ISNULL(D.reasons, N'Conv Touch Idle Time') AS Reason,
+        CASE
+            WHEN D.stime IS NOT NULL AND D.etime IS NOT NULL
+            THEN CASE
+                WHEN D.etime >= D.stime THEN DATEDIFF(SECOND, D.stime, D.etime)
+                ELSE DATEDIFF(SECOND, D.stime, DATEADD(DAY, 1, D.etime))
+            END
+            WHEN D.tottime IS NOT NULL AND DATEDIFF(SECOND, '19000101', D.tottime) > 0
+            THEN DATEDIFF(SECOND, '19000101', D.tottime)
+            ELSE 0
+        END AS IdleSeconds,
+        CASE WHEN ISNULL(CAST(D.IsEffCalc AS INT), 0) = 1 THEN 1 ELSE 0 END AS IsEffCalc
+    FROM ConvProd_TouchIdleDet D
+    INNER JOIN ConvProd_TouchMas M ON D.TchEntryNo = M.TchEntryNo
+    WHERE M.proddate >= ? AND M.proddate < DATEADD(DAY, 1, ?)
+      AND ISNULL(M.deleted, 0) = 0
+      AND ISNULL(D.deleted, 0) = 0
+      AND ISNULL(D.ProdTaken, 0) = 0
+
+    UNION ALL
+
+    -- 12. Conv Touch Idle (ProdTaken = 0)
+    SELECT
+        M.proddate AS EntryDate,
+        ISNULL(I.shift, M.shift) AS Shift,
+        ISNULL(I.macno, M.macno) AS MacNo,
+        ISNULL(I.reasons, N'Conv Touch Idle Time') AS Reason,
+        CASE
+            WHEN I.tottime IS NOT NULL AND DATEDIFF(SECOND, '19000101', I.tottime) > 0
+            THEN DATEDIFF(SECOND, '19000101', I.tottime)
+            ELSE 0
+        END AS IdleSeconds,
+        CAST(NULL AS INT) AS IsEffCalc
+    FROM ConvProd_TouchIdle I
+    INNER JOIN ConvProd_TouchMas M ON I.TchEntryNo = M.TchEntryNo
+    WHERE M.proddate >= ? AND M.proddate < DATEADD(DAY, 1, ?)
+      AND ISNULL(M.deleted, 0) = 0
+      AND ISNULL(I.deleted, 0) = 0
+      AND ISNULL(I.ProdTaken, 0) = 0
+      AND NOT EXISTS (
+          SELECT 1 FROM ConvProd_TouchIdleDet TID_CHK
+          WHERE TID_CHK.TchEntryNo = I.TchEntryNo
+            AND ISNULL(TID_CHK.deleted, 0) = 0
+            AND ISNULL(TID_CHK.ProdTaken, 0) = 0
+      )
+
+    UNION ALL
+
+    -- 13. Conv Touch Det Fallback (ProdTaken = 0)
+    SELECT
+        M.proddate AS EntryDate,
+        M.shift AS Shift,
+        M.macno AS MacNo,
+        N'Conv Touch Idle Time' AS Reason,
+        DATEDIFF(SECOND, '19000101', ISNULL(D.idlTime, '19000101')) AS IdleSeconds,
+        CAST(NULL AS INT) AS IsEffCalc
+    FROM ConvProd_TouchDet D
+    INNER JOIN ConvProd_TouchMas M ON D.TchEntryNo = M.TchEntryNo
+    WHERE M.proddate >= ? AND M.proddate < DATEADD(DAY, 1, ?)
+      AND ISNULL(M.deleted, 0) = 0
+      AND ISNULL(D.deleted, 0) = 0
+      AND ISNULL(D.ProdTaken, 0) = 0
+      AND NOT EXISTS (
+          SELECT 1 FROM ConvProd_TouchIdle TI_CHK
+          WHERE TI_CHK.TchEntryNo = D.TchEntryNo
+            AND ISNULL(TI_CHK.deleted, 0) = 0
+            AND ISNULL(TI_CHK.ProdTaken, 0) = 0
+      )
+      AND NOT EXISTS (
+          SELECT 1 FROM ConvProd_TouchIdleDet TID_CHK
+          WHERE TID_CHK.TchEntryNo = D.TchEntryNo
+            AND ISNULL(TID_CHK.deleted, 0) = 0
+            AND ISNULL(TID_CHK.ProdTaken, 0) = 0
+      )
+      AND D.idlTime IS NOT NULL AND DATEDIFF(SECOND, '19000101', D.idlTime) > 0
+
+    UNION ALL
+
+    -- 14. Conv Rod Touch Idle Det (ProdTaken = 0)
+    SELECT
+        M.proddate AS EntryDate,
+        ISNULL(D.Shift, M.shift) AS Shift,
+        ISNULL(D.MacNo, M.macno) AS MacNo,
+        ISNULL(D.reasons, N'Conv Rod Touch Idle Time') AS Reason,
+        CASE
+            WHEN D.stime IS NOT NULL AND D.etime IS NOT NULL
+            THEN CASE
+                WHEN D.etime >= D.stime THEN DATEDIFF(SECOND, D.stime, D.etime)
+                ELSE DATEDIFF(SECOND, D.stime, DATEADD(DAY, 1, D.etime))
+            END
+            WHEN D.tottime IS NOT NULL AND DATEDIFF(SECOND, '19000101', D.tottime) > 0
+            THEN DATEDIFF(SECOND, '19000101', D.tottime)
+            ELSE 0
+        END AS IdleSeconds,
+        CASE WHEN ISNULL(CAST(D.IsEffCalc AS INT), 0) = 1 THEN 1 ELSE 0 END AS IsEffCalc
+    FROM ConvRodProd_TouchIdleDet D
+    INNER JOIN ConvRodProd_TouchMas M ON D.TchEntryNo = M.TchEntryNo
+    WHERE M.proddate >= ? AND M.proddate < DATEADD(DAY, 1, ?)
+      AND ISNULL(M.deleted, 0) = 0
+      AND ISNULL(D.deleted, 0) = 0
+      AND ISNULL(D.ProdTaken, 0) = 0
+
+    UNION ALL
+
+    -- 15. Conv Rod Touch Idle (ProdTaken = 0)
+    SELECT
+        M.proddate AS EntryDate,
+        ISNULL(I.shift, M.shift) AS Shift,
+        ISNULL(I.macno, M.macno) AS MacNo,
+        ISNULL(I.reasons, N'Conv Rod Touch Idle Time') AS Reason,
+        CASE
+            WHEN I.tottime IS NOT NULL AND DATEDIFF(SECOND, '19000101', I.tottime) > 0
+            THEN DATEDIFF(SECOND, '19000101', I.tottime)
+            ELSE 0
+        END AS IdleSeconds,
+        CAST(NULL AS INT) AS IsEffCalc
+    FROM ConvRodProd_TouchIdle I
+    INNER JOIN ConvRodProd_TouchMas M ON I.TchEntryNo = M.TchEntryNo
+    WHERE M.proddate >= ? AND M.proddate < DATEADD(DAY, 1, ?)
+      AND ISNULL(M.deleted, 0) = 0
+      AND ISNULL(I.deleted, 0) = 0
+      AND ISNULL(I.ProdTaken, 0) = 0
+      AND NOT EXISTS (
+          SELECT 1 FROM ConvRodProd_TouchIdleDet TID_CHK
+          WHERE TID_CHK.TchEntryNo = I.TchEntryNo
+            AND ISNULL(TID_CHK.deleted, 0) = 0
+            AND ISNULL(TID_CHK.ProdTaken, 0) = 0
+      )
+
+    UNION ALL
+
+    -- 16. Conv Rod Touch Det Fallback (ProdTaken = 0)
+    SELECT
+        M.proddate AS EntryDate,
+        M.shift AS Shift,
+        M.macno AS MacNo,
+        N'Conv Rod Touch Idle Time' AS Reason,
+        DATEDIFF(SECOND, '19000101', ISNULL(D.idlTime, '19000101')) AS IdleSeconds,
+        CAST(NULL AS INT) AS IsEffCalc
+    FROM ConvRodProd_TouchDet D
+    INNER JOIN ConvRodProd_TouchMas M ON D.TchEntryNo = M.TchEntryNo
+    WHERE M.proddate >= ? AND M.proddate < DATEADD(DAY, 1, ?)
+      AND ISNULL(M.deleted, 0) = 0
+      AND ISNULL(D.deleted, 0) = 0
+      AND ISNULL(D.ProdTaken, 0) = 0
+      AND NOT EXISTS (
+          SELECT 1 FROM ConvRodProd_TouchIdle TI_CHK
+          WHERE TI_CHK.TchEntryNo = D.TchEntryNo
+            AND ISNULL(TI_CHK.deleted, 0) = 0
+            AND ISNULL(TI_CHK.ProdTaken, 0) = 0
+      )
+      AND NOT EXISTS (
+          SELECT 1 FROM ConvRodProd_TouchIdleDet TID_CHK
+          WHERE TID_CHK.TchEntryNo = D.TchEntryNo
+            AND ISNULL(TID_CHK.deleted, 0) = 0
+            AND ISNULL(TID_CHK.ProdTaken, 0) = 0
+      )
+      AND D.idlTime IS NOT NULL AND DATEDIFF(SECOND, '19000101', D.idlTime) > 0
 """
 
 _IDLE_REPORT_SQL = f"""
@@ -206,7 +465,10 @@ WHERE A.MacNo IS NOT NULL
       N'Conv Production Idle Time',
       N'Conv Rod Idle Time',
       N'Production Idle Time',
-      N'Machine Idle Entry'
+      N'Machine Idle Entry',
+      N'CNC Touch Idle Time',
+      N'Conv Touch Idle Time',
+      N'Conv Rod Touch Idle Time'
   )
 ORDER BY MacNo, Shift, Reason
 """
@@ -216,6 +478,9 @@ _DUMMY_REASONS = {
     "Production Idle Time",
     "Conv Production Idle Time",
     "Conv Rod Idle Time",
+    "CNC Touch Idle Time",
+    "Conv Touch Idle Time",
+    "Conv Rod Touch Idle Time",
 }
 
 _SHIFT_UI_LABELS = {
@@ -260,8 +525,8 @@ _SHIFT_TILE_SLOT_LABELS = (
 
 
 def _union_date_params(start_date, end_date):
-    """Seven UNION branches — each needs (start, end)."""
-    return [start_date, end_date] * 7
+    """Sixteen UNION branches — each needs (start, end)."""
+    return [start_date, end_date] * 16
 
 
 def _parse_machine(value):
@@ -1241,18 +1506,31 @@ def _build_accepted_vs_non_accepted_branches(cursor, start_date, end_date, inclu
     branches = []
     branch_params = []
 
-    # 1. Machine_IdleEntryDet + Machine_IdleEntryMas
+    # 1. Machine_IdleEntryDet + Machine_IdleEntryMas (+ MacIdle_IdleEntry)
     if include_machine_idle_entry and table_exists(cursor, "Machine_IdleEntryDet") and table_exists(cursor, "Machine_IdleEntryMas"):
-        branches.append("""
+        has_mac_idle = table_exists(cursor, "MacIdle_IdleEntry")
+        join_mac_idle = "LEFT JOIN MacIdle_IdleEntry E ON D.prodid = E.prodid AND D.RowNo = E.RowNo AND ISNULL(E.deleted, 0) = 0" if has_mac_idle else ""
+        eff_calc_expr = "CASE WHEN E.IsEffCalc = 1 THEN 1 WHEN E.IsEffCalc = 0 THEN 0 ELSE NULL END" if has_mac_idle else "CAST(NULL AS INT)"
+        branches.append(f"""
             SELECT
                 M.proddate AS EntryDate,
                 D.Shift,
                 D.MacNo,
                 ISNULL(D.reasons, N'Machine Idle Entry') AS Reason,
-                DATEDIFF(SECOND, '19000101', ISNULL(D.tottime, '19000101')) AS IdleSeconds,
-                CAST(NULL AS INT) AS IsEffCalc
+                CASE
+                    WHEN D.stime IS NOT NULL AND D.etime IS NOT NULL
+                    THEN CASE
+                        WHEN D.etime >= D.stime THEN DATEDIFF(SECOND, D.stime, D.etime)
+                        ELSE DATEDIFF(SECOND, D.stime, DATEADD(DAY, 1, D.etime))
+                    END
+                    WHEN D.tottime IS NOT NULL AND DATEDIFF(SECOND, '19000101', D.tottime) > 0
+                    THEN DATEDIFF(SECOND, '19000101', D.tottime)
+                    ELSE 0
+                END AS IdleSeconds,
+                {eff_calc_expr} AS IsEffCalc
             FROM Machine_IdleEntryDet D
             INNER JOIN Machine_IdleEntryMas M ON D.prodid = M.prodid
+            {join_mac_idle}
             WHERE M.proddate >= ? AND M.proddate < DATEADD(DAY, 1, ?)
               AND ISNULL(M.deleted, 0) = 0
               AND ISNULL(D.deleted, 0) = 0
@@ -1495,6 +1773,177 @@ def _build_accepted_vs_non_accepted_branches(cursor, start_date, end_date, inclu
             """)
             branch_params.extend([start_date, end_date])
 
+    # 5. CncProd_TouchIdleDet & CncProd_TouchIdle (ProdTaken = 0)
+    if table_exists(cursor, "CncProd_TouchMas"):
+        if table_exists(cursor, "CncProd_TouchIdleDet"):
+            branches.append("""
+                SELECT
+                    M.proddate AS EntryDate,
+                    ISNULL(D.Shift, M.shift) AS Shift,
+                    ISNULL(D.MacNo, M.macno) AS MacNo,
+                    ISNULL(D.reasons, N'CNC Touch Idle Time') AS Reason,
+                    CASE
+                        WHEN D.stime IS NOT NULL AND D.etime IS NOT NULL
+                        THEN CASE
+                            WHEN D.etime >= D.stime THEN DATEDIFF(SECOND, D.stime, D.etime)
+                            ELSE DATEDIFF(SECOND, D.stime, DATEADD(DAY, 1, D.etime))
+                        END
+                        WHEN D.tottime IS NOT NULL AND DATEDIFF(SECOND, '19000101', D.tottime) > 0
+                        THEN DATEDIFF(SECOND, '19000101', D.tottime)
+                        ELSE 0
+                    END AS IdleSeconds,
+                    CASE WHEN ISNULL(CAST(D.IsEffCalc AS INT), 0) = 1 THEN 1 ELSE 0 END AS IsEffCalc
+                FROM CncProd_TouchIdleDet D
+                INNER JOIN CncProd_TouchMas M ON D.TchEntryNo = M.TchEntryNo
+                WHERE M.proddate >= ? AND M.proddate < DATEADD(DAY, 1, ?)
+                  AND ISNULL(M.deleted, 0) = 0
+                  AND ISNULL(D.deleted, 0) = 0
+                  AND ISNULL(D.ProdTaken, 0) = 0
+            """)
+            branch_params.extend([start_date, end_date])
+
+        if table_exists(cursor, "CncProd_TouchIdle"):
+            branches.append("""
+                SELECT
+                    M.proddate AS EntryDate,
+                    ISNULL(I.shift, M.shift) AS Shift,
+                    ISNULL(I.macno, M.macno) AS MacNo,
+                    ISNULL(I.reasons, N'CNC Touch Idle Time') AS Reason,
+                    CASE
+                        WHEN I.tottime IS NOT NULL AND DATEDIFF(SECOND, '19000101', I.tottime) > 0
+                        THEN DATEDIFF(SECOND, '19000101', I.tottime)
+                        ELSE 0
+                    END AS IdleSeconds,
+                    CASE WHEN ISNULL(CAST(I.IsEffCalc AS INT), 0) = 1 THEN 1 ELSE 0 END AS IsEffCalc
+                FROM CncProd_TouchIdle I
+                INNER JOIN CncProd_TouchMas M ON I.TchEntryNo = M.TchEntryNo
+                WHERE M.proddate >= ? AND M.proddate < DATEADD(DAY, 1, ?)
+                  AND ISNULL(M.deleted, 0) = 0
+                  AND ISNULL(I.deleted, 0) = 0
+                  AND ISNULL(I.ProdTaken, 0) = 0
+                  AND NOT EXISTS (
+                      SELECT 1 FROM CncProd_TouchIdleDet TID_CHK
+                      WHERE TID_CHK.TchEntryNo = I.TchEntryNo
+                        AND ISNULL(TID_CHK.deleted, 0) = 0
+                        AND ISNULL(TID_CHK.ProdTaken, 0) = 0
+                  )
+            """)
+            branch_params.extend([start_date, end_date])
+
+    # 6. ConvProd_TouchIdleDet & ConvProd_TouchIdle (ProdTaken = 0)
+    if table_exists(cursor, "ConvProd_TouchMas"):
+        if table_exists(cursor, "ConvProd_TouchIdleDet"):
+            branches.append("""
+                SELECT
+                    M.proddate AS EntryDate,
+                    ISNULL(D.Shift, M.shift) AS Shift,
+                    ISNULL(D.MacNo, M.macno) AS MacNo,
+                    ISNULL(D.reasons, N'Conv Touch Idle Time') AS Reason,
+                    CASE
+                        WHEN D.stime IS NOT NULL AND D.etime IS NOT NULL
+                        THEN CASE
+                            WHEN D.etime >= D.stime THEN DATEDIFF(SECOND, D.stime, D.etime)
+                            ELSE DATEDIFF(SECOND, D.stime, DATEADD(DAY, 1, D.etime))
+                        END
+                        WHEN D.tottime IS NOT NULL AND DATEDIFF(SECOND, '19000101', D.tottime) > 0
+                        THEN DATEDIFF(SECOND, '19000101', D.tottime)
+                        ELSE 0
+                    END AS IdleSeconds,
+                    CASE WHEN ISNULL(CAST(D.IsEffCalc AS INT), 0) = 1 THEN 1 ELSE 0 END AS IsEffCalc
+                FROM ConvProd_TouchIdleDet D
+                INNER JOIN ConvProd_TouchMas M ON D.TchEntryNo = M.TchEntryNo
+                WHERE M.proddate >= ? AND M.proddate < DATEADD(DAY, 1, ?)
+                  AND ISNULL(M.deleted, 0) = 0
+                  AND ISNULL(D.deleted, 0) = 0
+                  AND ISNULL(D.ProdTaken, 0) = 0
+            """)
+            branch_params.extend([start_date, end_date])
+
+        if table_exists(cursor, "ConvProd_TouchIdle"):
+            branches.append("""
+                SELECT
+                    M.proddate AS EntryDate,
+                    ISNULL(I.shift, M.shift) AS Shift,
+                    ISNULL(I.macno, M.macno) AS MacNo,
+                    ISNULL(I.reasons, N'Conv Touch Idle Time') AS Reason,
+                    CASE
+                        WHEN I.tottime IS NOT NULL AND DATEDIFF(SECOND, '19000101', I.tottime) > 0
+                        THEN DATEDIFF(SECOND, '19000101', I.tottime)
+                        ELSE 0
+                    END AS IdleSeconds,
+                    CAST(NULL AS INT) AS IsEffCalc
+                FROM ConvProd_TouchIdle I
+                INNER JOIN ConvProd_TouchMas M ON I.TchEntryNo = M.TchEntryNo
+                WHERE M.proddate >= ? AND M.proddate < DATEADD(DAY, 1, ?)
+                  AND ISNULL(M.deleted, 0) = 0
+                  AND ISNULL(I.deleted, 0) = 0
+                  AND ISNULL(I.ProdTaken, 0) = 0
+                  AND NOT EXISTS (
+                      SELECT 1 FROM ConvProd_TouchIdleDet TID_CHK
+                      WHERE TID_CHK.TchEntryNo = I.TchEntryNo
+                        AND ISNULL(TID_CHK.deleted, 0) = 0
+                        AND ISNULL(TID_CHK.ProdTaken, 0) = 0
+                  )
+            """)
+            branch_params.extend([start_date, end_date])
+
+    # 7. ConvRodProd_TouchIdleDet & ConvRodProd_TouchIdle (ProdTaken = 0)
+    if table_exists(cursor, "ConvRodProd_TouchMas"):
+        if table_exists(cursor, "ConvRodProd_TouchIdleDet"):
+            branches.append("""
+                SELECT
+                    M.proddate AS EntryDate,
+                    ISNULL(D.Shift, M.shift) AS Shift,
+                    ISNULL(D.MacNo, M.macno) AS MacNo,
+                    ISNULL(D.reasons, N'Conv Rod Touch Idle Time') AS Reason,
+                    CASE
+                        WHEN D.stime IS NOT NULL AND D.etime IS NOT NULL
+                        THEN CASE
+                            WHEN D.etime >= D.stime THEN DATEDIFF(SECOND, D.stime, D.etime)
+                            ELSE DATEDIFF(SECOND, D.stime, DATEADD(DAY, 1, D.etime))
+                        END
+                        WHEN D.tottime IS NOT NULL AND DATEDIFF(SECOND, '19000101', D.tottime) > 0
+                        THEN DATEDIFF(SECOND, '19000101', D.tottime)
+                        ELSE 0
+                    END AS IdleSeconds,
+                    CASE WHEN ISNULL(CAST(D.IsEffCalc AS INT), 0) = 1 THEN 1 ELSE 0 END AS IsEffCalc
+                FROM ConvRodProd_TouchIdleDet D
+                INNER JOIN ConvRodProd_TouchMas M ON D.TchEntryNo = M.TchEntryNo
+                WHERE M.proddate >= ? AND M.proddate < DATEADD(DAY, 1, ?)
+                  AND ISNULL(M.deleted, 0) = 0
+                  AND ISNULL(D.deleted, 0) = 0
+                  AND ISNULL(D.ProdTaken, 0) = 0
+            """)
+            branch_params.extend([start_date, end_date])
+
+        if table_exists(cursor, "ConvRodProd_TouchIdle"):
+            branches.append("""
+                SELECT
+                    M.proddate AS EntryDate,
+                    ISNULL(I.shift, M.shift) AS Shift,
+                    ISNULL(I.macno, M.macno) AS MacNo,
+                    ISNULL(I.reasons, N'Conv Rod Touch Idle Time') AS Reason,
+                    CASE
+                        WHEN I.tottime IS NOT NULL AND DATEDIFF(SECOND, '19000101', I.tottime) > 0
+                        THEN DATEDIFF(SECOND, '19000101', I.tottime)
+                        ELSE 0
+                    END AS IdleSeconds,
+                    CAST(NULL AS INT) AS IsEffCalc
+                FROM ConvRodProd_TouchIdle I
+                INNER JOIN ConvRodProd_TouchMas M ON I.TchEntryNo = M.TchEntryNo
+                WHERE M.proddate >= ? AND M.proddate < DATEADD(DAY, 1, ?)
+                  AND ISNULL(M.deleted, 0) = 0
+                  AND ISNULL(I.deleted, 0) = 0
+                  AND ISNULL(I.ProdTaken, 0) = 0
+                  AND NOT EXISTS (
+                      SELECT 1 FROM ConvRodProd_TouchIdleDet TID_CHK
+                      WHERE TID_CHK.TchEntryNo = I.TchEntryNo
+                        AND ISNULL(TID_CHK.deleted, 0) = 0
+                        AND ISNULL(TID_CHK.ProdTaken, 0) = 0
+                  )
+            """)
+            branch_params.extend([start_date, end_date])
+
     return branches, branch_params
 
 
@@ -1622,11 +2071,74 @@ _PRODUCTIVE_UNION_SQL = """
       AND deleted = 0
       AND starttime IS NOT NULL
       AND endtime IS NOT NULL
+
+    UNION ALL
+
+    -- CNC Touch Productive (ProdTaken = 0)
+    SELECT
+        M.proddate AS EntryDate,
+        M.shift,
+        M.macno,
+        CASE
+            WHEN D.runto >= D.runfrom
+                THEN DATEDIFF(SECOND, D.runfrom, D.runto)
+            ELSE DATEDIFF(SECOND, D.runfrom, DATEADD(DAY, 1, D.runto))
+        END AS ProductiveSeconds
+    FROM CncProd_TouchDet D
+    INNER JOIN CncProd_TouchMas M ON D.TchEntryNo = M.TchEntryNo
+    WHERE M.proddate BETWEEN ? AND ?
+      AND ISNULL(M.deleted, 0) = 0
+      AND ISNULL(D.deleted, 0) = 0
+      AND ISNULL(D.ProdTaken, 0) = 0
+      AND D.runfrom IS NOT NULL
+      AND D.runto IS NOT NULL
+
+    UNION ALL
+
+    -- Conv Touch Productive (ProdTaken = 0)
+    SELECT
+        M.proddate AS EntryDate,
+        M.shift,
+        M.macno,
+        CASE
+            WHEN D.runto >= D.runfrom
+                THEN DATEDIFF(SECOND, D.runfrom, D.runto)
+            ELSE DATEDIFF(SECOND, D.runfrom, DATEADD(DAY, 1, D.runto))
+        END AS ProductiveSeconds
+    FROM ConvProd_TouchDet D
+    INNER JOIN ConvProd_TouchMas M ON D.TchEntryNo = M.TchEntryNo
+    WHERE M.proddate BETWEEN ? AND ?
+      AND ISNULL(M.deleted, 0) = 0
+      AND ISNULL(D.deleted, 0) = 0
+      AND ISNULL(D.ProdTaken, 0) = 0
+      AND D.runfrom IS NOT NULL
+      AND D.runto IS NOT NULL
+
+    UNION ALL
+
+    -- Conv Rod Touch Productive (ProdTaken = 0)
+    SELECT
+        M.proddate AS EntryDate,
+        M.shift,
+        M.macno,
+        CASE
+            WHEN D.runto >= D.runfrom
+                THEN DATEDIFF(SECOND, D.runfrom, D.runto)
+            ELSE DATEDIFF(SECOND, D.runfrom, DATEADD(DAY, 1, D.runto))
+        END AS ProductiveSeconds
+    FROM ConvRodProd_TouchDet D
+    INNER JOIN ConvRodProd_TouchMas M ON D.TchEntryNo = M.TchEntryNo
+    WHERE M.proddate BETWEEN ? AND ?
+      AND ISNULL(M.deleted, 0) = 0
+      AND ISNULL(D.deleted, 0) = 0
+      AND ISNULL(D.ProdTaken, 0) = 0
+      AND D.runfrom IS NOT NULL
+      AND D.runto IS NOT NULL
 """
 
 
 def _productive_date_params(start_date, end_date):
-    return [start_date, end_date] * 3
+    return [start_date, end_date] * 6
 
 
 def _build_utilization_filters(machine, shift, mac_type=None, prefix="S_ALL"):
@@ -1976,7 +2488,7 @@ def _fetch_idle_time_not_entered(cursor, start_date, end_date, machine, shift, m
         machine, shift, mac_col="P.macno", shift_col="P.shift", mac_type=mac_type,
     )
     opr_slot_sql, opr_slot_params = _build_slot_filter_clauses(
-        machine, shift, mac_col="macno", shift_col="shift", mac_type=mac_type,
+        machine, shift, mac_col="MacNo", shift_col="Shift", mac_type=mac_type,
     )
 
     sql = f"""
@@ -2043,18 +2555,29 @@ def _fetch_idle_time_not_entered(cursor, start_date, end_date, machine, shift, m
     ),
     OPERATOR_DATA AS (
         SELECT
-            CAST(proddate AS DATE) AS EntryDate,
-            LTRIM(RTRIM(CAST(shift AS NVARCHAR(128)))) AS ShiftName,
-            LTRIM(RTRIM(CAST(macno AS NVARCHAR(512)))) AS MacNo,
-            MAX(NULLIF(LTRIM(RTRIM(CAST(oprname AS NVARCHAR(256)))), N'')) AS OperatorName
-        FROM ProductionEntry
-        WHERE proddate BETWEEN ? AND ?
-          AND deleted = 0
+            CAST(EntryDate AS DATE) AS EntryDate,
+            LTRIM(RTRIM(CAST(Shift AS NVARCHAR(128)))) AS ShiftName,
+            LTRIM(RTRIM(CAST(MacNo AS NVARCHAR(512)))) AS MacNo,
+            MAX(NULLIF(LTRIM(RTRIM(CAST(OperatorName AS NVARCHAR(256)))), N'')) AS OperatorName
+        FROM (
+            SELECT proddate AS EntryDate, shift AS Shift, macno AS MacNo, oprname AS OperatorName FROM ProductionEntry WHERE proddate BETWEEN ? AND ? AND deleted = 0
+            UNION ALL
+            SELECT entrydate AS EntryDate, shift AS Shift, macno AS MacNo, oprname AS OperatorName FROM ConvProductionEntry WHERE entrydate BETWEEN ? AND ? AND deleted = 0
+            UNION ALL
+            SELECT entrydate AS EntryDate, shift AS Shift, macno AS MacNo, oprname AS OperatorName FROM ConvProductionEntryRod WHERE entrydate BETWEEN ? AND ? AND deleted = 0
+            UNION ALL
+            SELECT proddate AS EntryDate, shift AS Shift, macno AS MacNo, oprname AS OperatorName FROM CncProd_TouchMas WHERE proddate BETWEEN ? AND ? AND deleted = 0
+            UNION ALL
+            SELECT proddate AS EntryDate, shift AS Shift, macno AS MacNo, oprname AS OperatorName FROM ConvProd_TouchMas WHERE proddate BETWEEN ? AND ? AND deleted = 0
+            UNION ALL
+            SELECT proddate AS EntryDate, shift AS Shift, macno AS MacNo, oprname AS OperatorName FROM ConvRodProd_TouchMas WHERE proddate BETWEEN ? AND ? AND deleted = 0
+        ) O_ALL
+        WHERE 1 = 1
           {opr_slot_sql}
         GROUP BY
-            CAST(proddate AS DATE),
-            LTRIM(RTRIM(CAST(shift AS NVARCHAR(128)))),
-            LTRIM(RTRIM(CAST(macno AS NVARCHAR(512))))
+            CAST(EntryDate AS DATE),
+            LTRIM(RTRIM(CAST(Shift AS NVARCHAR(128)))),
+            LTRIM(RTRIM(CAST(MacNo AS NVARCHAR(512))))
     ),
     MACHINE_IDLE_RECORDED AS (
         SELECT DISTINCT
@@ -2078,7 +2601,7 @@ def _fetch_idle_time_not_entered(cursor, start_date, end_date, machine, shift, m
             ISNULL(I.TotalIdleSeconds, 0) AS IdleSeconds,
             ISNULL(P.TotalProductiveSeconds, 0) AS ProductiveSeconds,
             CASE
-                WHEN R.EntryDate IS NOT NULL THEN 1
+                WHEN R.EntryDate IS NOT NULL OR ISNULL(I.TotalIdleSeconds, 0) > 0 THEN 1
                 ELSE 0
             END AS HasMachineIdleEntry,
             O.OperatorName
@@ -2128,7 +2651,7 @@ def _fetch_idle_time_not_entered(cursor, start_date, end_date, machine, shift, m
     params.extend(idle_slot_params)
     params.extend(prod_date_params)
     params.extend(prod_slot_params)
-    params.extend([start_date, end_date])
+    params.extend([start_date, end_date] * 6)
     params.extend(opr_slot_params)
     params.extend([start_date, end_date])
     if shift:
@@ -2405,6 +2928,32 @@ def idle_time_report(request):
             except Exception:
                 pass
 
+        for tidle, tmas in [
+            ("CncProd_TouchIdle", "CncProd_TouchMas"),
+            ("CncProd_TouchIdleDet", "CncProd_TouchMas"),
+            ("ConvProd_TouchIdle", "ConvProd_TouchMas"),
+            ("ConvProd_TouchIdleDet", "ConvProd_TouchMas"),
+            ("ConvRodProd_TouchIdle", "ConvRodProd_TouchMas"),
+            ("ConvRodProd_TouchIdleDet", "ConvRodProd_TouchMas"),
+        ]:
+            if table_exists(cursor, tidle) and table_exists(cursor, tmas):
+                try:
+                    cursor.execute(f"""
+                        SELECT DISTINCT LTRIM(RTRIM(CAST(TI.reasons AS NVARCHAR(512))))
+                        FROM {tidle} TI
+                        INNER JOIN {tmas} TM ON TI.TchEntryNo = TM.TchEntryNo
+                        WHERE TM.proddate >= ? AND TM.proddate < DATEADD(DAY, 1, ?)
+                          AND ISNULL(TM.deleted, 0) = 0
+                          AND ISNULL(TI.deleted, 0) = 0
+                          AND ISNULL(TI.ProdTaken, 0) = 0
+                          AND TI.reasons IS NOT NULL AND LTRIM(RTRIM(CAST(TI.reasons AS NVARCHAR(512)))) <> N''
+                    """, [start_date, end_date])
+                    for r_row in cursor.fetchall() or []:
+                        if r_row and r_row[0]:
+                            reason_set.append(r_row[0])
+                except Exception:
+                    pass
+
 
         cnc_map = {}
         if table_exists(cursor, "MacMaster"):
@@ -2483,6 +3032,36 @@ def idle_time_report(request):
 
         from .views_plantperformance import _pv_enrich_operator_team
         _pv_enrich_operator_team(cursor, data_rows, start_date, end_date)
+
+        # Enrich any remaining missing operators from Touch masters (ProdTaken = 0)
+        missing_op_keys = [
+            r for r in data_rows
+            if not r.get("operator") or r.get("operator") in ("—", "Pending", "-", "NO OPERATOR", "None")
+        ]
+        if missing_op_keys:
+            try:
+                touch_op_sql = """
+                SELECT CAST(EntryDate AS DATE), LTRIM(RTRIM(CAST(Shift AS NVARCHAR(128)))), LTRIM(RTRIM(CAST(MacNo AS NVARCHAR(512)))), MAX(oprname)
+                FROM (
+                    SELECT proddate AS EntryDate, shift AS Shift, macno AS MacNo, oprname FROM CncProd_TouchMas WHERE ISNULL(deleted, 0) = 0 AND proddate >= ? AND proddate < DATEADD(DAY, 1, ?) AND oprname IS NOT NULL AND LTRIM(RTRIM(oprname)) <> ''
+                    UNION ALL
+                    SELECT proddate AS EntryDate, shift AS Shift, macno AS MacNo, oprname FROM ConvProd_TouchMas WHERE ISNULL(deleted, 0) = 0 AND proddate >= ? AND proddate < DATEADD(DAY, 1, ?) AND oprname IS NOT NULL AND LTRIM(RTRIM(oprname)) <> ''
+                    UNION ALL
+                    SELECT proddate AS EntryDate, shift AS Shift, macno AS MacNo, oprname FROM ConvRodProd_TouchMas WHERE ISNULL(deleted, 0) = 0 AND proddate >= ? AND proddate < DATEADD(DAY, 1, ?) AND oprname IS NOT NULL AND LTRIM(RTRIM(oprname)) <> ''
+                ) TM
+                GROUP BY CAST(EntryDate AS DATE), LTRIM(RTRIM(CAST(Shift AS NVARCHAR(128)))), LTRIM(RTRIM(CAST(MacNo AS NVARCHAR(512))))
+                """
+                cursor.execute(touch_op_sql, [start_date, end_date] * 3)
+                touch_ops = {
+                    (str(row[0]), str(row[1]).strip().upper(), str(row[2]).strip().upper()): str(row[3]).strip()
+                    for row in cursor.fetchall() or []
+                }
+                for r in missing_op_keys:
+                    k = (str(r.get("date")), str(r.get("shift")).strip().upper(), str(r.get("mac_no")).strip().upper())
+                    if k in touch_ops:
+                        r["operator"] = touch_ops[k]
+            except Exception:
+                pass
 
         kpis = _compute_kpis(
             cursor, start_date, end_date, date_params, outer_sql, outer_params,

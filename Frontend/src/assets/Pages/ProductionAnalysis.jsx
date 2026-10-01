@@ -731,7 +731,7 @@ export default function ProductionAnalysis() {
   const [pvChartType, setPvChartType] = useState("bar"); // "bar" | "line"
   const [pvmhrViewMode, setPvmhrViewMode] = useState("comparison"); // "comparison" | "production_value" | "mhr_cost" | "net_margin"
   const [oeeChartType, setOeeChartType] = useState("line"); // "line" | "bar"
-  const [selectedMacTypeFilter, setSelectedMacTypeFilter] = useState("All");
+  const [selectedMacTypeFilter, setSelectedMacTypeFilter] = useState("Active");
   const [searchMacQuery, setSearchMacQuery] = useState("");
   const [selectedMachine, setSelectedMachine] = useState(null);
   const [setupFilterMode, setSetupFilterMode] = useState("machine"); // "machine" | "month" | "part" | "shift"
@@ -954,16 +954,42 @@ export default function ProductionAnalysis() {
   const machineCategories = useMemo(() => {
     const groups = new Set();
     allMachinesList.forEach((m) => {
-      if (m.type) groups.add(m.type);
+      if (m.type && m.type !== "Other" && m.type !== "All" && m.type !== "Active") {
+        groups.add(m.type);
+      }
     });
-    return ["All", ...Array.from(groups)];
+    return ["Active", "All", ...Array.from(groups)];
   }, [allMachinesList]);
 
-  const filteredMachinesList = allMachinesList.filter(m => {
-    const matchesTab = selectedMacTypeFilter === "All" || m.type === selectedMacTypeFilter;
-    const matchesSearch = m.name.toLowerCase().includes(searchMacQuery.toLowerCase()) || m.type.toLowerCase().includes(searchMacQuery.toLowerCase());
-    return matchesTab && matchesSearch;
-  });
+  const filteredMachinesList = useMemo(() => {
+    return allMachinesList.filter(m => {
+      const hasData = (
+        (Number(m.oprEff) || 0) > 0 ||
+        (Number(m.oee) || 0) > 0 ||
+        (Number(m.prodQty) || 0) > 0 ||
+        (Number(m.runningHrs) || 0) > 0 ||
+        (Number(m.idleHrs) || 0) > 0 ||
+        (Number(m.utilization) || 0) > 0 ||
+        (Number(m.okQty) || 0) > 0
+      );
+
+      if (selectedMacTypeFilter === "Active") {
+        if (!hasData) return false;
+      } else if (selectedMacTypeFilter !== "All") {
+        if (m.type !== selectedMacTypeFilter) return false;
+      }
+
+      if (searchMacQuery && searchMacQuery.trim()) {
+        const q = searchMacQuery.toLowerCase().trim();
+        const matchesName = (m.name || "").toLowerCase().includes(q);
+        const matchesMacName = (m.macname || "").toLowerCase().includes(q);
+        const matchesType = (m.type || "").toLowerCase().includes(q);
+        if (!matchesName && !matchesMacName && !matchesType) return false;
+      }
+
+      return true;
+    });
+  }, [allMachinesList, selectedMacTypeFilter, searchMacQuery]);
 
   const macDetailData = {
     "TC-59": {
@@ -1083,12 +1109,16 @@ export default function ProductionAnalysis() {
         : Math.round(Number(idleBreakdown.accepted.total_hours || 0) * 3600));
   const totalNonAcceptedSecs = idleBreakdown.non_accepted.total_seconds !== undefined
     ? Number(idleBreakdown.non_accepted.total_seconds)
-    : Math.round(Number(idleBreakdown.non_accepted.total_hours || 0) * 3600);
+    : (kpiValues.idleNonAcceptedSeconds !== undefined
+        ? Number(kpiValues.idleNonAcceptedSeconds)
+        : Math.round(Number(idleBreakdown.non_accepted.total_hours || 0) * 3600));
 
   const totalAcceptedHrs = (idleBreakdown.accepted.total_hours !== undefined && idleBreakdown.accepted.total_hours !== null && idleBreakdown.accepted.total_hours !== "")
     ? Number(idleBreakdown.accepted.total_hours)
     : (Number(kpiValues.idleAcceptedHours) || 0);
-  const totalNonAccepted = Number(idleBreakdown.non_accepted.total_hours) || 0;
+  const totalNonAccepted = (idleBreakdown.non_accepted.total_hours !== undefined && idleBreakdown.non_accepted.total_hours !== null && idleBreakdown.non_accepted.total_hours !== "")
+    ? Number(idleBreakdown.non_accepted.total_hours)
+    : (Number(kpiValues.idleNonAcceptedHours) || 0);
   const totalLoss = idleBreakdown.non_accepted.total_loss || 0;
 
   const machineRunningSecs = kpiValues.productionSeconds !== undefined
@@ -1780,7 +1810,7 @@ export default function ProductionAnalysis() {
       .then(data => {
         if (data && data.status === "success" && data.data) {
           const d = data.data;
-          setKpiValues({ totalProductionQty: d.totalProductionQty || 0, okAcceptedQty: d.okAcceptedQty || 0, rejectionQty: d.rejectionQty || 0, totMatRejQty: d.totMatRejQty ?? 0, totMacRejQty: d.totMacRejQty ?? 0, totReworkQty: d.totReworkQty ?? 0, overallOee: d.overallOee ?? 0.0, productionHours: d.productionHours ?? 0.0, productionSeconds: d.productionSeconds ?? 0, totalMachineHours: d.totalMachineHours ?? 0.0, idleHours: d.idleHours ?? 0.0, idleSeconds: d.idleSeconds ?? 0, idleAcceptedHours: d.idleAcceptedHours ?? 0.0, idleAcceptedSeconds: d.idleAcceptedSeconds ?? 0, totProductionHours: d.totProductionHours ?? 0.0, totProductionSeconds: d.totProductionSeconds ?? 0, totProductionHoursDisplay: d.totProductionHoursDisplay || "", settingHours: d.settingHours ?? 0.0, settingSeconds: d.settingSeconds ?? 0, manEfficiency: d.manEfficiency ?? 0.0, totalShifts: d.totalShifts || 0, avgProdPerShift: d.avgProdPerShift ?? 0.0, peakShiftOutput: d.peakShiftOutput || 0, lowestShiftOutput: d.lowestShiftOutput || 0, activeMachines: d.activeMachines || 0, idleMachines: d.idleMachines || 0, machineUtilization: d.machineUtilization ?? 0.0, machineEfficiency: d.machineEfficiency ?? 0.0, operatorEfficiency: d.operatorEfficiency ?? 0.0, qualityRate: d.qualityRate ?? 0.0, materialRejection: d.materialRejection ?? 0.0, machineRejection: d.machineRejection ?? 0.0, totCncMac: d.totCncMac || 0, totConvMac: d.totConvMac || 0 });
+          setKpiValues({ totalProductionQty: d.totalProductionQty || 0, okAcceptedQty: d.okAcceptedQty || 0, rejectionQty: d.rejectionQty || 0, totMatRejQty: d.totMatRejQty ?? 0, totMacRejQty: d.totMacRejQty ?? 0, totReworkQty: d.totReworkQty ?? 0, overallOee: d.overallOee ?? 0.0, productionHours: d.productionHours ?? 0.0, productionSeconds: d.productionSeconds ?? 0, totalMachineHours: d.totalMachineHours ?? 0.0, idleHours: d.idleHours ?? 0.0, idleSeconds: d.idleSeconds ?? 0, idleAcceptedHours: d.idleAcceptedHours ?? 0.0, idleAcceptedSeconds: d.idleAcceptedSeconds ?? 0, idleNonAcceptedHours: d.idleNonAcceptedHours ?? 0.0, idleNonAcceptedSeconds: d.idleNonAcceptedSeconds ?? 0, totProductionHours: d.totProductionHours ?? 0.0, totProductionSeconds: d.totProductionSeconds ?? 0, totProductionHoursDisplay: d.totProductionHoursDisplay || "", settingHours: d.settingHours ?? 0.0, settingSeconds: d.settingSeconds ?? 0, manEfficiency: d.manEfficiency ?? 0.0, totalShifts: d.totalShifts || 0, avgProdPerShift: d.avgProdPerShift ?? 0.0, peakShiftOutput: d.peakShiftOutput || 0, lowestShiftOutput: d.lowestShiftOutput || 0, activeMachines: d.activeMachines || 0, idleMachines: d.idleMachines || 0, machineUtilization: d.machineUtilization ?? 0.0, machineEfficiency: d.machineEfficiency ?? 0.0, operatorEfficiency: d.operatorEfficiency ?? 0.0, qualityRate: d.qualityRate ?? 0.0, materialRejection: d.materialRejection ?? 0.0, machineRejection: d.machineRejection ?? 0.0, totCncMac: d.totCncMac || 0, totConvMac: d.totConvMac || 0 });
           if (d.machines && Array.isArray(d.machines)) {
             setMachines(d.machines);
           }

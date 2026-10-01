@@ -12,7 +12,223 @@ from .views_idle_time_report import (
     _resolve_shift_db_name,
 )
 
-def _get_idle_union_sql_and_params(request, conn, from_date, to_date):
+def _build_production_idle_branches(cursor, from_date, to_date):
+    """
+    Builds idle branches strictly for Production Analysis Report as requested:
+    1. Machine_IdleEntryDet + Machine_IdleEntryMas (+ MacIdle_IdleEntry for IsEffCalc)
+    2. CncProd_TouchIdleDet & CncProd_TouchIdle (ProdTaken = 0 / false only)
+    3. ConvProd_TouchIdleDet & ConvProd_TouchIdle (ProdTaken = 0 / false only)
+    4. ConvRodProd_TouchIdleDet & ConvRodProd_TouchIdle (ProdTaken = 0 / false only)
+    IsEffCalc = 1 (True) -> Accepted idle, IsEffCalc = 0 (False) -> Non-accepted idle.
+    """
+    branches = []
+    branch_params = []
+
+    # 1. Three-table Machine Idle: Machine_IdleEntryDet + Machine_IdleEntryMas (+ MacIdle_IdleEntry)
+    if table_exists(cursor, "Machine_IdleEntryDet") and table_exists(cursor, "Machine_IdleEntryMas"):
+        has_mac_idle = table_exists(cursor, "MacIdle_IdleEntry")
+        join_mac_idle = "LEFT JOIN MacIdle_IdleEntry E ON D.prodid = E.prodid AND D.RowNo = E.RowNo AND ISNULL(E.deleted, 0) = 0" if has_mac_idle else ""
+        eff_calc_expr = "CASE WHEN E.IsEffCalc = 1 THEN 1 WHEN E.IsEffCalc = 0 THEN 0 ELSE NULL END" if has_mac_idle else "CAST(NULL AS INT)"
+        branches.append(f"""
+            SELECT
+                M.proddate AS EntryDate,
+                D.Shift,
+                D.MacNo,
+                ISNULL(D.reasons, N'Machine Idle Entry') AS Reason,
+                CASE
+                    WHEN D.stime IS NOT NULL AND D.etime IS NOT NULL
+                    THEN CASE
+                        WHEN D.etime >= D.stime THEN DATEDIFF(SECOND, D.stime, D.etime)
+                        ELSE DATEDIFF(SECOND, D.stime, DATEADD(DAY, 1, D.etime))
+                    END
+                    WHEN D.tottime IS NOT NULL AND DATEDIFF(SECOND, '19000101', D.tottime) > 0
+                    THEN DATEDIFF(SECOND, '19000101', D.tottime)
+                    ELSE 0
+                END AS IdleSeconds,
+                {eff_calc_expr} AS IsEffCalc
+            FROM Machine_IdleEntryDet D
+            INNER JOIN Machine_IdleEntryMas M ON D.prodid = M.prodid
+            {join_mac_idle}
+            WHERE M.proddate >= ? AND M.proddate < DATEADD(DAY, 1, ?)
+              AND ISNULL(M.deleted, 0) = 0
+              AND ISNULL(D.deleted, 0) = 0
+        """)
+        branch_params.extend([from_date, to_date])
+
+    # 2. CncProd_TouchIdleDet & CncProd_TouchIdle (ProdTaken = 0 only)
+    if table_exists(cursor, "CncProd_TouchMas"):
+        if table_exists(cursor, "CncProd_TouchIdleDet"):
+            branches.append("""
+                SELECT
+                    M.proddate AS EntryDate,
+                    ISNULL(D.Shift, M.shift) AS Shift,
+                    ISNULL(D.MacNo, M.macno) AS MacNo,
+                    ISNULL(D.reasons, N'CNC Touch Idle Time') AS Reason,
+                    CASE
+                        WHEN D.stime IS NOT NULL AND D.etime IS NOT NULL
+                        THEN CASE
+                            WHEN D.etime >= D.stime THEN DATEDIFF(SECOND, D.stime, D.etime)
+                            ELSE DATEDIFF(SECOND, D.stime, DATEADD(DAY, 1, D.etime))
+                        END
+                        WHEN D.tottime IS NOT NULL AND DATEDIFF(SECOND, '19000101', D.tottime) > 0
+                        THEN DATEDIFF(SECOND, '19000101', D.tottime)
+                        ELSE 0
+                    END AS IdleSeconds,
+                    CASE WHEN ISNULL(CAST(D.IsEffCalc AS INT), 0) = 1 THEN 1 ELSE 0 END AS IsEffCalc
+                FROM CncProd_TouchIdleDet D
+                INNER JOIN CncProd_TouchMas M ON D.TchEntryNo = M.TchEntryNo
+                WHERE M.proddate >= ? AND M.proddate < DATEADD(DAY, 1, ?)
+                  AND ISNULL(M.deleted, 0) = 0
+                  AND ISNULL(D.deleted, 0) = 0
+                  AND ISNULL(D.ProdTaken, 0) = 0
+            """)
+            branch_params.extend([from_date, to_date])
+
+        if table_exists(cursor, "CncProd_TouchIdle"):
+            branches.append("""
+                SELECT
+                    M.proddate AS EntryDate,
+                    ISNULL(I.shift, M.shift) AS Shift,
+                    ISNULL(I.macno, M.macno) AS MacNo,
+                    ISNULL(I.reasons, N'CNC Touch Idle Time') AS Reason,
+                    CASE
+                        WHEN I.tottime IS NOT NULL AND DATEDIFF(SECOND, '19000101', I.tottime) > 0
+                        THEN DATEDIFF(SECOND, '19000101', I.tottime)
+                        ELSE 0
+                    END AS IdleSeconds,
+                    CASE WHEN ISNULL(CAST(I.IsEffCalc AS INT), 0) = 1 THEN 1 ELSE 0 END AS IsEffCalc
+                FROM CncProd_TouchIdle I
+                INNER JOIN CncProd_TouchMas M ON I.TchEntryNo = M.TchEntryNo
+                WHERE M.proddate >= ? AND M.proddate < DATEADD(DAY, 1, ?)
+                  AND ISNULL(M.deleted, 0) = 0
+                  AND ISNULL(I.deleted, 0) = 0
+                  AND ISNULL(I.ProdTaken, 0) = 0
+                  AND NOT EXISTS (
+                      SELECT 1 FROM CncProd_TouchIdleDet TID_CHK
+                      WHERE TID_CHK.TchEntryNo = I.TchEntryNo
+                        AND ISNULL(TID_CHK.deleted, 0) = 0
+                        AND ISNULL(TID_CHK.ProdTaken, 0) = 0
+                  )
+            """)
+            branch_params.extend([from_date, to_date])
+
+    # 3. ConvProd_TouchIdleDet & ConvProd_TouchIdle (ProdTaken = 0 only)
+    if table_exists(cursor, "ConvProd_TouchMas"):
+        if table_exists(cursor, "ConvProd_TouchIdleDet"):
+            branches.append("""
+                SELECT
+                    M.proddate AS EntryDate,
+                    ISNULL(D.Shift, M.shift) AS Shift,
+                    ISNULL(D.MacNo, M.macno) AS MacNo,
+                    ISNULL(D.reasons, N'Conv Touch Idle Time') AS Reason,
+                    CASE
+                        WHEN D.stime IS NOT NULL AND D.etime IS NOT NULL
+                        THEN CASE
+                            WHEN D.etime >= D.stime THEN DATEDIFF(SECOND, D.stime, D.etime)
+                            ELSE DATEDIFF(SECOND, D.stime, DATEADD(DAY, 1, D.etime))
+                        END
+                        WHEN D.tottime IS NOT NULL AND DATEDIFF(SECOND, '19000101', D.tottime) > 0
+                        THEN DATEDIFF(SECOND, '19000101', D.tottime)
+                        ELSE 0
+                    END AS IdleSeconds,
+                    CASE WHEN ISNULL(CAST(D.IsEffCalc AS INT), 0) = 1 THEN 1 ELSE 0 END AS IsEffCalc
+                FROM ConvProd_TouchIdleDet D
+                INNER JOIN ConvProd_TouchMas M ON D.TchEntryNo = M.TchEntryNo
+                WHERE M.proddate >= ? AND M.proddate < DATEADD(DAY, 1, ?)
+                  AND ISNULL(M.deleted, 0) = 0
+                  AND ISNULL(D.deleted, 0) = 0
+                  AND ISNULL(D.ProdTaken, 0) = 0
+            """)
+            branch_params.extend([from_date, to_date])
+
+        if table_exists(cursor, "ConvProd_TouchIdle"):
+            branches.append("""
+                SELECT
+                    M.proddate AS EntryDate,
+                    ISNULL(I.shift, M.shift) AS Shift,
+                    ISNULL(I.macno, M.macno) AS MacNo,
+                    ISNULL(I.reasons, N'Conv Touch Idle Time') AS Reason,
+                    CASE
+                        WHEN I.tottime IS NOT NULL AND DATEDIFF(SECOND, '19000101', I.tottime) > 0
+                        THEN DATEDIFF(SECOND, '19000101', I.tottime)
+                        ELSE 0
+                    END AS IdleSeconds,
+                    CAST(NULL AS INT) AS IsEffCalc
+                FROM ConvProd_TouchIdle I
+                INNER JOIN ConvProd_TouchMas M ON I.TchEntryNo = M.TchEntryNo
+                WHERE M.proddate >= ? AND M.proddate < DATEADD(DAY, 1, ?)
+                  AND ISNULL(M.deleted, 0) = 0
+                  AND ISNULL(I.deleted, 0) = 0
+                  AND ISNULL(I.ProdTaken, 0) = 0
+                  AND NOT EXISTS (
+                      SELECT 1 FROM ConvProd_TouchIdleDet TID_CHK
+                      WHERE TID_CHK.TchEntryNo = I.TchEntryNo
+                        AND ISNULL(TID_CHK.deleted, 0) = 0
+                        AND ISNULL(TID_CHK.ProdTaken, 0) = 0
+                  )
+            """)
+            branch_params.extend([from_date, to_date])
+
+    # 4. ConvRodProd_TouchIdleDet & ConvRodProd_TouchIdle (ProdTaken = 0 only)
+    if table_exists(cursor, "ConvRodProd_TouchMas"):
+        if table_exists(cursor, "ConvRodProd_TouchIdleDet"):
+            branches.append("""
+                SELECT
+                    M.proddate AS EntryDate,
+                    ISNULL(D.Shift, M.shift) AS Shift,
+                    ISNULL(D.MacNo, M.macno) AS MacNo,
+                    ISNULL(D.reasons, N'Conv Rod Touch Idle Time') AS Reason,
+                    CASE
+                        WHEN D.stime IS NOT NULL AND D.etime IS NOT NULL
+                        THEN CASE
+                            WHEN D.etime >= D.stime THEN DATEDIFF(SECOND, D.stime, D.etime)
+                            ELSE DATEDIFF(SECOND, D.stime, DATEADD(DAY, 1, D.etime))
+                        END
+                        WHEN D.tottime IS NOT NULL AND DATEDIFF(SECOND, '19000101', D.tottime) > 0
+                        THEN DATEDIFF(SECOND, '19000101', D.tottime)
+                        ELSE 0
+                    END AS IdleSeconds,
+                    CASE WHEN ISNULL(CAST(D.IsEffCalc AS INT), 0) = 1 THEN 1 ELSE 0 END AS IsEffCalc
+                FROM ConvRodProd_TouchIdleDet D
+                INNER JOIN ConvRodProd_TouchMas M ON D.TchEntryNo = M.TchEntryNo
+                WHERE M.proddate >= ? AND M.proddate < DATEADD(DAY, 1, ?)
+                  AND ISNULL(M.deleted, 0) = 0
+                  AND ISNULL(D.deleted, 0) = 0
+                  AND ISNULL(D.ProdTaken, 0) = 0
+            """)
+            branch_params.extend([from_date, to_date])
+
+        if table_exists(cursor, "ConvRodProd_TouchIdle"):
+            branches.append("""
+                SELECT
+                    M.proddate AS EntryDate,
+                    ISNULL(I.shift, M.shift) AS Shift,
+                    ISNULL(I.macno, M.macno) AS MacNo,
+                    ISNULL(I.reasons, N'Conv Rod Touch Idle Time') AS Reason,
+                    CASE
+                        WHEN I.tottime IS NOT NULL AND DATEDIFF(SECOND, '19000101', I.tottime) > 0
+                        THEN DATEDIFF(SECOND, '19000101', I.tottime)
+                        ELSE 0
+                    END AS IdleSeconds,
+                    CAST(NULL AS INT) AS IsEffCalc
+                FROM ConvRodProd_TouchIdle I
+                INNER JOIN ConvRodProd_TouchMas M ON I.TchEntryNo = M.TchEntryNo
+                WHERE M.proddate >= ? AND M.proddate < DATEADD(DAY, 1, ?)
+                  AND ISNULL(M.deleted, 0) = 0
+                  AND ISNULL(I.deleted, 0) = 0
+                  AND ISNULL(I.ProdTaken, 0) = 0
+                  AND NOT EXISTS (
+                      SELECT 1 FROM ConvRodProd_TouchIdleDet TID_CHK
+                      WHERE TID_CHK.TchEntryNo = I.TchEntryNo
+                        AND ISNULL(TID_CHK.deleted, 0) = 0
+                        AND ISNULL(TID_CHK.ProdTaken, 0) = 0
+                  )
+            """)
+            branch_params.extend([from_date, to_date])
+
+    return branches, branch_params
+
+def _get_idle_union_sql_and_params(request, conn, from_date, to_date, use_mis_idle=True):
     machine_raw = request.query_params.get("machine", "")
     shift_raw = request.query_params.get("shift", "")
     operator_raw = request.query_params.get("operator", "")
@@ -26,7 +242,10 @@ def _get_idle_union_sql_and_params(request, conn, from_date, to_date):
     cursor = conn.cursor()
     try:
         shift = _resolve_shift_db_name(cursor, shift_parsed) if shift_parsed else None
-        branches, branch_params = _build_accepted_vs_non_accepted_branches(cursor, from_date, to_date, include_machine_idle_entry=False)
+        if use_mis_idle:
+            branches, branch_params = _build_accepted_vs_non_accepted_branches(cursor, from_date, to_date, include_machine_idle_entry=True)
+        else:
+            branches, branch_params = _build_production_idle_branches(cursor, from_date, to_date)
         has_t_cnc_m = table_exists(cursor, "CncProd_TouchMas")
         has_t_conv_m = table_exists(cursor, "ConvProd_TouchMas")
         has_t_rod_m = table_exists(cursor, "ConvRodProd_TouchMas")
@@ -380,11 +599,16 @@ def production_analysis_report(request):
             "totReworkQty": 0,
             "overallOee": 0.0,
             "productionHours": 0.0,
+            "productionSeconds": 0,
+            "runningHours": 0.0,
+            "runningSeconds": 0,
             "totalMachineHours": 0.0,
             "idleHours": 0.0,
             "idleSeconds": 0,
             "idleAcceptedHours": 0.0,
             "idleAcceptedSeconds": 0,
+            "idleNonAcceptedHours": 0.0,
+            "idleNonAcceptedSeconds": 0,
             "settingHours": 0.0,
             "settingSeconds": 0,
             "totProductionHours": 0.0,
@@ -543,26 +767,24 @@ def production_analysis_report(request):
             UNION ALL
             SELECT 
                 CASE 
-                    WHEN VTD.runtimesecs IS NOT NULL AND VTD.runtimesecs > 0 THEN CAST(VTD.runtimesecs AS INT)
                     WHEN VTD.runto >= VTD.runfrom THEN DATEDIFF(SECOND, VTD.runfrom, VTD.runto) 
                     ELSE DATEDIFF(SECOND, VTD.runfrom, DATEADD(DAY, 1, VTD.runto)) 
                 END AS TotalRunSeconds 
             FROM ConvProd_TouchDet VTD
             INNER JOIN #FilteredTouchConv F ON VTD.TchEntryNo = F.TchEntryNo AND VTD.RowNo = F.RowNo
-            WHERE (VTD.runtimesecs IS NOT NULL AND VTD.runtimesecs > 0) OR (VTD.runfrom IS NOT NULL AND VTD.runto IS NOT NULL)
+            WHERE VTD.runfrom IS NOT NULL AND VTD.runto IS NOT NULL
         """ if has_touch_conv else ""
 
         t_rod_hours = """
             UNION ALL
             SELECT 
                 CASE 
-                    WHEN RTD.runtimesecs IS NOT NULL AND RTD.runtimesecs > 0 THEN CAST(RTD.runtimesecs AS INT)
                     WHEN RTD.runto >= RTD.runfrom THEN DATEDIFF(SECOND, RTD.runfrom, RTD.runto) 
                     ELSE DATEDIFF(SECOND, RTD.runfrom, DATEADD(DAY, 1, RTD.runto)) 
                 END AS TotalRunSeconds 
             FROM ConvRodProd_TouchDet RTD
             INNER JOIN #FilteredTouchRod F ON RTD.TchEntryNo = F.TchEntryNo AND RTD.RowNo = F.RowNo
-            WHERE (RTD.runtimesecs IS NOT NULL AND RTD.runtimesecs > 0) OR (RTD.runfrom IS NOT NULL AND RTD.runto IS NOT NULL)
+            WHERE RTD.runfrom IS NOT NULL AND RTD.runto IS NOT NULL
         """ if has_touch_rod else ""
 
         t_cnc_setting = """
@@ -705,7 +927,7 @@ def production_analysis_report(request):
                 CTM.macno, 
                 CASE WHEN CTD.runto < CTD.runfrom THEN DATEDIFF(SECOND, CTD.runfrom, DATEADD(DAY, 1, CTD.runto)) ELSE DATEDIFF(SECOND, CTD.runfrom, CTD.runto) END AS RunTimeSecs,
                 28800 AS ShiftTimeSecs,
-                CASE WHEN CTD.idlTime IS NOT NULL AND DATEDIFF(SECOND, 0, CTD.idlTime) > 0 THEN DATEDIFF(SECOND, 0, CTD.idlTime) ELSE 0 END AS IdleTimeSecs
+                0 AS IdleTimeSecs
             FROM CncProd_TouchDet CTD
             INNER JOIN CncProd_TouchMas CTM ON CTD.TchEntryNo = CTM.TchEntryNo
             INNER JOIN #FilteredTouchCNC F ON CTD.TchEntryNo = F.TchEntryNo AND CTD.RowNo = F.RowNo
@@ -716,9 +938,9 @@ def production_analysis_report(request):
             UNION ALL
             SELECT 
                 VTM.macno, 
-                CASE WHEN VTD.runtimesecs IS NOT NULL AND VTD.runtimesecs > 0 THEN CAST(VTD.runtimesecs AS INT) WHEN VTD.runto < VTD.runfrom THEN DATEDIFF(SECOND, VTD.runfrom, DATEADD(DAY, 1, VTD.runto)) ELSE DATEDIFF(SECOND, VTD.runfrom, VTD.runto) END AS RunTimeSecs,
+                CASE WHEN VTD.runto >= VTD.runfrom THEN DATEDIFF(SECOND, VTD.runfrom, VTD.runto) ELSE DATEDIFF(SECOND, VTD.runfrom, DATEADD(DAY, 1, VTD.runto)) END AS RunTimeSecs,
                 COALESCE(NULLIF(VTD.shifttimesecs, 0), 28800) AS ShiftTimeSecs,
-                DATEDIFF(SECOND, 0, ISNULL(VTD.idlTime, '1900-01-01 00:00:00')) AS IdleTimeSecs
+                0 AS IdleTimeSecs
             FROM ConvProd_TouchDet VTD
             INNER JOIN ConvProd_TouchMas VTM ON VTD.TchEntryNo = VTM.TchEntryNo
             INNER JOIN #FilteredTouchConv F ON VTD.TchEntryNo = F.TchEntryNo AND VTD.RowNo = F.RowNo
@@ -729,9 +951,9 @@ def production_analysis_report(request):
             UNION ALL
             SELECT 
                 RTM.macno, 
-                CASE WHEN RTD.runtimesecs IS NOT NULL AND RTD.runtimesecs > 0 THEN CAST(RTD.runtimesecs AS INT) WHEN RTD.runto < RTD.runfrom THEN DATEDIFF(SECOND, RTD.runfrom, DATEADD(DAY, 1, RTD.runto)) ELSE DATEDIFF(SECOND, RTD.runfrom, RTD.runto) END AS RunTimeSecs,
+                CASE WHEN RTD.runto >= RTD.runfrom THEN DATEDIFF(SECOND, RTD.runfrom, RTD.runto) ELSE DATEDIFF(SECOND, RTD.runfrom, DATEADD(DAY, 1, RTD.runto)) END AS RunTimeSecs,
                 COALESCE(NULLIF(RTD.shifttimesecs, 0), 28800) AS ShiftTimeSecs,
-                DATEDIFF(SECOND, 0, ISNULL(RTD.idlTime, '1900-01-01 00:00:00')) AS IdleTimeSecs
+                0 AS IdleTimeSecs
             FROM ConvRodProd_TouchDet RTD
             INNER JOIN ConvRodProd_TouchMas RTM ON RTD.TchEntryNo = RTM.TchEntryNo
             INNER JOIN #FilteredTouchRod F ON RTD.TchEntryNo = F.TchEntryNo AND RTD.RowNo = F.RowNo
@@ -770,7 +992,7 @@ def production_analysis_report(request):
         t_conv_overall_util = """
             UNION ALL
             SELECT 
-                CASE WHEN VTD.runtimesecs IS NOT NULL AND VTD.runtimesecs > 0 THEN CAST(VTD.runtimesecs AS INT) WHEN VTD.runto < VTD.runfrom THEN DATEDIFF(SECOND, VTD.runfrom, DATEADD(DAY, 1, VTD.runto)) ELSE DATEDIFF(SECOND, VTD.runfrom, VTD.runto) END AS RunTimeSecs,
+                CASE WHEN VTD.runto >= VTD.runfrom THEN DATEDIFF(SECOND, VTD.runfrom, VTD.runto) ELSE DATEDIFF(SECOND, VTD.runfrom, DATEADD(DAY, 1, VTD.runto)) END AS RunTimeSecs,
                 DATEDIFF(SECOND, 0, ISNULL(VTD.idlTime, '1900-01-01 00:00:00')) AS IdleTimeSecs
             FROM ConvProd_TouchDet VTD
             INNER JOIN #FilteredTouchConv F ON VTD.TchEntryNo = F.TchEntryNo AND VTD.RowNo = F.RowNo
@@ -779,7 +1001,7 @@ def production_analysis_report(request):
         t_rod_overall_util = """
             UNION ALL
             SELECT 
-                CASE WHEN RTD.runtimesecs IS NOT NULL AND RTD.runtimesecs > 0 THEN CAST(RTD.runtimesecs AS INT) WHEN RTD.runto < RTD.runfrom THEN DATEDIFF(SECOND, RTD.runfrom, DATEADD(DAY, 1, RTD.runto)) ELSE DATEDIFF(SECOND, RTD.runfrom, RTD.runto) END AS RunTimeSecs,
+                CASE WHEN RTD.runto >= RTD.runfrom THEN DATEDIFF(SECOND, RTD.runfrom, RTD.runto) ELSE DATEDIFF(SECOND, RTD.runfrom, DATEADD(DAY, 1, RTD.runto)) END AS RunTimeSecs,
                 DATEDIFF(SECOND, 0, ISNULL(RTD.idlTime, '1900-01-01 00:00:00')) AS IdleTimeSecs
             FROM ConvRodProd_TouchDet RTD
             INNER JOIN #FilteredTouchRod F ON RTD.TchEntryNo = F.TchEntryNo AND RTD.RowNo = F.RowNo
@@ -801,7 +1023,6 @@ def production_analysis_report(request):
             SELECT 
                 CAST(VTD.TchEntryNo AS NVARCHAR(100)) + '_' + CAST(VTD.RowNo AS NVARCHAR(20)) AS EntryID,
                 MAX(CASE 
-                    WHEN VTD.runtimesecs IS NOT NULL AND VTD.runtimesecs > 0 THEN CAST(VTD.runtimesecs AS INT)
                     WHEN VTD.runto >= VTD.runfrom THEN DATEDIFF(SECOND, VTD.runfrom, VTD.runto) 
                     ELSE DATEDIFF(SECOND, VTD.runfrom, DATEADD(DAY, 1, VTD.runto)) 
                 END) AS RunTimeSecs,
@@ -816,7 +1037,6 @@ def production_analysis_report(request):
             SELECT 
                 CAST(RTD.TchEntryNo AS NVARCHAR(100)) + '_' + CAST(RTD.RowNo AS NVARCHAR(20)) AS EntryID,
                 MAX(CASE 
-                    WHEN RTD.runtimesecs IS NOT NULL AND RTD.runtimesecs > 0 THEN CAST(RTD.runtimesecs AS INT)
                     WHEN RTD.runto >= RTD.runfrom THEN DATEDIFF(SECOND, RTD.runfrom, RTD.runto) 
                     ELSE DATEDIFF(SECOND, RTD.runfrom, DATEADD(DAY, 1, RTD.runto)) 
                 END) AS RunTimeSecs,
@@ -872,7 +1092,6 @@ def production_analysis_report(request):
                 CAST(VTD.TchEntryNo AS NVARCHAR(100)) + '_' + CAST(VTD.RowNo AS NVARCHAR(20)) AS EntryID,
                 VTM.proddate AS entrydate,
                 MAX(CASE 
-                    WHEN VTD.runtimesecs IS NOT NULL AND VTD.runtimesecs > 0 THEN CAST(VTD.runtimesecs AS INT)
                     WHEN VTD.runto >= VTD.runfrom THEN DATEDIFF(SECOND, VTD.runfrom, VTD.runto) 
                     ELSE DATEDIFF(SECOND, VTD.runfrom, DATEADD(DAY, 1, VTD.runto)) 
                 END) AS RunTimeSecs,
@@ -889,7 +1108,6 @@ def production_analysis_report(request):
                 CAST(RTD.TchEntryNo AS NVARCHAR(100)) + '_' + CAST(RTD.RowNo AS NVARCHAR(20)) AS EntryID,
                 RTM.proddate AS entrydate,
                 MAX(CASE 
-                    WHEN RTD.runtimesecs IS NOT NULL AND RTD.runtimesecs > 0 THEN CAST(RTD.runtimesecs AS INT)
                     WHEN RTD.runto >= RTD.runfrom THEN DATEDIFF(SECOND, RTD.runfrom, RTD.runto) 
                     ELSE DATEDIFF(SECOND, RTD.runfrom, DATEADD(DAY, 1, RTD.runto)) 
                 END) AS RunTimeSecs,
@@ -1031,8 +1249,8 @@ def production_analysis_report(request):
         row = run_query(total_machine_hours_query, [from_date, to_date] + mac_filter_params + shift_filter_params)
         if row and row[0] is not None: result["totalMachineHours"] = float(row[0])
 
-        # ── Query 7: Total Idle Hours & Idle Accepted Hours ───────────
-        idle_union_sql, idle_outer_sql, idle_params = _get_idle_union_sql_and_params(request, conn, from_date, to_date)
+        # ── Query 7: Total Idle Hours & Idle Accepted Hours (from MIS - Idle Report logic) ───
+        idle_union_sql, idle_outer_sql, idle_params = _get_idle_union_sql_and_params(request, conn, from_date, to_date, use_mis_idle=True)
         cur_ir = conn.cursor()
         try:
             has_idle_reasons = table_exists(cur_ir, "IdleReasons")
@@ -1044,7 +1262,8 @@ def production_analysis_report(request):
                  = LTRIM(RTRIM(CAST(IR.IdleReasons AS NVARCHAR(512))))
                 AND ISNULL(IR.deleted, 0) = 0
         """ if has_idle_reasons else ""
-        ir_accept_check = "(IR.IdleID IS NOT NULL AND ISNULL(IR.IsAccept, 0) = 1)" if has_idle_reasons else "1 = 0"
+        ir_accept_1 = "IR.IsAccept = 1" if has_idle_reasons else "1 = 0"
+        ir_accept_0 = "IR.IsAccept = 0" if has_idle_reasons else "1 = 0"
 
         idle_hours_query = f"""
         SELECT 
@@ -1053,10 +1272,20 @@ def production_analysis_report(request):
                 CASE
                     WHEN A.IsEffCalc = 1 THEN A.IdleSeconds
                     WHEN A.IsEffCalc = 0 THEN 0
-                    WHEN {ir_accept_check} THEN A.IdleSeconds
+                    WHEN {ir_accept_1} THEN A.IdleSeconds
+                    WHEN {ir_accept_0} THEN 0
+                    ELSE A.IdleSeconds
+                END
+            ), 0) AS AcceptedIdleSeconds,
+            COALESCE(SUM(
+                CASE
+                    WHEN A.IsEffCalc = 1 THEN 0
+                    WHEN A.IsEffCalc = 0 THEN A.IdleSeconds
+                    WHEN {ir_accept_1} THEN 0
+                    WHEN {ir_accept_0} THEN A.IdleSeconds
                     ELSE 0
                 END
-            ), 0) AS AcceptedIdleSeconds
+            ), 0) AS NonAcceptedIdleSeconds
         FROM (
             {idle_union_sql}
         ) A
@@ -1067,10 +1296,13 @@ def production_analysis_report(request):
         row = run_query(idle_hours_query, idle_params)
         idle_seconds = int(row[0] or 0) if row and row[0] is not None else 0
         idle_accepted_seconds = int(row[1] or 0) if row and len(row) > 1 and row[1] is not None else 0
+        idle_non_accepted_seconds = int(row[2] or 0) if row and len(row) > 2 and row[2] is not None else 0
         result["idleSeconds"] = idle_seconds
         result["idleHours"] = round(idle_seconds / 3600.0, 2)
         result["idleAcceptedSeconds"] = idle_accepted_seconds
         result["idleAcceptedHours"] = round(idle_accepted_seconds / 3600.0, 2)
+        result["idleNonAcceptedSeconds"] = idle_non_accepted_seconds
+        result["idleNonAcceptedHours"] = round(idle_non_accepted_seconds / 3600.0, 2)
 
         # ── Query 8: Total Setting Hours ──────────────────────────────
         setting_hours_query = f"""
@@ -1122,8 +1354,36 @@ def production_analysis_report(request):
             result["settingSeconds"] = setting_seconds
             result["settingHours"] = float(row[0]) / 3600.0
 
+        # ── Machine Running Hrs = Production Run Time (from/to) + Machine Idle Entry (264 hours on 01-09-2026) ──
+        mac_idle_sql, mac_idle_outer, mac_idle_params = _get_idle_union_sql_and_params(request, conn, from_date, to_date, use_mis_idle=False)
+        mac_idle_acc_query = f"""
+        SELECT COALESCE(SUM(
+            CASE
+                WHEN A.IsEffCalc = 1 THEN A.IdleSeconds
+                WHEN A.IsEffCalc = 0 THEN 0
+                WHEN {ir_accept_1} THEN A.IdleSeconds
+                WHEN {ir_accept_0} THEN 0
+                ELSE A.IdleSeconds
+            END
+        ), 0)
+        FROM ({mac_idle_sql}) A
+        LEFT JOIN MacMaster MM ON LTRIM(RTRIM(CAST(A.MacNo AS NVARCHAR(512)))) = LTRIM(RTRIM(CAST(MM.macno AS NVARCHAR(512)))) AND MM.deleted = 0
+        {join_idle_reasons}
+        WHERE 1 = 1 {mac_idle_outer}
+        """
+        row_mac_idle = run_query(mac_idle_acc_query, mac_idle_params)
+        mac_idle_accepted_seconds = int(row_mac_idle[0] or 0) if row_mac_idle and row_mac_idle[0] is not None else 0
+
+        machine_running_seconds = run_seconds + mac_idle_accepted_seconds
+        result["prodRunSeconds"] = run_seconds
+        result["prodRunHours"] = round(run_seconds / 3600.0, 2)
+        result["productionSeconds"] = machine_running_seconds
+        result["productionHours"] = round(machine_running_seconds / 3600.0, 2)
+        result["runningSeconds"] = machine_running_seconds
+        result["runningHours"] = result["productionHours"]
+
         # Tot Production Hrs = Machine Running Hrs - (Tot Setting Hrs + Idle Accepted Hours)
-        net_prod_seconds = max(0, run_seconds - (setting_seconds + idle_accepted_seconds))
+        net_prod_seconds = max(0, machine_running_seconds - (setting_seconds + idle_accepted_seconds))
         result["totProductionSeconds"] = net_prod_seconds
         result["totProductionHours"] = net_prod_seconds / 3600.0
         result["totProductionHoursDisplay"] = _pa_fmt_hms(net_prod_seconds)
@@ -1231,7 +1491,7 @@ def production_analysis_report(request):
                     macno, 
                     CASE WHEN runto < runfrom THEN DATEDIFF(SECOND, runfrom, DATEADD(DAY, 1, runto)) ELSE DATEDIFF(SECOND, runfrom, runto) END AS RunTimeSecs,
                     COALESCE(NULLIF(shifttimesecs, 0), 28800) AS ShiftTimeSecs,
-                    CASE WHEN PE.idlTime IS NOT NULL AND DATEDIFF(SECOND, 0, PE.idlTime) > 0 THEN DATEDIFF(SECOND, 0, PE.idlTime) ELSE ISNULL(PE.accidletimesecs, 0) + ISNULL(PE.nonaccidletimesecs, 0) END AS IdleTimeSecs
+                    0 AS IdleTimeSecs
                 FROM ProductionEntry PE
                 WHERE PE.prodid IN (SELECT prodid FROM #FilteredPE) AND macno IS NOT NULL
                 
@@ -1239,9 +1499,9 @@ def production_analysis_report(request):
                 
                 SELECT 
                     macno, 
-                    runtimesecs AS RunTimeSecs,
+                    CASE WHEN endtime >= starttime THEN DATEDIFF(SECOND, starttime, endtime) ELSE DATEDIFF(SECOND, starttime, DATEADD(DAY, 1, endtime)) END AS RunTimeSecs,
                     COALESCE(NULLIF(shifttimesecs, 0), 28800) AS ShiftTimeSecs,
-                    DATEDIFF(SECOND, 0, ISNULL(IdleTime, '1900-01-01 00:00:00')) AS IdleTimeSecs
+                    0 AS IdleTimeSecs
                 FROM ConvProductionEntry 
                 WHERE entryno IN (SELECT entryno FROM #FilteredCPE) AND macno IS NOT NULL
                 
@@ -1249,14 +1509,32 @@ def production_analysis_report(request):
                 
                 SELECT 
                     macno, 
-                    runtimesecs AS RunTimeSecs,
+                    CASE WHEN endtime >= starttime THEN DATEDIFF(SECOND, starttime, endtime) ELSE DATEDIFF(SECOND, starttime, DATEADD(DAY, 1, endtime)) END AS RunTimeSecs,
                     COALESCE(NULLIF(shifttimesecs, 0), 28800) AS ShiftTimeSecs,
-                    DATEDIFF(SECOND, 0, ISNULL(IdleTime, '1900-01-01 00:00:00')) AS IdleTimeSecs
+                    0 AS IdleTimeSecs
                 FROM ConvProductionEntryRod 
                 WHERE entryno IN (SELECT entryno FROM #FilteredCPR) AND macno IS NOT NULL
                 {t_cnc_mac_run_details}
                 {t_conv_mac_run_details}
                 {t_rod_mac_run_details}
+
+                UNION ALL
+
+                SELECT 
+                    A.MacNo AS macno, 
+                    A.IdleSeconds AS RunTimeSecs, 
+                    28800 AS ShiftTimeSecs, 
+                    A.IdleSeconds AS IdleTimeSecs
+                FROM (
+                    {mac_idle_sql}
+                ) A
+                LEFT JOIN MacMaster MM ON LTRIM(RTRIM(CAST(A.MacNo AS NVARCHAR(512)))) = LTRIM(RTRIM(CAST(MM.macno AS NVARCHAR(512)))) AND MM.deleted = 0
+                {join_idle_reasons}
+                WHERE 1 = 1 {mac_idle_outer}
+                  AND (
+                      A.IsEffCalc = 1 
+                      OR (A.IsEffCalc IS NULL AND {ir_accept_1})
+                  )
             ) A
         ),
         MachineUtilizations AS
@@ -1378,7 +1656,7 @@ def production_analysis_report(request):
             except Exception as q_err:
                 logger.warning(f"Error fetching machine quality rejection breakdown: {q_err}")
 
-            cur.execute(machines_query, mac_filter_params)
+            cur.execute(machines_query, mac_idle_params + mac_filter_params)
             rows = cur.fetchall()
             COLORS = ["#2563eb", "#059669", "#7c3aed", "#ea580c", "#0891b2", "#be185d", "#b45309", "#1d4ed8", "#065f46", "#6d28d9", "#0f766e", "#9f1239"]
             for idx, r in enumerate(rows or []):
@@ -1463,7 +1741,7 @@ def production_analysis_report(request):
             UNION ALL
             
             SELECT 
-                runtimesecs AS RunTimeSecs,
+                CASE WHEN endtime >= starttime THEN DATEDIFF(SECOND, starttime, endtime) ELSE DATEDIFF(SECOND, starttime, DATEADD(DAY, 1, endtime)) END AS RunTimeSecs,
                 DATEDIFF(SECOND, 0, ISNULL(IdleTime, '1900-01-01 00:00:00')) AS IdleTimeSecs
             FROM ConvProductionEntry 
             WHERE entryno IN (SELECT entryno FROM #FilteredCPE)
@@ -1471,7 +1749,7 @@ def production_analysis_report(request):
             UNION ALL
             
             SELECT 
-                runtimesecs AS RunTimeSecs,
+                CASE WHEN endtime >= starttime THEN DATEDIFF(SECOND, starttime, endtime) ELSE DATEDIFF(SECOND, starttime, DATEADD(DAY, 1, endtime)) END AS RunTimeSecs,
                 DATEDIFF(SECOND, 0, ISNULL(IdleTime, '1900-01-01 00:00:00')) AS IdleTimeSecs
             FROM ConvProductionEntryRod 
             WHERE entryno IN (SELECT entryno FROM #FilteredCPR)
@@ -1506,7 +1784,6 @@ def production_analysis_report(request):
             SELECT 
                 CPE.entryno AS EntryID,
                 MAX(CASE 
-                    WHEN CPE.runtimesecs IS NOT NULL AND CPE.runtimesecs > 0 THEN CPE.runtimesecs
                     WHEN CPE.endtime >= CPE.starttime THEN DATEDIFF(SECOND, CPE.starttime, CPE.endtime) 
                     ELSE DATEDIFF(SECOND, CPE.starttime, DATEADD(DAY, 1, CPE.endtime)) 
                 END) AS RunTimeSecs,
@@ -1520,7 +1797,6 @@ def production_analysis_report(request):
             SELECT 
                 CPR.entryno AS EntryID,
                 MAX(CASE 
-                    WHEN CPR.runtimesecs IS NOT NULL AND CPR.runtimesecs > 0 THEN CPR.runtimesecs
                     WHEN CPR.endtime >= CPR.starttime THEN DATEDIFF(SECOND, CPR.starttime, CPR.endtime) 
                     ELSE DATEDIFF(SECOND, CPR.starttime, DATEADD(DAY, 1, CPR.endtime)) 
                 END) AS RunTimeSecs,
@@ -1673,7 +1949,6 @@ def production_analysis_report(request):
                 CPE.entryno AS EntryID,
                 CPE.entrydate,
                 MAX(CASE 
-                    WHEN CPE.runtimesecs IS NOT NULL AND CPE.runtimesecs > 0 THEN CPE.runtimesecs
                     WHEN CPE.endtime >= CPE.starttime THEN DATEDIFF(SECOND, CPE.starttime, CPE.endtime) 
                     ELSE DATEDIFF(SECOND, CPE.starttime, DATEADD(DAY, 1, CPE.endtime)) 
                 END) AS RunTimeSecs,
@@ -1688,7 +1963,6 @@ def production_analysis_report(request):
                 CPR.entryno AS EntryID,
                 CPR.entrydate,
                 MAX(CASE 
-                    WHEN CPR.runtimesecs IS NOT NULL AND CPR.runtimesecs > 0 THEN CPR.runtimesecs
                     WHEN CPR.endtime >= CPR.starttime THEN DATEDIFF(SECOND, CPR.starttime, CPR.endtime) 
                     ELSE DATEDIFF(SECOND, CPR.starttime, DATEADD(DAY, 1, CPR.endtime)) 
                 END) AS RunTimeSecs,
@@ -2158,7 +2432,7 @@ def production_value_report(request):
             SELECT
                 VTM.macno,
                 VTM.proddate AS entrydate,
-                CASE WHEN VTD.runtimesecs IS NOT NULL AND VTD.runtimesecs > 0 THEN CAST(VTD.runtimesecs AS INT) WHEN VTD.runto < VTD.runfrom THEN DATEDIFF(SECOND, VTD.runfrom, DATEADD(DAY, 1, VTD.runto)) ELSE DATEDIFF(SECOND, VTD.runfrom, VTD.runto) END AS RunTimeSecs,
+                CASE WHEN VTD.runto >= VTD.runfrom THEN DATEDIFF(SECOND, VTD.runfrom, VTD.runto) ELSE DATEDIFF(SECOND, VTD.runfrom, DATEADD(DAY, 1, VTD.runto)) END AS RunTimeSecs,
                 DATEDIFF(SECOND, 0, ISNULL(VTD.idlTime, '1900-01-01 00:00:00')) AS IdleTimeSecs
             FROM ConvProd_TouchDet VTD
             INNER JOIN ConvProd_TouchMas VTM ON VTD.TchEntryNo = VTM.TchEntryNo
@@ -2171,7 +2445,7 @@ def production_value_report(request):
             SELECT
                 RTM.macno,
                 RTM.proddate AS entrydate,
-                CASE WHEN RTD.runtimesecs IS NOT NULL AND RTD.runtimesecs > 0 THEN CAST(RTD.runtimesecs AS INT) WHEN RTD.runto < RTD.runfrom THEN DATEDIFF(SECOND, RTD.runfrom, DATEADD(DAY, 1, RTD.runto)) ELSE DATEDIFF(SECOND, RTD.runfrom, RTD.runto) END AS RunTimeSecs,
+                CASE WHEN RTD.runto >= RTD.runfrom THEN DATEDIFF(SECOND, RTD.runfrom, RTD.runto) ELSE DATEDIFF(SECOND, RTD.runfrom, DATEADD(DAY, 1, RTD.runto)) END AS RunTimeSecs,
                 DATEDIFF(SECOND, 0, ISNULL(RTD.idlTime, '1900-01-01 00:00:00')) AS IdleTimeSecs
             FROM ConvRodProd_TouchDet RTD
             INNER JOIN ConvRodProd_TouchMas RTM ON RTD.TchEntryNo = RTM.TchEntryNo
@@ -2205,7 +2479,6 @@ def production_value_report(request):
                 CPE.macno, 
                 CPE.entrydate, 
                 CASE 
-                    WHEN CPE.runtimesecs IS NOT NULL AND CPE.runtimesecs > 0 THEN CPE.runtimesecs
                     WHEN CPE.endtime >= CPE.starttime THEN DATEDIFF(SECOND, CPE.starttime, CPE.endtime) 
                     ELSE DATEDIFF(SECOND, CPE.starttime, DATEADD(DAY, 1, CPE.endtime)) 
                 END AS RunTimeSecs,
@@ -2219,7 +2492,6 @@ def production_value_report(request):
                 CPR.macno, 
                 CPR.entrydate, 
                 CASE 
-                    WHEN CPR.runtimesecs IS NOT NULL AND CPR.runtimesecs > 0 THEN CPR.runtimesecs
                     WHEN CPR.endtime >= CPR.starttime THEN DATEDIFF(SECOND, CPR.starttime, CPR.endtime) 
                     ELSE DATEDIFF(SECOND, CPR.starttime, DATEADD(DAY, 1, CPR.endtime)) 
                 END AS RunTimeSecs,
@@ -2374,7 +2646,7 @@ def production_idle_breakdown(request):
             cursor.close()
             return Response({"status": "error", "message": str(te), "data": {}}, status=500)
 
-        idle_union_sql, idle_outer_sql, idle_params = _get_idle_union_sql_and_params(request, conn, from_date, to_date)
+        idle_union_sql, idle_outer_sql, idle_params = _get_idle_union_sql_and_params(request, conn, from_date, to_date, use_mis_idle=True)
 
         has_idle_reasons = table_exists(cursor, "IdleReasons")
         has_mac_master   = table_exists(cursor, "MacMaster")
@@ -2402,7 +2674,8 @@ def production_idle_breakdown(request):
                 AND ISNULL(IR.deleted, 0) = 0
         """ if has_idle_reasons else ""
 
-        ir_accept_check = "(IR.IdleID IS NOT NULL AND ISNULL(IR.IsAccept, 0) = 1)" if has_idle_reasons else "1 = 0"
+        ir_accept_1 = "IR.IsAccept = 1" if has_idle_reasons else "1 = 0"
+        ir_accept_0 = "IR.IsAccept = 0" if has_idle_reasons else "1 = 0"
 
         classify_sql = f"""
         {cte_sql}
@@ -2411,16 +2684,18 @@ def production_idle_breakdown(request):
                 CASE
                     WHEN F.IsEffCalc = 1 THEN F.IdleSeconds
                     WHEN F.IsEffCalc = 0 THEN 0
-                    WHEN {ir_accept_check} THEN F.IdleSeconds
-                    ELSE 0
+                    WHEN {ir_accept_1} THEN F.IdleSeconds
+                    WHEN {ir_accept_0} THEN 0
+                    ELSE F.IdleSeconds
                 END
             ), 0) AS AccSecs,
             ISNULL(SUM(
                 CASE
                     WHEN F.IsEffCalc = 1 THEN 0
                     WHEN F.IsEffCalc = 0 THEN F.IdleSeconds
-                    WHEN {ir_accept_check} THEN 0
-                    ELSE F.IdleSeconds
+                    WHEN {ir_accept_1} THEN 0
+                    WHEN {ir_accept_0} THEN F.IdleSeconds
+                    ELSE 0
                 END
             ), 0) AS NaSecs
         FROM FilteredIdle F
@@ -2452,14 +2727,16 @@ def production_idle_breakdown(request):
             SUM(CASE
                 WHEN F.IsEffCalc = 1 THEN F.IdleSeconds
                 WHEN F.IsEffCalc = 0 THEN 0
-                WHEN {ir_accept_check} THEN F.IdleSeconds
-                ELSE 0
+                WHEN {ir_accept_1} THEN F.IdleSeconds
+                WHEN {ir_accept_0} THEN 0
+                ELSE F.IdleSeconds
             END) AS AccSecs,
             SUM(CASE
                 WHEN F.IsEffCalc = 1 THEN 0
                 WHEN F.IsEffCalc = 0 THEN F.IdleSeconds
-                WHEN {ir_accept_check} THEN 0
-                ELSE F.IdleSeconds
+                WHEN {ir_accept_1} THEN 0
+                WHEN {ir_accept_0} THEN F.IdleSeconds
+                ELSE 0
             END) AS NaSecs
         FROM FilteredIdle F
         {join_idle_reasons}
@@ -2670,7 +2947,7 @@ def daily_production_details(request):
         PD.process AS ProcessName,
 
         CAST(
-            (ISNULL(VTD.runtimesecs,0) / 3600.0)
+            ((CASE WHEN VTD.runto >= VTD.runfrom THEN DATEDIFF(SECOND, VTD.runfrom, VTD.runto) ELSE DATEDIFF(SECOND, VTD.runfrom, DATEADD(DAY, 1, VTD.runto)) END) / 3600.0)
             * ISNULL(PT.qtyperhour,0)
         AS DECIMAL(18,0)) AS TargetQty,
 
@@ -2713,7 +2990,7 @@ def daily_production_details(request):
         PD.process AS ProcessName,
 
         CAST(
-            (ISNULL(RTD.runtimesecs,0) / 3600.0)
+            ((CASE WHEN RTD.runto >= RTD.runfrom THEN DATEDIFF(SECOND, RTD.runfrom, RTD.runto) ELSE DATEDIFF(SECOND, RTD.runfrom, DATEADD(DAY, 1, RTD.runto)) END) / 3600.0)
             * ISNULL(PT.qtyperhour,0)
         AS DECIMAL(18,0)) AS TargetQty,
 
@@ -2828,7 +3105,7 @@ ConvProductionData AS
         PD.process AS ProcessName,
 
         CAST(
-            (ISNULL(CPE.runtimesecs,0) / 3600.0)
+            ((CASE WHEN CPE.endtime >= CPE.starttime THEN DATEDIFF(SECOND, CPE.starttime, CPE.endtime) ELSE DATEDIFF(SECOND, CPE.starttime, DATEADD(DAY, 1, CPE.endtime)) END) / 3600.0)
             * ISNULL(PT.qtyperhour,0)
         AS DECIMAL(18,0)) AS TargetQty,
 
@@ -2876,7 +3153,7 @@ ConvRodData AS
         PD.process AS ProcessName,
 
         CAST(
-            (ISNULL(CPR.runtimesecs,0) / 3600.0)
+            ((CASE WHEN CPR.endtime >= CPR.starttime THEN DATEDIFF(SECOND, CPR.starttime, CPR.endtime) ELSE DATEDIFF(SECOND, CPR.starttime, DATEADD(DAY, 1, CPR.endtime)) END) / 3600.0)
             * ISNULL(PT.qtyperhour,0)
         AS DECIMAL(18,0)) AS TargetQty,
 
@@ -3210,7 +3487,7 @@ def machine_card_data(request, macno):
                 VTD.qty                                                        AS OkQty,
                 CAST(NULL AS INT)                                              AS RejQty,
                 VTD.Rework                                                     AS ReworkQty,
-                CASE WHEN VTD.runtimesecs IS NOT NULL AND VTD.runtimesecs > 0 THEN CAST(VTD.runtimesecs AS INT) WHEN VTD.runto < VTD.runfrom THEN DATEDIFF(SECOND, VTD.runfrom, DATEADD(DAY, 1, VTD.runto)) ELSE DATEDIFF(SECOND, VTD.runfrom, VTD.runto) END AS RunTimeSecs,
+                CASE WHEN VTD.runto >= VTD.runfrom THEN DATEDIFF(SECOND, VTD.runfrom, VTD.runto) ELSE DATEDIFF(SECOND, VTD.runfrom, DATEADD(DAY, 1, VTD.runto)) END AS RunTimeSecs,
                 CASE WHEN VTD.idlTime IS NOT NULL AND DATEDIFF(SECOND, 0, VTD.idlTime) > 0 THEN DATEDIFF(SECOND, 0, VTD.idlTime) ELSE 0 END AS IdleTimeSecs,
                 COALESCE(NULLIF(VTD.shifttimesecs, 0), 28800)                  AS ShiftTimeSecs,
                 COALESCE(VTD.OEENEW, VTD.OAEFF, VTD.EFF, 0)                    AS OEE,
@@ -3247,7 +3524,7 @@ def machine_card_data(request, macno):
                 RTD.qty                                                        AS OkQty,
                 RTD.ScrapQty                                                   AS RejQty,
                 CAST(NULL AS INT)                                              AS ReworkQty,
-                CASE WHEN RTD.runtimesecs IS NOT NULL AND RTD.runtimesecs > 0 THEN CAST(RTD.runtimesecs AS INT) WHEN RTD.runto < RTD.runfrom THEN DATEDIFF(SECOND, RTD.runfrom, DATEADD(DAY, 1, RTD.runto)) ELSE DATEDIFF(SECOND, RTD.runfrom, RTD.runto) END AS RunTimeSecs,
+                CASE WHEN RTD.runto >= RTD.runfrom THEN DATEDIFF(SECOND, RTD.runfrom, RTD.runto) ELSE DATEDIFF(SECOND, RTD.runfrom, DATEADD(DAY, 1, RTD.runto)) END AS RunTimeSecs,
                 CASE WHEN RTD.idlTime IS NOT NULL AND DATEDIFF(SECOND, 0, RTD.idlTime) > 0 THEN DATEDIFF(SECOND, 0, RTD.idlTime) ELSE 0 END AS IdleTimeSecs,
                 COALESCE(NULLIF(RTD.shifttimesecs, 0), 28800)                  AS ShiftTimeSecs,
                 COALESCE(RTD.OEENEW, RTD.OAEFF, RTD.EFF, 0)                    AS OEE,
@@ -3452,9 +3729,9 @@ def machine_card_data(request, macno):
                         "ok_qty": int(r[18] or 0)
                     })
 
-            # ── Machine-wise Idle Hours via Idle Accepted & Idle Non-Accepted KPI logic ──
+            # ── Machine-wise Idle Hours via Production Idle logic ──
             try:
-                branches, branch_params = _build_accepted_vs_non_accepted_branches(cursor, from_date, to_date, include_machine_idle_entry=False)
+                branches, branch_params = _build_production_idle_branches(cursor, from_date, to_date)
                 if branches:
                     idle_union_sql = "\n    UNION ALL\n".join(branches)
                     has_idle_reasons = table_exists(cursor, "IdleReasons")
@@ -3464,7 +3741,8 @@ def machine_card_data(request, macno):
                              = LTRIM(RTRIM(CAST(IR.IdleReasons AS NVARCHAR(512))))
                             AND ISNULL(IR.deleted, 0) = 0
                     """ if has_idle_reasons else ""
-                    ir_accept_check = "(IR.IdleID IS NOT NULL AND ISNULL(IR.IsAccept, 0) = 1)" if has_idle_reasons else "1 = 0"
+                    ir_accept_1 = "IR.IsAccept = 1" if has_idle_reasons else "1 = 0"
+                    ir_accept_0 = "IR.IsAccept = 0" if has_idle_reasons else "1 = 0"
 
                     mac_idle_where = ["LTRIM(RTRIM(CAST(A.MacNo AS NVARCHAR(512)))) = ?"]
                     mac_idle_params = list(branch_params) + [macno.strip()]
@@ -3567,16 +3845,18 @@ def machine_card_data(request, macno):
                             CASE
                                 WHEN F.IsEffCalc = 1 THEN F.IdleSeconds
                                 WHEN F.IsEffCalc = 0 THEN 0
-                                WHEN {ir_accept_check} THEN F.IdleSeconds
-                                ELSE 0
+                                WHEN {ir_accept_1} THEN F.IdleSeconds
+                                WHEN {ir_accept_0} THEN 0
+                                ELSE F.IdleSeconds
                             END
                         ), 0) AS AccSecs,
                         ISNULL(SUM(
                             CASE
                                 WHEN F.IsEffCalc = 1 THEN 0
                                 WHEN F.IsEffCalc = 0 THEN F.IdleSeconds
-                                WHEN {ir_accept_check} THEN 0
-                                ELSE F.IdleSeconds
+                                WHEN {ir_accept_1} THEN 0
+                                WHEN {ir_accept_0} THEN F.IdleSeconds
+                                ELSE 0
                             END
                         ), 0) AS NaSecs
                     FROM FilteredIdle F
@@ -3592,6 +3872,12 @@ def machine_card_data(request, macno):
                         card["idle_hrs"] = round(total_mac_idle_secs / 3600.0, 2)
                         card["idle_acc_hrs"] = round(mac_acc_secs / 3600.0, 2)
                         card["idle_na_hrs"] = round(mac_na_secs / 3600.0, 2)
+                        # MACHINE RUNNING HRS = ProdRun + IdleAccepted
+                        prod_run_secs = float(card.get("run_hrs") or 0.0) * 3600.0
+                        total_mac_run_secs = prod_run_secs + mac_acc_secs
+                        card["run_hrs"] = round(total_mac_run_secs / 3600.0, 2)
+                        if total_mac_run_secs > 0:
+                            card["machine_run_pct"] = round(min(100.0, (prod_run_secs / total_mac_run_secs) * 100.0), 2)
             except Exception as ie:
                 import logging
                 logging.getLogger(__name__).warning(f"Error computing machine idle hours from idle breakdown: {ie}")
