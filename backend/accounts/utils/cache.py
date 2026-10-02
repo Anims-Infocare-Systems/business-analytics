@@ -32,15 +32,18 @@ def _extract_company_code(request):
     return "GLOBAL"
 
 
-def build_analytics_cache_key(prefix, company_code, view_name, query_params):
+def build_analytics_cache_key(prefix, company_code, view_name, query_params, route_kwargs=None):
     """
     Generates a unique, normalized cache key for an analytics endpoint:
     e.g. anims:analytics:VES001:summary_strip:d41d8cd98f00b204e9800998ecf8427e
+    URL route kwargs (e.g. <invoice_no>) are part of the key so detail views don't collide.
     """
     sorted_items = sorted(
         (k, str(v)) for k, v in query_params.items() if k not in ("_", "timestamp", "nocache")
     )
     query_str = "&".join(f"{k}={v}" for k, v in sorted_items)
+    if route_kwargs:
+        query_str += "|" + "&".join(f"{k}={v}" for k, v in sorted(route_kwargs.items()))
     query_hash = hashlib.md5(query_str.encode("utf-8")).hexdigest()
     return f"{prefix}:{company_code}:{view_name}:{query_hash}"
 
@@ -60,8 +63,12 @@ def cache_analytics_response(timeout=DEFAULT_ANALYTICS_TTL, key_prefix="analytic
 
             company_code = _extract_company_code(request)
             view_name = view_func.__name__
+            route_kwargs = dict(kwargs) if kwargs else None
+            if args:
+                route_kwargs = route_kwargs or {}
+                route_kwargs["_args"] = "/".join(str(a) for a in args)
             cache_key = build_analytics_cache_key(
-                key_prefix, company_code, view_name, request.GET
+                key_prefix, company_code, view_name, request.GET, route_kwargs
             )
 
             try:

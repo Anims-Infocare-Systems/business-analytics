@@ -1297,11 +1297,15 @@ export default function Dashboard1() {
                 <>
                     {/* ── Overall Average OEE under chart ── */}
                     {(() => {
-                        const vals = oaEfficiencyWeeklyData?.data?.filter(v => v != null && v > 0) || [];
-                        const avg = vals.length ? (vals.reduce((a, b) => a + b, 0) / vals.length) : null;
-                        return avg != null ? (
+                        const overallAvg = oaEfficiencyWeeklyData?.overall_avg != null
+                            ? oaEfficiencyWeeklyData.overall_avg
+                            : (() => {
+                                const vals = oaEfficiencyWeeklyData?.data?.filter(v => v != null && v > 0) || [];
+                                return vals.length ? (vals.reduce((a, b) => a + b, 0) / vals.length) : null;
+                            })();
+                        return overallAvg != null ? (
                             <span className="d1-cc__foot-val d1-cc__foot-val--oa" style={{ fontSize: "10px", fontWeight: "700", background: "rgba(16,185,129,0.10)", borderRadius: "6px", padding: "2px 8px", color: "#059669", display: "inline-block", marginBottom: "2px" }}>
-                                Avg OEE: {avg.toFixed(2)}%
+                                Avg OEE: {Number(overallAvg).toFixed(2)}%
                             </span>
                         ) : null;
                     })()}

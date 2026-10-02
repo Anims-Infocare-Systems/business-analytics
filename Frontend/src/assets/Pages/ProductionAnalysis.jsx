@@ -1,7 +1,8 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback, memo } from "react";
 import { createPortal } from "react-dom";
 import { FiCpu, FiUser, FiLayers, FiClock, FiActivity, FiCheckCircle, FiXCircle, FiRefreshCw, FiAlertTriangle, FiList, FiAward, FiDollarSign, FiAlertCircle, FiTrendingDown, FiTable, FiTrendingUp, FiCalendar, FiLoader, FiPlus, FiX, FiSettings, FiCheck, FiChevronDown, FiSearch, FiFilter, FiInbox } from "react-icons/fi";
 import { Chart, registerables } from "chart.js";
+import { Loader2, CheckCircle2 } from "lucide-react";
 import ChartDataLabels from "chartjs-plugin-datalabels";
 import "./ProductionAnalysis.css";
 import ProductionAnalysisDatePicker from "./ProductionAnalysisDatePicker";
@@ -101,6 +102,92 @@ const MANPOWER_DATA = [
   { operator: "Biswanath Dhungia", dept: "VMC", shifts: 7, totalTarget: 2485, totalOk: 2415, eff: 97.2, attendance: 100 },
 ];
 
+const MAC_DETAIL_FALLBACK_DATA = {
+  "TC-59": {
+    runs: [
+      { operator: "Ramchandra Soran", partNo: "PRT-2047", process: "Turning OD", runHrs: 4.8, okQty: 180 },
+      { operator: "Karthi.S", partNo: "PRT-1022", process: "Facing", runHrs: 2.0, okQty: 68 }
+    ],
+    idleHrs: 1.2, rejQty: 4, rwQty: 2, oprEff: 88, oee: 84
+  },
+  "TC-60": {
+    runs: [
+      { operator: "Santhana Lakshmi", partNo: "PRT-1085", process: "Facing & Boring", runHrs: 4.1, okQty: 190 },
+      { operator: "Ajith.A", partNo: "PRT-2204", process: "Chamfering", runHrs: 3.0, okQty: 122 }
+    ],
+    idleHrs: 0.9, rejQty: 6, rwQty: 3, oprEff: 91, oee: 87
+  },
+  "TC 50": {
+    runs: [
+      { operator: "Akash.A", partNo: "PRT-3321", process: "Internal Turning", runHrs: 3.4, okQty: 109 },
+      { operator: "Nagamani", partNo: "PRT-0988", process: "Boring", runHrs: 2.0, okQty: 80 }
+    ],
+    idleHrs: 2.6, rejQty: 11, rwQty: 5, oprEff: 74, oee: 71
+  },
+  "TC 43 L": {
+    runs: [
+      { operator: "Mohan Kewat", partNo: "PRT-0912", process: "Thread Cutting", runHrs: 2.2, okQty: 75 },
+      { operator: "Chandan Kumar", partNo: "PRT-1155", process: "Grooving", runHrs: 2.0, okQty: 68 }
+    ],
+    idleHrs: 3.8, rejQty: 9, rwQty: 4, oprEff: 66, oee: 62
+  },
+  "VMC-07": {
+    runs: [
+      { operator: "Ravi Kumar", partNo: "PRT-4456", process: "Face Milling", runHrs: 3.5, okQty: 110 },
+      { operator: "Priya Singh", partNo: "PRT-3321", process: "Pocket Milling", runHrs: 3.0, okQty: 97 }
+    ],
+    idleHrs: 1.5, rejQty: 5, rwQty: 2, oprEff: 85, oee: 81
+  },
+  "VMC 18": {
+    runs: [
+      { operator: "Priya Singh", partNo: "PRT-2210", process: "Slot Milling", runHrs: 2.0, okQty: 52 },
+      { operator: "Biswanath Dhungia", partNo: "PRT-5503", process: "Drilling", runHrs: 1.8, okQty: 46 }
+    ],
+    idleHrs: 4.2, rejQty: 8, rwQty: 6, oprEff: 58, oee: 45
+  },
+  "SPM-04": {
+    runs: [
+      { operator: "Deepak Yadav", partNo: "PRT-5503", process: "Drilling & Tapping", runHrs: 3.9, okQty: 140 },
+      { operator: "Nilesh Gupta", partNo: "PRT-4490", process: "Reaming", runHrs: 2.0, okQty: 75 }
+    ],
+    idleHrs: 2.1, rejQty: 7, rwQty: 3, oprEff: 79, oee: 73
+  },
+  "BROACHING-1": {
+    runs: [
+      { operator: "Arun Mishra", partNo: "PRT-6678", process: "Keyway Broaching", runHrs: 3.2, okQty: 76 }
+    ],
+    idleHrs: 4.8, rejQty: 14, rwQty: 8, oprEff: 52, oee: 38
+  },
+  "M/C-09": {
+    runs: [
+      { operator: "Suresh Patel", partNo: "PRT-1134", process: "Conventional Turn", runHrs: 4.2, okQty: 120 },
+      { operator: "Vikas Sharma", partNo: "PRT-2267", process: "Knurling", runHrs: 2.0, okQty: 68 }
+    ],
+    idleHrs: 1.8, rejQty: 6, rwQty: 2, oprEff: 82, oee: 80
+  },
+  "M/C-10": {
+    runs: [
+      { operator: "Vikas Sharma", partNo: "PRT-2267", process: "Conventional Mill", runHrs: 2.7, okQty: 80 },
+      { operator: "Kiran Babu", partNo: "PRT-3389", process: "Drilling", runHrs: 2.0, okQty: 54 }
+    ],
+    idleHrs: 3.3, rejQty: 10, rwQty: 7, oprEff: 70, oee: 55
+  },
+  "M/C-11": {
+    runs: [
+      { operator: "Kiran Babu", partNo: "PRT-3389", process: "Conventional Turn", runHrs: 4.0, okQty: 135 },
+      { operator: "Ramchandra Soran", partNo: "PRT-2047", process: "Facing", runHrs: 2.0, okQty: 66 }
+    ],
+    idleHrs: 2.0, rejQty: 5, rwQty: 3, oprEff: 80, oee: 77
+  },
+  "M/C-12": {
+    runs: [
+      { operator: "Nilesh Gupta", partNo: "PRT-4490", process: "Special Process", runHrs: 3.1, okQty: 100 },
+      { operator: "Deepak Yadav", partNo: "PRT-5503", process: "Deburring", runHrs: 2.0, okQty: 62 }
+    ],
+    idleHrs: 2.9, rejQty: 8, rwQty: 4, oprEff: 75, oee: 68
+  },
+};
+
 function formatHoursMins(val) {
   if (val === null || val === undefined || val === "") return "00 hour 00 mins";
   if (typeof val === "string") {
@@ -127,10 +214,146 @@ function formatHoursMins(val) {
   return `${hStr} ${hLabel} ${mStr} mins`;
 }
 
+// ── Ultra-Smooth Fluid Organic Progress Status Card (Exact Sales Analysis standard) ──
+function ProductionStatusBar({ isGlobalLoading, loadingProgress }) {
+  const [displayProgress, setDisplayProgress] = useState(0);
+  const [statusVisible, setStatusVisible] = useState(true);
+
+  useEffect(() => {
+    let animId = null;
+    let finishTimer = null;
+    let lastStamp = performance.now();
+
+    if (isGlobalLoading) {
+      setStatusVisible(true);
+
+      const stepProgress = (timestamp) => {
+        const dt = Math.min((timestamp - lastStamp) / 1000, 0.08);
+        lastStamp = timestamp;
+
+        setDisplayProgress((prev) => {
+          const target = Math.max(loadingProgress, 14);
+
+          if (prev < target) {
+            const gap = target - prev;
+            const speed = Math.max(gap * 4.2, 10);
+            const next = prev + speed * dt;
+            return Math.min(next, target);
+          } else if (prev < 96) {
+            let rate = 2.4;
+            if (prev > 35) rate = 1.5;
+            if (prev > 65) rate = 0.75;
+            if (prev > 85) rate = 0.3;
+            return Math.min(prev + rate * dt, 96);
+          }
+          return prev;
+        });
+
+        animId = requestAnimationFrame(stepProgress);
+      };
+
+      animId = requestAnimationFrame(stepProgress);
+    } else {
+      let isDone = false;
+      const glideToComplete = (timestamp) => {
+        const dt = Math.min((timestamp - lastStamp) / 1000, 0.08);
+        lastStamp = timestamp;
+
+        setDisplayProgress((prev) => {
+          if (prev >= 100) {
+            isDone = true;
+            return 100;
+          }
+          const speed = Math.max((100 - prev) * 10, 60);
+          const next = prev + speed * dt;
+          if (next >= 99.5) {
+            isDone = true;
+            return 100;
+          }
+          return next;
+        });
+
+        if (!isDone) {
+          animId = requestAnimationFrame(glideToComplete);
+        }
+      };
+
+      animId = requestAnimationFrame(glideToComplete);
+
+      finishTimer = setTimeout(() => {
+        setStatusVisible(false);
+        setDisplayProgress(0);
+      }, 750);
+    }
+
+    return () => {
+      if (animId) cancelAnimationFrame(animId);
+      if (finishTimer) clearTimeout(finishTimer);
+    };
+  }, [isGlobalLoading, loadingProgress]);
+
+  const showStatusBar = isGlobalLoading || statusVisible;
+
+  return (
+    <div className={`pda-status-card-container ${showStatusBar ? "pda-status-card--active" : "pda-status-card--hidden"}`}>
+      <div className="pda-status-card">
+        <div className="pda-status-card__glow-bg" />
+        <div className="pda-status-card__body">
+          <div className="pda-status-card__left">
+            <div className={`pda-status-card__icon-box ${displayProgress >= 99.5 ? "pda-status-card__icon-box--done" : ""}`}>
+              {displayProgress >= 99.5 ? (
+                <CheckCircle2 size={18} className="pda-status-card__icon-check" />
+              ) : (
+                <Loader2 size={18} className="pda-status-card__icon-spin" />
+              )}
+            </div>
+            <div className="pda-status-card__text-wrap">
+              <div className="pda-status-card__title-row">
+                <span className="pda-status-card__title">
+                  {displayProgress >= 99.5 ? "Production Analytics Synchronized" : "Updating Production Analytics"}
+                </span>
+                <span className={`pda-status-card__badge ${displayProgress >= 99.5 ? "pda-status-card__badge--done" : ""}`}>
+                  <span className="pda-status-card__badge-dot" />
+                  {displayProgress >= 99.5 ? "Ready" : "Live Sync"}
+                </span>
+              </div>
+              <div className="pda-status-card__subtitle">
+                {displayProgress >= 99.5
+                  ? "All machine telemetry, OEE metrics, and production records are up to date"
+                  : displayProgress < 35
+                    ? "Fetching machine production entries and cycle records..."
+                    : displayProgress < 75
+                      ? "Aggregating OEE metrics, idle time & operator efficiency..."
+                      : "Finalizing machine running hours and rejection breakdowns..."}
+              </div>
+            </div>
+          </div>
+
+          <div className="pda-status-card__right">
+            <div className={`pda-status-pill ${displayProgress >= 99.5 ? "pda-status-pill--done" : ""}`}>
+              <span className="pda-status-pill__percent">{Math.round(displayProgress)}%</span>
+              <span className="pda-status-pill__label">{displayProgress >= 99.5 ? "Complete" : "Loaded"}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="pda-status-card__track">
+          <div
+            className={`pda-status-card__fill ${displayProgress >= 99.5 ? "pda-status-card__fill--done" : ""}`}
+            style={{ width: `${Math.min(100, Math.max(0, displayProgress))}%` }}
+          >
+            <div className="pda-status-card__fill-shimmer" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ═══════════════════════════════════════════════
-ANIMATED NUMBER COUNTER
+ANIMATED NUMBER COUNTER (Optimized 400ms)
 ═══════════════════════════════════════════════ */
-function AnimatedValue({ target, duration = 900, prefix = "", suffix = "", decimals }) {
+function AnimatedValue({ target, duration = 400, prefix = "", suffix = "", decimals }) {
   if (typeof target === "string" && (target.includes("hour") || target.includes("mins"))) {
     return <>{prefix}{target}{suffix}</>;
   }
@@ -149,13 +372,23 @@ function AnimatedValue({ target, duration = 900, prefix = "", suffix = "", decim
     };
     frame.current = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(frame.current);
-  }, [target]);
+  }, [target, duration, numTarget]);
   const fmt = (n) => {
     if (decimals !== undefined) return n.toFixed(decimals);
     if (suffix === "%" || String(target).includes(".")) return n.toFixed(1);
     return Math.round(n).toLocaleString("en-IN");
   };
   return <>{prefix}{fmt(val)}{suffix}</>;
+}
+
+/* ── Lightweight Debounce Hook ── */
+function useDebounce(value, delay = 220) {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+  useEffect(() => {
+    const handler = setTimeout(() => setDebouncedValue(value), delay);
+    return () => clearTimeout(handler);
+  }, [value, delay]);
+  return debouncedValue;
 }
 
 /* ═══════════════════════════════════════════════
@@ -288,6 +521,116 @@ const SortIcon = ({ active, direction }) => {
         <polyline points="19 12 12 19 5 12" />
       </svg>
     </span>
+  );
+};
+
+/* ═══════════════════════════════════════════════
+PAGINATION CONTROL (utility component)
+═══════════════════════════════════════════════ */
+const PaginationControl = ({ currentPage, totalPages, totalRows, rowsPerPage, onPageChange, onRowsPerPageChange }) => {
+  if (totalRows === 0) return null;
+
+  const startRow = rowsPerPage === "All" ? 1 : Math.min((currentPage - 1) * rowsPerPage + 1, totalRows);
+  const endRow = rowsPerPage === "All" ? totalRows : Math.min(currentPage * rowsPerPage, totalRows);
+
+  const getPageNumbers = () => {
+    if (totalPages <= 7) {
+      return Array.from({ length: totalPages }, (_, i) => i + 1);
+    }
+    const pages = [];
+    if (currentPage <= 4) {
+      pages.push(1, 2, 3, 4, 5, "...", totalPages);
+    } else if (currentPage >= totalPages - 3) {
+      pages.push(1, "...", totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages);
+    } else {
+      pages.push(1, "...", currentPage - 1, currentPage, currentPage + 1, "...", totalPages);
+    }
+    return pages;
+  };
+
+  return (
+    <div className="pa2-pagination-container">
+      <div className="pa2-pagination-info">
+        Showing <strong>{startRow.toLocaleString()}</strong>–<strong>{endRow.toLocaleString()}</strong> of <strong>{totalRows.toLocaleString()}</strong> records
+      </div>
+
+      <div className="pa2-pagination-controls">
+        <div className="pa2-pagination-size-wrap">
+          <span>Rows per page:</span>
+          <select
+            className="pa2-pagination-size-select"
+            value={rowsPerPage}
+            onChange={(e) => {
+              const val = e.target.value === "All" ? "All" : Number(e.target.value);
+              onRowsPerPageChange(val);
+            }}
+          >
+            <option value={25}>25</option>
+            <option value={50}>50</option>
+            <option value={100}>100</option>
+            <option value={200}>200</option>
+            <option value="All">All</option>
+          </select>
+        </div>
+
+        {totalPages > 1 && rowsPerPage !== "All" && (
+          <div className="pa2-pagination-pages">
+            <button
+              type="button"
+              className="pa2-page-btn"
+              onClick={() => onPageChange(1)}
+              disabled={currentPage === 1}
+              title="First Page"
+            >
+              «
+            </button>
+            <button
+              type="button"
+              className="pa2-page-btn"
+              onClick={() => onPageChange(currentPage - 1)}
+              disabled={currentPage === 1}
+              title="Previous Page"
+            >
+              ‹
+            </button>
+
+            {getPageNumbers().map((p, idx) => (
+              p === "..." ? (
+                <span key={`ellipsis-${idx}`} className="pa2-page-ellipsis">…</span>
+              ) : (
+                <button
+                  key={p}
+                  type="button"
+                  className={`pa2-page-btn ${p === currentPage ? "pa2-page-btn--active" : ""}`}
+                  onClick={() => onPageChange(p)}
+                >
+                  {p}
+                </button>
+              )
+            ))}
+
+            <button
+              type="button"
+              className="pa2-page-btn"
+              onClick={() => onPageChange(currentPage + 1)}
+              disabled={currentPage === totalPages}
+              title="Next Page"
+            >
+              ›
+            </button>
+            <button
+              type="button"
+              className="pa2-page-btn"
+              onClick={() => onPageChange(totalPages)}
+              disabled={currentPage === totalPages}
+              title="Last Page"
+            >
+              »
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
   );
 };
 
@@ -629,6 +972,248 @@ const formatShiftLogDate = (val) => {
   }
 };
 
+// ── Ultra-Fast Isolated Top Search Input (60fps Keystrokes, Zero Parent Re-render Churn) ──
+const TopFilterSearchInput = memo(function TopFilterSearchInput({
+  value,
+  onCommit,
+  onApply,
+  disabled
+}) {
+  const [localVal, setLocalVal] = useState(value || "");
+
+  useEffect(() => {
+    setLocalVal(value || "");
+  }, [value]);
+
+  const debounceTimer = useRef(null);
+
+  const handleChange = (e) => {
+    const next = e.target.value;
+    setLocalVal(next);
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    debounceTimer.current = setTimeout(() => {
+      onCommit(next);
+    }, 250);
+  };
+
+  const handleClear = () => {
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    setLocalVal("");
+    onCommit("");
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter" && !disabled) {
+      if (debounceTimer.current) clearTimeout(debounceTimer.current);
+      onCommit(localVal);
+      if (onApply) onApply(localVal);
+    }
+  };
+
+  return (
+    <div className="pa2-search-input-wrapper">
+      <svg className="pa2-search-icon-svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+        <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+      </svg>
+      <input
+        type="text"
+        placeholder={disabled ? "Loading..." : "Search Partno"}
+        value={localVal}
+        onChange={handleChange}
+        onKeyDown={handleKeyDown}
+        disabled={disabled}
+        style={{
+          cursor: disabled ? "not-allowed" : "text",
+          background: disabled ? "#f8fafc" : undefined
+        }}
+      />
+      {localVal && !disabled && (
+        <button
+          type="button"
+          className="pa2-search-clear-btn"
+          onClick={handleClear}
+          disabled={disabled}
+          aria-label="Clear search"
+        >
+          <FiX size={14} style={{ strokeWidth: 3 }} />
+        </button>
+      )}
+    </div>
+  );
+});
+
+// ── Isolated Daily Table Multi-Select Dropdown with Local Search & Click Outside ──
+const DailyTableFilterDropdown = memo(function DailyTableFilterDropdown({
+  icon: Icon,
+  label,
+  iconColor = "#2563eb",
+  items = [],
+  selected = [],
+  onChange,
+  width = "280px"
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    const handleOutsideClick = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setOpen(false);
+        setSearch("");
+      }
+    };
+    if (open) {
+      document.addEventListener("mousedown", handleOutsideClick);
+    }
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, [open]);
+
+  const filteredItems = useMemo(() => {
+    if (!search.trim()) return items;
+    const q = search.toLowerCase().trim();
+    return items.filter(it => String(it).toLowerCase().includes(q));
+  }, [items, search]);
+
+  const triggerText = selected.length === 0
+    ? `All ${label}s`
+    : selected.length === 1
+      ? selected[0]
+      : `${selected.length} ${label}s Selected`;
+
+  return (
+    <div className="pa2-daily-filter-group" ref={dropdownRef}>
+      <span className="pa2-daily-filter-label">
+        <Icon size={13} style={{ color: iconColor }} /> {label}:
+      </span>
+      <div style={{ position: "relative" }}>
+        <button
+          type="button"
+          onClick={() => setOpen(o => !o)}
+          className={`pa2-daily-filter-btn ${selected.length > 0 ? "is-active" : ""}`}
+        >
+          <div className="pa2-daily-filter-btn-text">
+            <span>{triggerText}</span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "2px" }}>
+            {selected.length > 1 && (
+              <span className="pa2-daily-badge-counter">{selected.length}</span>
+            )}
+            <FiChevronDown size={12} style={{ color: "#94a3b8", transform: open ? "rotate(180deg)" : "none", transition: "transform 0.18s ease" }} />
+          </div>
+        </button>
+
+        {open && (
+          <div className="pa2-daily-dropdown-panel" style={{ width }}>
+            <div className="pa2-daily-search-row">
+              <FiSearch size={12} className="pa2-daily-search-icon" />
+              <input
+                type="text"
+                placeholder={`Search ${label}...`}
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                onClick={e => e.stopPropagation()}
+                className="pa2-daily-search-input"
+                autoFocus
+              />
+              {search && (
+                <button type="button" onClick={(e) => { e.stopPropagation(); setSearch(""); }} className="pa2-daily-search-clear">
+                  <FiX size={11} />
+                </button>
+              )}
+            </div>
+            <div className="pa2-daily-list-scroll">
+              <div
+                className={`pa2-daily-item ${selected.length === 0 ? "is-active" : ""}`}
+                onClick={() => onChange([])}
+              >
+                <div className={`pa2-daily-checkbox ${selected.length === 0 ? "checked" : ""}`}>
+                  {selected.length === 0 && <FiCheck size={10} strokeWidth={3.5} />}
+                </div>
+                <span className="pa2-daily-item-title" style={{ fontWeight: 600 }}>All {label}s</span>
+                <span className="pa2-daily-item-count">{items.length}</span>
+              </div>
+              {filteredItems.map((item) => {
+                const isSelected = selected.includes(item);
+                return (
+                  <div
+                    key={item}
+                    className={`pa2-daily-item ${isSelected ? "is-active" : ""}`}
+                    onClick={() => onChange(prev => prev.includes(item) ? prev.filter(p => p !== item) : [...prev, item])}
+                  >
+                    <div className={`pa2-daily-checkbox ${isSelected ? "checked" : ""}`}>
+                      {isSelected && <FiCheck size={10} strokeWidth={3.5} />}
+                    </div>
+                    <span className="pa2-daily-item-title" title={item}>{item}</span>
+                  </div>
+                );
+              })}
+              {filteredItems.length === 0 && (
+                <div style={{ textAlign: "center", color: "#94a3b8", fontSize: "0.74rem", padding: "12px 4px" }}>No matching {label.toLowerCase()}s found</div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+});
+
+// ── Isolated Machine Details Search Input ──
+const MachineDetailsSearchInput = memo(function MachineDetailsSearchInput({
+  value,
+  onChange
+}) {
+  const [localVal, setLocalVal] = useState(value || "");
+
+  useEffect(() => {
+    setLocalVal(value || "");
+  }, [value]);
+
+  const debounceTimer = useRef(null);
+
+  const handleChange = (e) => {
+    const next = e.target.value;
+    setLocalVal(next);
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    debounceTimer.current = setTimeout(() => {
+      onChange(next);
+    }, 180);
+  };
+
+  const handleClear = () => {
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    setLocalVal("");
+    onChange("");
+  };
+
+  return (
+    <div className="pa2-macdetail-search-wrapper">
+      <svg className="pa2-macdetail-search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+        <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+      </svg>
+      <input
+        type="text"
+        placeholder="Search machine..."
+        value={localVal}
+        onChange={handleChange}
+        className="pa2-macdetail-search-input"
+      />
+      {localVal && (
+        <button
+          type="button"
+          className="pa2-search-clear-btn"
+          style={{ right: "6px" }}
+          onClick={handleClear}
+          aria-label="Clear machine search"
+        >
+          <FiX size={12} style={{ strokeWidth: 3 }} />
+        </button>
+      )}
+    </div>
+  );
+});
+
 export default function ProductionAnalysis() {
   const _now = new Date();
   const _dflt = getModuleDefaultDateRange("production_analysis", { from: new Date(_now.getFullYear(), _now.getMonth(), 1), to: new Date(_now.getFullYear(), _now.getMonth() + 1, 0) });
@@ -712,17 +1297,13 @@ export default function ProductionAnalysis() {
   const [dailyMacFilter, setDailyMacFilter] = useState([]);
   const [dailyOperatorFilter, setDailyOperatorFilter] = useState([]);
 
-  const [dailyPartDropdownOpen, setDailyPartDropdownOpen] = useState(false);
-  const [dailyMacDropdownOpen, setDailyMacDropdownOpen] = useState(false);
-  const [dailyOperatorDropdownOpen, setDailyOperatorDropdownOpen] = useState(false);
+  // ── Pagination State for Daily Production Details ──
+  const [dailyCurrentPage, setDailyCurrentPage] = useState(1);
+  const [dailyRowsPerPage, setDailyRowsPerPage] = useState(50);
 
-  const [dailyPartSearch, setDailyPartSearch] = useState("");
-  const [dailyMacSearch, setDailyMacSearch] = useState("");
-  const [dailyOperatorSearch, setDailyOperatorSearch] = useState("");
-
-  const dailyPartRef = useRef(null);
-  const dailyMacRef = useRef(null);
-  const dailyOperatorRef = useRef(null);
+  // ── Pagination State for Setup Time Details ──
+  const [setupCurrentPage, setSetupCurrentPage] = useState(1);
+  const [setupRowsPerPage, setSetupRowsPerPage] = useState(25);
   const [pvMode, setPvMode] = useState("machine"); // "machine" | "month"
   const [oeeMode, setOeeMode] = useState("machine"); // "machine" | "month"
   const [oeeTrend, setOeeTrend] = useState({ labels: [], data: [] });
@@ -733,6 +1314,7 @@ export default function ProductionAnalysis() {
   const [oeeChartType, setOeeChartType] = useState("line"); // "line" | "bar"
   const [selectedMacTypeFilter, setSelectedMacTypeFilter] = useState("Active");
   const [searchMacQuery, setSearchMacQuery] = useState("");
+  const debouncedSearchMacQuery = useDebounce(searchMacQuery, 220);
   const [selectedMachine, setSelectedMachine] = useState(null);
   const [setupFilterMode, setSetupFilterMode] = useState("machine"); // "machine" | "month" | "part" | "shift"
   const [setupFilterOpen, setSetupFilterOpen] = useState(false);
@@ -784,6 +1366,7 @@ export default function ProductionAnalysis() {
   const [tableData, setTableData] = useState([]);
   const [tableLoading, setTableLoading] = useState(false);
   const [pageLoading, setPageLoading] = useState(true);
+  const [loadingProgress, setLoadingProgress] = useState(0);
   const isGlobalLoading = pageLoading || tableLoading;
 
   // Dynamic filter options states loaded from ERP database
@@ -979,8 +1562,8 @@ export default function ProductionAnalysis() {
         if (m.type !== selectedMacTypeFilter) return false;
       }
 
-      if (searchMacQuery && searchMacQuery.trim()) {
-        const q = searchMacQuery.toLowerCase().trim();
+      if (debouncedSearchMacQuery && debouncedSearchMacQuery.trim()) {
+        const q = debouncedSearchMacQuery.toLowerCase().trim();
         const matchesName = (m.name || "").toLowerCase().includes(q);
         const matchesMacName = (m.macname || "").toLowerCase().includes(q);
         const matchesType = (m.type || "").toLowerCase().includes(q);
@@ -989,93 +1572,9 @@ export default function ProductionAnalysis() {
 
       return true;
     });
-  }, [allMachinesList, selectedMacTypeFilter, searchMacQuery]);
+  }, [allMachinesList, selectedMacTypeFilter, debouncedSearchMacQuery]);
 
-  const macDetailData = {
-    "TC-59": {
-      runs: [
-        { operator: "Ramchandra Soran", partNo: "PRT-2047", process: "Turning OD", runHrs: 4.8, okQty: 180 },
-        { operator: "Karthi.S", partNo: "PRT-1022", process: "Facing", runHrs: 2.0, okQty: 68 }
-      ],
-      idleHrs: 1.2, rejQty: 4, rwQty: 2, oprEff: 88, oee: 84
-    },
-    "TC-60": {
-      runs: [
-        { operator: "Santhana Lakshmi", partNo: "PRT-1085", process: "Facing & Boring", runHrs: 4.1, okQty: 190 },
-        { operator: "Ajith.A", partNo: "PRT-2204", process: "Chamfering", runHrs: 3.0, okQty: 122 }
-      ],
-      idleHrs: 0.9, rejQty: 6, rwQty: 3, oprEff: 91, oee: 87
-    },
-    "TC 50": {
-      runs: [
-        { operator: "Akash.A", partNo: "PRT-3321", process: "Internal Turning", runHrs: 3.4, okQty: 109 },
-        { operator: "Nagamani", partNo: "PRT-0988", process: "Boring", runHrs: 2.0, okQty: 80 }
-      ],
-      idleHrs: 2.6, rejQty: 11, rwQty: 5, oprEff: 74, oee: 71
-    },
-    "TC 43 L": {
-      runs: [
-        { operator: "Mohan Kewat", partNo: "PRT-0912", process: "Thread Cutting", runHrs: 2.2, okQty: 75 },
-        { operator: "Chandan Kumar", partNo: "PRT-1155", process: "Grooving", runHrs: 2.0, okQty: 68 }
-      ],
-      idleHrs: 3.8, rejQty: 9, rwQty: 4, oprEff: 66, oee: 62
-    },
-    "VMC-07": {
-      runs: [
-        { operator: "Ravi Kumar", partNo: "PRT-4456", process: "Face Milling", runHrs: 3.5, okQty: 110 },
-        { operator: "Priya Singh", partNo: "PRT-3321", process: "Pocket Milling", runHrs: 3.0, okQty: 97 }
-      ],
-      idleHrs: 1.5, rejQty: 5, rwQty: 2, oprEff: 85, oee: 81
-    },
-    "VMC 18": {
-      runs: [
-        { operator: "Priya Singh", partNo: "PRT-2210", process: "Slot Milling", runHrs: 2.0, okQty: 52 },
-        { operator: "Biswanath Dhungia", partNo: "PRT-5503", process: "Drilling", runHrs: 1.8, okQty: 46 }
-      ],
-      idleHrs: 4.2, rejQty: 8, rwQty: 6, oprEff: 58, oee: 45
-    },
-    "SPM-04": {
-      runs: [
-        { operator: "Deepak Yadav", partNo: "PRT-5503", process: "Drilling & Tapping", runHrs: 3.9, okQty: 140 },
-        { operator: "Nilesh Gupta", partNo: "PRT-4490", process: "Reaming", runHrs: 2.0, okQty: 75 }
-      ],
-      idleHrs: 2.1, rejQty: 7, rwQty: 3, oprEff: 79, oee: 73
-    },
-    "BROACHING-1": {
-      runs: [
-        { operator: "Arun Mishra", partNo: "PRT-6678", process: "Keyway Broaching", runHrs: 3.2, okQty: 76 }
-      ],
-      idleHrs: 4.8, rejQty: 14, rwQty: 8, oprEff: 52, oee: 38
-    },
-    "M/C-09": {
-      runs: [
-        { operator: "Suresh Patel", partNo: "PRT-1134", process: "Conventional Turn", runHrs: 4.2, okQty: 120 },
-        { operator: "Vikas Sharma", partNo: "PRT-2267", process: "Knurling", runHrs: 2.0, okQty: 68 }
-      ],
-      idleHrs: 1.8, rejQty: 6, rwQty: 2, oprEff: 82, oee: 80
-    },
-    "M/C-10": {
-      runs: [
-        { operator: "Vikas Sharma", partNo: "PRT-2267", process: "Conventional Mill", runHrs: 2.7, okQty: 80 },
-        { operator: "Kiran Babu", partNo: "PRT-3389", process: "Drilling", runHrs: 2.0, okQty: 54 }
-      ],
-      idleHrs: 3.3, rejQty: 10, rwQty: 7, oprEff: 70, oee: 55
-    },
-    "M/C-11": {
-      runs: [
-        { operator: "Kiran Babu", partNo: "PRT-3389", process: "Conventional Turn", runHrs: 4.0, okQty: 135 },
-        { operator: "Ramchandra Soran", partNo: "PRT-2047", process: "Facing", runHrs: 2.0, okQty: 66 }
-      ],
-      idleHrs: 2.0, rejQty: 5, rwQty: 3, oprEff: 80, oee: 77
-    },
-    "M/C-12": {
-      runs: [
-        { operator: "Nilesh Gupta", partNo: "PRT-4490", process: "Special Process", runHrs: 3.1, okQty: 100 },
-        { operator: "Deepak Yadav", partNo: "PRT-5503", process: "Deburring", runHrs: 2.0, okQty: 62 }
-      ],
-      idleHrs: 2.9, rejQty: 8, rwQty: 4, oprEff: 75, oee: 68
-    },
-  };
+  const macDetailData = MAC_DETAIL_FALLBACK_DATA;
 
   const handleResetFilters = () => {
     setSearchQuery("");
@@ -1150,12 +1649,6 @@ export default function ProductionAnalysis() {
     return Array.from(set).sort();
   }, [tableData]);
 
-  const filteredDailyParts = useMemo(() => {
-    if (!dailyPartSearch.trim()) return dailyUniqueParts;
-    const q = dailyPartSearch.toLowerCase().trim();
-    return dailyUniqueParts.filter(p => p.toLowerCase().includes(q));
-  }, [dailyUniqueParts, dailyPartSearch]);
-
   const dailyUniqueMacs = useMemo(() => {
     const set = new Set();
     tableData.forEach(r => {
@@ -1165,12 +1658,6 @@ export default function ProductionAnalysis() {
     return Array.from(set).sort();
   }, [tableData]);
 
-  const filteredDailyMacs = useMemo(() => {
-    if (!dailyMacSearch.trim()) return dailyUniqueMacs;
-    const q = dailyMacSearch.toLowerCase().trim();
-    return dailyUniqueMacs.filter(m => m.toLowerCase().includes(q));
-  }, [dailyUniqueMacs, dailyMacSearch]);
-
   const dailyUniqueOperators = useMemo(() => {
     const set = new Set();
     tableData.forEach(r => {
@@ -1179,12 +1666,6 @@ export default function ProductionAnalysis() {
     });
     return Array.from(set).sort();
   }, [tableData]);
-
-  const filteredDailyOperators = useMemo(() => {
-    if (!dailyOperatorSearch.trim()) return dailyUniqueOperators;
-    const q = dailyOperatorSearch.toLowerCase().trim();
-    return dailyUniqueOperators.filter(op => op.toLowerCase().includes(q));
-  }, [dailyUniqueOperators, dailyOperatorSearch]);
 
   const filteredTableData = useMemo(() => {
     return tableData.filter(row => {
@@ -1240,14 +1721,9 @@ export default function ProductionAnalysis() {
     filteredTableData.forEach(row => {
       totalTarget += Number(row.Target || 0);
       totalOkQty += Number(row.OKQty || 0);
-
-      const matRej = row.MaterialRejection ?? row.MatRej ?? (row.Rej ? Math.floor(row.Rej * 0.6) : 0);
-      const macRej = row.MachineRejection ?? row.MacRej ?? (row.Rej ? (row.Rej - matRej) : 0);
-      const rwQty = row.ReworkQty ?? row.RwQty ?? (row.OKQty ? Math.max(0, (row.SNo % 3 === 0 ? Math.floor(row.OKQty * 0.05) : 0)) : 0);
-
-      totalMatRej += Number(matRej || 0);
-      totalMacRej += Number(macRej || 0);
-      totalRwQty += Number(rwQty || 0);
+      totalMatRej += Number(row._matRej || 0);
+      totalMacRej += Number(row._macRej || 0);
+      totalRwQty += Number(row._rwQty || 0);
     });
 
     return {
@@ -1487,24 +1963,20 @@ export default function ProductionAnalysis() {
       let valB = b[dailySortField];
 
       if (dailySortField === "MatRej") {
-        const getMatRej = r => r.MaterialRejection ?? r.MatRej ?? (r.Rej ? Math.floor(r.Rej * 0.6) : 0);
-        valA = getMatRej(a);
-        valB = getMatRej(b);
+        valA = a._matRej ?? 0;
+        valB = b._matRej ?? 0;
       } else if (dailySortField === "MacRej") {
-        const getMacRej = r => r.MachineRejection ?? r.MacRej ?? (r.Rej ? (r.Rej - Math.floor(r.Rej * 0.6)) : 0);
-        valA = getMacRej(a);
-        valB = getMacRej(b);
+        valA = a._macRej ?? 0;
+        valB = b._macRej ?? 0;
       } else if (dailySortField === "RwQty") {
-        const getRwQty = r => r.ReworkQty ?? r.RwQty ?? (r.OKQty ? Math.max(0, (r.SNo % 3 === 0 ? Math.floor(r.OKQty * 0.05) : 0)) : 0);
-        valA = getRwQty(a);
-        valB = getRwQty(b);
+        valA = a._rwQty ?? 0;
+        valB = b._rwQty ?? 0;
       } else if (dailySortField === "IdleHrs") {
-        const getIdleHrs = r => r.IdleHours ?? r.IdleHrs ?? (r.Rej > 0 || r.OKQty < r.Target ? parseFloat((Math.max(0.2, (r.Target - r.OKQty) * 0.1)).toFixed(1)) : 0);
-        valA = getIdleHrs(a);
-        valB = getIdleHrs(b);
+        valA = a._idleHrs ?? 0;
+        valB = b._idleHrs ?? 0;
       } else if (dailySortField === "Date") {
-        const dateA = valA ? new Date(valA).getTime() : 0;
-        const dateB = valB ? new Date(valB).getTime() : 0;
+        const dateA = a.Date ? new Date(a.Date).getTime() : 0;
+        const dateB = b.Date ? new Date(b.Date).getTime() : 0;
         return dailySortDirection === "asc" ? dateA - dateB : dateB - dateA;
       }
 
@@ -1518,6 +1990,22 @@ export default function ProductionAnalysis() {
     });
   }, [filteredTableData, dailySortField, dailySortDirection]);
 
+  // ── Pagination Calculation for Daily Production Details ──
+  const totalDailyPages = useMemo(() => {
+    if (dailyRowsPerPage === "All" || !sortedTableData.length) return 1;
+    return Math.ceil(sortedTableData.length / dailyRowsPerPage);
+  }, [sortedTableData.length, dailyRowsPerPage]);
+
+  const paginatedTableData = useMemo(() => {
+    if (dailyRowsPerPage === "All") return sortedTableData;
+    const start = (dailyCurrentPage - 1) * dailyRowsPerPage;
+    return sortedTableData.slice(start, start + dailyRowsPerPage);
+  }, [sortedTableData, dailyCurrentPage, dailyRowsPerPage]);
+
+  useEffect(() => {
+    setDailyCurrentPage(1);
+  }, [appliedSearchQuery, appliedFilterMachine, appliedFilterShift, appliedFilterOperator, dailyPartFilter, dailyMacFilter, dailyOperatorFilter, dailySortField, dailySortDirection, dailyRowsPerPage]);
+
   const handleDailySort = (field) => {
     if (dailySortField === field) {
       setDailySortDirection(prev => prev === "asc" ? "desc" : "asc");
@@ -1529,31 +2017,19 @@ export default function ProductionAnalysis() {
 
   /* ── Setup Time & effectiveness details derived from live data ── */
   const settingTableData = useMemo(() => {
-    let list = [];
-    if (filteredTableData.length > 0) {
-      list = filteredTableData.map((row, idx) => {
-        // Use actual setting time from data; fall back to null (no artificial mock)
-        const settingTime = row.SettingTime !== undefined && row.SettingTime !== null ? parseFloat(row.SettingTime) : null;
-        const defSettingTime = row.DefaultSettingTime !== undefined && row.DefaultSettingTime !== null ? parseFloat(row.DefaultSettingTime) : null;
-
-        // effectiveness = (Standard / Actual) * 100
-        const effectiveness = settingTime && settingTime > 0 && defSettingTime ? Math.round((defSettingTime / settingTime) * 100) : null;
-
-        return {
-          sno: idx + 1,
-          date: row.Date ? (() => { const p = row.Date.split("T")[0].split("-"); return `${p[2]}-${p[1]}-${p[0]}`; })() : "—",
-          macNo: row.Machine || "—",
-          shift: row.Shift || "—",
-          partNo: row.Part || "—",
-          process: row.Process || "—",
-          operatorName: row.Operator || "—",
-          settingTime: settingTime,
-          defaultSettingTime: defSettingTime,
-          effectiveness: effectiveness
-        };
-      });
-    }
-    // No mock fallback — empty list when no real data is available
+    if (!filteredTableData || !filteredTableData.length) return [];
+    let list = filteredTableData.map((row, idx) => ({
+      sno: idx + 1,
+      date: row._formattedDate || "—",
+      macNo: row.Machine || "—",
+      shift: row.Shift || "—",
+      partNo: row.Part || "—",
+      process: row.Process || "—",
+      operatorName: row.Operator || "—",
+      settingTime: row._settingTime,
+      defaultSettingTime: row._defaultSettingTime,
+      effectiveness: row._effectiveness
+    }));
 
     if (setupFilterMode === "part") {
       list = list.filter(row => setupSelectedParts.includes(row.partNo));
@@ -1764,6 +2240,22 @@ export default function ProductionAnalysis() {
     });
   }, [settingTableData, setupSortField, setupSortDirection]);
 
+  // ── Pagination Calculation for Setup Time Table ──
+  const totalSetupPages = useMemo(() => {
+    if (setupRowsPerPage === "All" || !sortedSettingTableData.length) return 1;
+    return Math.ceil(sortedSettingTableData.length / setupRowsPerPage);
+  }, [sortedSettingTableData.length, setupRowsPerPage]);
+
+  const paginatedSettingTableData = useMemo(() => {
+    if (setupRowsPerPage === "All") return sortedSettingTableData;
+    const start = (setupCurrentPage - 1) * setupRowsPerPage;
+    return sortedSettingTableData.slice(start, start + setupRowsPerPage);
+  }, [sortedSettingTableData, setupCurrentPage, setupRowsPerPage]);
+
+  useEffect(() => {
+    setSetupCurrentPage(1);
+  }, [setupFilterMode, setupSelectedParts, setupSortField, setupSortDirection, setupRowsPerPage]);
+
   const handleSetupSort = (field) => {
     if (setupSortField === field) {
       setSetupSortDirection(prev => (prev === "asc" ? "desc" : "asc"));
@@ -1783,31 +2275,30 @@ export default function ProductionAnalysis() {
     writeFilterSession("ba_filter_production", { from: appliedDateRange.from, to: appliedDateRange.to });
   }, [appliedDateRange.from, appliedDateRange.to]);
 
+  const buildReportParams = useCallback(() => {
+    const params = new URLSearchParams({ from: formatDateToYYYYMMDD(appliedDateRange.from), to: formatDateToYYYYMMDD(appliedDateRange.to) });
+    if (appliedFilterMachine && appliedFilterMachine.length > 0) params.append("machine", appliedFilterMachine.join(","));
+    if (appliedFilterShift) params.append("shift", appliedFilterShift);
+    if (appliedFilterOperator && appliedFilterOperator.length > 0) params.append("operator", appliedFilterOperator.join(","));
+    if (appliedFilterMacType) params.append("mac_type", appliedFilterMacType);
+    if (appliedFilterMacGroup) params.append("mac_group", appliedFilterMacGroup);
+    if (appliedSearchQuery) params.append("search", appliedSearchQuery);
+    return params;
+  }, [appliedDateRange.from, appliedDateRange.to, appliedFilterMachine, appliedFilterShift, appliedFilterOperator, appliedFilterMacType, appliedFilterMacGroup, appliedSearchQuery]);
+
+  // One bundle request for report (KPIs/trends), production value, idle
+  // breakdown and daily details — replaces four parallel fetches that each
+  // opened their own SQL Server connection over the tunnel.
   useEffect(() => {
     if (!appliedDateRange.from || !appliedDateRange.to) return;
     setPageLoading(true);
-    const params = new URLSearchParams({ from: formatDateToYYYYMMDD(appliedDateRange.from), to: formatDateToYYYYMMDD(appliedDateRange.to) });
-    if (appliedFilterMachine && appliedFilterMachine.length > 0) {
-      params.append("machine", appliedFilterMachine.join(","));
-    }
-    if (appliedFilterShift) {
-      params.append("shift", appliedFilterShift);
-    }
-    if (appliedFilterOperator && appliedFilterOperator.length > 0) {
-      params.append("operator", appliedFilterOperator.join(","));
-    }
-    if (appliedFilterMacType) {
-      params.append("mac_type", appliedFilterMacType);
-    }
-    if (appliedFilterMacGroup) {
-      params.append("mac_group", appliedFilterMacGroup);
-    }
-    if (appliedSearchQuery) {
-      params.append("search", appliedSearchQuery);
-    }
-    fetch(`${API_BASE}/production-analysis-report/?${params}`, { credentials: "include" })
-      .then(async (res) => { const data = await res.json().catch(() => ({})); if (!res.ok) throw new Error(data?.error || "Failed to load production analysis report"); return data; })
-      .then(data => {
+    setTableLoading(true);
+    setLoadingProgress(14);
+    const params = buildReportParams();
+    params.set("keys", "report,value,idle_breakdown,daily_details");
+    const ctrl = new AbortController();
+
+    const applyReport = (data) => {
         if (data && data.status === "success" && data.data) {
           const d = data.data;
           setKpiValues({ totalProductionQty: d.totalProductionQty || 0, okAcceptedQty: d.okAcceptedQty || 0, rejectionQty: d.rejectionQty || 0, totMatRejQty: d.totMatRejQty ?? 0, totMacRejQty: d.totMacRejQty ?? 0, totReworkQty: d.totReworkQty ?? 0, overallOee: d.overallOee ?? 0.0, productionHours: d.productionHours ?? 0.0, productionSeconds: d.productionSeconds ?? 0, totalMachineHours: d.totalMachineHours ?? 0.0, idleHours: d.idleHours ?? 0.0, idleSeconds: d.idleSeconds ?? 0, idleAcceptedHours: d.idleAcceptedHours ?? 0.0, idleAcceptedSeconds: d.idleAcceptedSeconds ?? 0, idleNonAcceptedHours: d.idleNonAcceptedHours ?? 0.0, idleNonAcceptedSeconds: d.idleNonAcceptedSeconds ?? 0, totProductionHours: d.totProductionHours ?? 0.0, totProductionSeconds: d.totProductionSeconds ?? 0, totProductionHoursDisplay: d.totProductionHoursDisplay || "", settingHours: d.settingHours ?? 0.0, settingSeconds: d.settingSeconds ?? 0, manEfficiency: d.manEfficiency ?? 0.0, totalShifts: d.totalShifts || 0, avgProdPerShift: d.avgProdPerShift ?? 0.0, peakShiftOutput: d.peakShiftOutput || 0, lowestShiftOutput: d.lowestShiftOutput || 0, activeMachines: d.activeMachines || 0, idleMachines: d.idleMachines || 0, machineUtilization: d.machineUtilization ?? 0.0, machineEfficiency: d.machineEfficiency ?? 0.0, operatorEfficiency: d.operatorEfficiency ?? 0.0, qualityRate: d.qualityRate ?? 0.0, materialRejection: d.materialRejection ?? 0.0, machineRejection: d.machineRejection ?? 0.0, totCncMac: d.totCncMac || 0, totConvMac: d.totConvMac || 0 });
@@ -1830,12 +2321,81 @@ export default function ProductionAnalysis() {
             setMacEffTrend({ labels: [], data: [] });
           }
         }
+    };
+    const applyValue = (data) => {
+      if (data && data.status === "success" && data.data) setPvChartData(data.data);
+    };
+    const applyIdle = (data) => {
+      if (data && data.status === "success") {
+        setIdleBreakdown({ accepted: data.accepted || _IDLE_BREAKDOWN_EMPTY.accepted, non_accepted: data.non_accepted || _IDLE_BREAKDOWN_EMPTY.non_accepted, summary: data.summary || _IDLE_BREAKDOWN_EMPTY.summary });
+      }
+    };
+    const applyDaily = (data) => {
+        if (data && data.status === "success" && Array.isArray(data.data)) {
+          const normalized = data.data.map((row, idx) => {
+            const matRej = row.MaterialRejection ?? row.MatRej ?? (row.Rej ? Math.floor(row.Rej * 0.6) : 0);
+            const macRej = row.MachineRejection ?? row.MacRej ?? (row.Rej ? (row.Rej - matRej) : 0);
+            const rwQty = row.ReworkQty ?? row.RwQty ?? (row.OKQty ? Math.max(0, (row.SNo % 3 === 0 ? Math.floor(row.OKQty * 0.05) : 0)) : 0);
+            const idleHrs = row.IdleHours ?? row.IdleHrs ?? (row.Rej > 0 || row.OKQty < row.Target ? parseFloat((Math.max(0.2, (row.Target - row.OKQty) * 0.1)).toFixed(1)) : 0);
+            let formattedDate = "—";
+            if (row.Date) {
+              try {
+                const p = String(row.Date).split("T")[0].split("-");
+                formattedDate = p.length === 3 ? `${p[2]}-${p[1]}-${p[0]}` : String(row.Date);
+              } catch {
+                formattedDate = String(row.Date);
+              }
+            }
+            const settingTime = row.SettingTime !== undefined && row.SettingTime !== null ? parseFloat(row.SettingTime) : null;
+            const defSettingTime = row.DefaultSettingTime !== undefined && row.DefaultSettingTime !== null ? parseFloat(row.DefaultSettingTime) : null;
+            const effectiveness = settingTime && settingTime > 0 && defSettingTime ? Math.round((defSettingTime / settingTime) * 100) : null;
+
+            return {
+              ...row,
+              _matRej: matRej,
+              _macRej: macRej,
+              _rwQty: rwQty,
+              _idleHrs: idleHrs,
+              _formattedDate: formattedDate,
+              _settingTime: settingTime,
+              _defaultSettingTime: defSettingTime,
+              _effectiveness: effectiveness,
+              _rowKey: row.RefNo || row.SNo || `${row.Date}_${row.Machine}_${row.Shift}_${idx}`
+            };
+          });
+          setTableData(normalized);
+        } else {
+          setTableData([]);
+        }
+    };
+
+    fetch(`${API_BASE}/production-analysis/bundle/?${params}`, { credentials: "include", signal: ctrl.signal })
+      .then(async (res) => { const json = await res.json().catch(() => ({})); if (!res.ok) throw new Error(json?.error || "Failed to load production analysis"); return json; })
+      .then(json => {
+        const d = json?.data || {};
+        const errs = json?.errors || {};
+        Object.keys(errs).forEach(k => console.error(`Production analysis ${k}:`, errs[k]));
+        setLoadingProgress(55);
+        applyReport(d.report || {});
+        applyValue(d.value || {});
+        applyIdle(d.idle_breakdown || {});
+        applyDaily(d.daily_details || {});
       })
-      .catch(err => console.error("Error connecting to production analysis backend:", err))
+      .catch(err => {
+        if (err.name === "AbortError") return;
+        console.error("Error connecting to production analysis backend:", err);
+        setTableData([]);
+      })
       .finally(() => {
-        setTimeout(() => setPageLoading(false), 700);
+        if (ctrl.signal.aborted) return;
+        setTableLoading(false);
+        setTimeout(() => {
+          setPageLoading(false);
+          setLoadingProgress(100);
+        }, 300);
       });
-  }, [appliedDateRange.from, appliedDateRange.to, appliedFilterMachine, appliedFilterShift, appliedFilterOperator, appliedFilterMacType, appliedFilterMacGroup, appliedSearchQuery, fetchTrigger]);
+    return () => ctrl.abort();
+  }, [buildReportParams, appliedDateRange.from, appliedDateRange.to, fetchTrigger]);
 
   const fetchMachineCardData = useCallback((macName) => {
     if (!macName) return;
@@ -1894,107 +2454,13 @@ export default function ProductionAnalysis() {
     }
   }, [selectedMachine?.name, fetchMachineCardData, fetchTrigger]);
 
-  /* ── Production Value chart fetch ───────────────── */
-  useEffect(() => {
-    if (!appliedDateRange.from || !appliedDateRange.to) return;
-    const params = new URLSearchParams({ from: formatDateToYYYYMMDD(appliedDateRange.from), to: formatDateToYYYYMMDD(appliedDateRange.to) });
-    if (appliedFilterMachine && appliedFilterMachine.length > 0) {
-      params.append("machine", appliedFilterMachine.join(","));
-    }
-    if (appliedFilterShift) {
-      params.append("shift", appliedFilterShift);
-    }
-    if (appliedFilterOperator && appliedFilterOperator.length > 0) {
-      params.append("operator", appliedFilterOperator.join(","));
-    }
-    if (appliedFilterMacType) {
-      params.append("mac_type", appliedFilterMacType);
-    }
-    if (appliedFilterMacGroup) {
-      params.append("mac_group", appliedFilterMacGroup);
-    }
-    if (appliedSearchQuery) {
-      params.append("search", appliedSearchQuery);
-    }
-    fetch(`${API_BASE}/production-value-report/?${params}`, { credentials: "include" })
-      .then(r => r.json().catch(() => ({})))
-      .then(data => { if (data && data.status === "success" && data.data) setPvChartData(data.data); })
-      .catch(err => console.error("Production value report error:", err));
-  }, [appliedDateRange.from, appliedDateRange.to, appliedFilterMachine, appliedFilterShift, appliedFilterOperator, appliedFilterMacType, appliedFilterMacGroup, appliedSearchQuery, fetchTrigger]);
-
-  /* ── Idle Breakdown fetch ───────────────────── */
-  useEffect(() => {
-    if (!appliedDateRange.from || !appliedDateRange.to) return;
-    const params = new URLSearchParams({
-      from: formatDateToYYYYMMDD(appliedDateRange.from),
-      to: formatDateToYYYYMMDD(appliedDateRange.to)
-    });
-    if (appliedFilterMachine && appliedFilterMachine.length > 0) {
-      params.append("machine", appliedFilterMachine.join(","));
-    }
-    if (appliedFilterShift) {
-      params.append("shift", appliedFilterShift);
-    }
-    if (appliedFilterOperator && appliedFilterOperator.length > 0) {
-      params.append("operator", appliedFilterOperator.join(","));
-    }
-    if (appliedFilterMacType) {
-      params.append("mac_type", appliedFilterMacType);
-    }
-    if (appliedFilterMacGroup) {
-      params.append("mac_group", appliedFilterMacGroup);
-    }
-    if (appliedSearchQuery) {
-      params.append("search", appliedSearchQuery);
-    }
-    fetch(`${API_BASE}/production-idle-breakdown/?${params}`, { credentials: "include" })
-      .then(r => r.json().catch(() => ({})))
-      .then(data => { if (data && data.status === "success") setIdleBreakdown({ accepted: data.accepted || _IDLE_BREAKDOWN_EMPTY.accepted, non_accepted: data.non_accepted || _IDLE_BREAKDOWN_EMPTY.non_accepted, summary: data.summary || _IDLE_BREAKDOWN_EMPTY.summary }); })
-      .catch(err => console.error("Idle breakdown error:", err));
-  }, [appliedDateRange.from, appliedDateRange.to, appliedFilterMachine, appliedFilterShift, appliedFilterOperator, appliedFilterMacType, appliedFilterMacGroup, appliedSearchQuery, fetchTrigger]);
-
-  /* ── Daily Production Details fetch ─────────── */
-  useEffect(() => {
-    if (!appliedDateRange.from || !appliedDateRange.to) return;
-    const params = new URLSearchParams({ from: formatDateToYYYYMMDD(appliedDateRange.from), to: formatDateToYYYYMMDD(appliedDateRange.to) });
-    if (appliedFilterMachine && appliedFilterMachine.length > 0) {
-      params.append("machine", appliedFilterMachine.join(","));
-    }
-    if (appliedFilterShift) {
-      params.append("shift", appliedFilterShift);
-    }
-    if (appliedFilterOperator && appliedFilterOperator.length > 0) {
-      params.append("operator", appliedFilterOperator.join(","));
-    }
-    if (appliedFilterMacType) {
-      params.append("mac_type", appliedFilterMacType);
-    }
-    if (appliedFilterMacGroup) {
-      params.append("mac_group", appliedFilterMacGroup);
-    }
-    if (appliedSearchQuery) {
-      params.append("search", appliedSearchQuery);
-    }
-    setTableLoading(true);
-    fetch(`${API_BASE}/production-analysis/daily-details/?${params}`, { credentials: "include" })
-      .then(r => r.json().catch(() => ({})))
-      .then(data => {
-        if (data && data.status === "success" && Array.isArray(data.data)) {
-          setTableData(data.data);
-        } else {
-          setTableData([]);
-        }
-      })
-      .catch(err => { console.error("Daily production details error:", err); setTableData([]); })
-      .finally(() => setTableLoading(false));
-  }, [appliedDateRange.from, appliedDateRange.to, appliedFilterMachine, appliedFilterShift, appliedFilterOperator, appliedFilterMacType, appliedFilterMacGroup, appliedSearchQuery, fetchTrigger]);
 
 
 
 
 
   useEffect(() => {
-    if (!oeeChartRef.current) return;
+    if (!oeeChartRef.current || pageLoading) return;
     oeeChartInst.current?.destroy();
     const ctx = oeeChartRef.current.getContext("2d");
 
@@ -2104,11 +2570,11 @@ export default function ProductionAnalysis() {
       }
     });
     return () => oeeChartInst.current?.destroy();
-  }, [pvChartData, oeeMode, oeeChartType, pageLoading, allMachinesList, oeeTrend]);
+  }, [oeeMode, oeeChartType, pageLoading, allMachinesList, oeeTrend]);
 
   /* ── Setting Time Machine Wise Chart ─────── */
   useEffect(() => {
-    if (!setChartRef.current) return;
+    if (!setChartRef.current || pageLoading) return;
     setChartInst.current?.destroy();
     const ctx = setChartRef.current.getContext("2d");
 
@@ -2198,11 +2664,11 @@ export default function ProductionAnalysis() {
       }
     });
     return () => setChartInst.current?.destroy();
-  }, [pvChartData, setupChartData, setupFilterMode, setupChartType, pageLoading]);
+  }, [setupChartData, setupFilterMode, setupChartType, pageLoading]);
 
   /* ── Machine Utilization Chart ──────────── */
   useEffect(() => {
-    if (!utilChartRef.current) return;
+    if (!utilChartRef.current || pageLoading) return;
     utilChartInst.current?.destroy();
     const ctx = utilChartRef.current.getContext("2d");
 
@@ -2297,11 +2763,12 @@ export default function ProductionAnalysis() {
         }
       }
     });
-  }, [pvChartData, utilChartData, utilChartType, pageLoading]);
+    return () => utilChartInst.current?.destroy();
+  }, [utilChartData, utilChartType, pageLoading]);
 
   /* ── Machine Wise Quality & Rejection Chart ──── */
   useEffect(() => {
-    if (!qualityChartRef.current) return;
+    if (!qualityChartRef.current || pageLoading) return;
     qualityChartInst.current?.destroy();
     const ctx = qualityChartRef.current.getContext("2d");
 
@@ -2475,7 +2942,7 @@ export default function ProductionAnalysis() {
 
   // ── Unified Production Value Vs MHR Cost Chart.js Effect ──
   useEffect(() => {
-    if (!pvChartRef.current) return;
+    if (!pvChartRef.current || pageLoading) return;
     pvChartInst.current?.destroy();
     const ctx = pvChartRef.current.getContext("2d");
 
@@ -2656,7 +3123,7 @@ export default function ProductionAnalysis() {
   }, [pvmhrChartData, pvmhrViewMode, pvChartType, pageLoading]);
   /* ── Machine Added Trend Chart ───────────── */
   useEffect(() => {
-    if (!macAddedChartRef.current) return;
+    if (!macAddedChartRef.current || pageLoading) return;
     macAddedChartInst.current?.destroy();
     const ctx = macAddedChartRef.current.getContext("2d");
 
@@ -2736,7 +3203,7 @@ export default function ProductionAnalysis() {
 
   /* ── Machine Efficiency% Trend Chart ─────── */
   useEffect(() => {
-    if (!macEffTrendChartRef.current) return;
+    if (!macEffTrendChartRef.current || pageLoading) return;
     macEffTrendChartInst.current?.destroy();
     const ctx = macEffTrendChartRef.current.getContext("2d");
 
@@ -2831,15 +3298,6 @@ export default function ProductionAnalysis() {
       if (mhrFilterDropdownRef.current && !mhrFilterDropdownRef.current.contains(e.target)) {
         setMhrFilterOpen(false);
       }
-      if (dailyPartRef.current && !dailyPartRef.current.contains(e.target)) {
-        setDailyPartDropdownOpen(false);
-      }
-      if (dailyMacRef.current && !dailyMacRef.current.contains(e.target)) {
-        setDailyMacDropdownOpen(false);
-      }
-      if (dailyOperatorRef.current && !dailyOperatorRef.current.contains(e.target)) {
-        setDailyOperatorDropdownOpen(false);
-      }
     };
     document.addEventListener("mousedown", handleOutside);
     return () => document.removeEventListener("mousedown", handleOutside);
@@ -2847,8 +3305,8 @@ export default function ProductionAnalysis() {
 
   return (
     <div className={`pa2-wrap ${mounted ? "pa2-wrap--in" : ""}`}>
-      {/* ── Global Top Loading Progress Bar (YouTube Style) ── */}
-      <div className={`pa2-global-progress-bar ${isGlobalLoading ? "pa2-global-progress-bar--active" : ""}`} />
+      {/* ── Ultra-Smooth Fluid Organic Progress Status Card (Exact Sales Analysis standard) ── */}
+      <ProductionStatusBar isGlobalLoading={isGlobalLoading} loadingProgress={loadingProgress} />
 
       {/* ── Page Hero ── */}
       <div className="pa2-page-hero">
@@ -2856,7 +3314,7 @@ export default function ProductionAnalysis() {
       </div>
 
       {/* ── FILTERS ──────────────────────────────────── */}
-      <div className={`pa2-card pa2-filters pa2-anim ${isGlobalLoading ? "pa2-filters--loading" : ""}`} style={{ "--d": "0ms" }}>
+      <div className={`pa2-card pa2-filters pa2-anim ${isGlobalLoading ? "pa2-filters--loading" : ""}`} data-spotlight="pda-report-filters" style={{ "--d": "0ms" }}>
         <div
           className="pa2-filters-grid"
           style={{
@@ -2876,38 +3334,12 @@ export default function ProductionAnalysis() {
           </div>
           <div className="pa2-fg" data-spotlight="pda-export-controls">
             <label>Search</label>
-            <div className="pa2-search-input-wrapper">
-              <svg className="pa2-search-icon-svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
-              </svg>
-              <input
-                type="text"
-                placeholder={isGlobalLoading ? "Loading..." : "Search Partno"}
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === "Enter" && !isGlobalLoading) {
-                    handleApplyFilters();
-                  }
-                }}
-                disabled={isGlobalLoading}
-                style={{
-                  cursor: isGlobalLoading ? "not-allowed" : "text",
-                  background: isGlobalLoading ? "#f8fafc" : undefined
-                }}
-              />
-              {searchQuery && !isGlobalLoading && (
-                <button
-                  type="button"
-                  className="pa2-search-clear-btn"
-                  onClick={() => setSearchQuery("")}
-                  disabled={isGlobalLoading}
-                  aria-label="Clear search"
-                >
-                  <FiX size={14} style={{ strokeWidth: 3 }} />
-                </button>
-              )}
-            </div>
+            <TopFilterSearchInput
+              value={searchQuery}
+              onCommit={setSearchQuery}
+              onApply={handleApplyFilters}
+              disabled={isGlobalLoading}
+            />
           </div>
           <PremiumSelectMulti
             label="Mac Name"
@@ -3039,29 +3471,7 @@ export default function ProductionAnalysis() {
             <div className="pa2-macdetail-badge">{filteredMachinesList.length} Machines</div>
           </div>
           <div className="pa2-macdetail-controls">
-            <div className="pa2-macdetail-search-wrapper">
-              <svg className="pa2-macdetail-search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
-              </svg>
-              <input
-                type="text"
-                placeholder="Search machine..."
-                value={searchMacQuery}
-                onChange={e => setSearchMacQuery(e.target.value)}
-                className="pa2-macdetail-search-input"
-              />
-              {searchMacQuery && (
-                <button
-                  type="button"
-                  className="pa2-search-clear-btn"
-                  style={{ right: "6px" }}
-                  onClick={() => setSearchMacQuery("")}
-                  aria-label="Clear machine search"
-                >
-                  <FiX size={12} style={{ strokeWidth: 3 }} />
-                </button>
-              )}
-            </div>
+            <MachineDetailsSearchInput value={searchMacQuery} onChange={setSearchMacQuery} />
             <div className="pa2-macdetail-tabs">
               {machineCategories.map((tab) => (
                 <button
@@ -3104,7 +3514,7 @@ export default function ProductionAnalysis() {
                 };
                 return (
                   <div
-                    key={i}
+                    key={m.name || i}
                     className="pa2-mac-chip"
                     style={{ "--ci": i, "--cc1": m.color }}
                     onClick={() => handleMachineClick(m)}
@@ -4307,12 +4717,12 @@ export default function ProductionAnalysis() {
                       icon={FiClock}
                     />
                   ) : (
-                    sortedSettingTableData.map((row, i) => {
+                    paginatedSettingTableData.map((row, i) => {
                       const effColor = row.effectiveness >= 100 ? "#10b981" : row.effectiveness >= 80 ? "#3b82f6" : "#ef4444";
                       const effBg = row.effectiveness >= 100 ? "rgba(16, 185, 129, 0.08)" : row.effectiveness >= 80 ? "rgba(59, 130, 246, 0.08)" : "rgba(239, 68, 68, 0.08)";
 
                       return (
-                        <tr key={i} className="pa2-anim" style={{ "--d": `${i * 30}ms` }}>
+                        <tr key={i} className="pa2-table-row-hover">
                           <td className="pa2-td-muted">{row.sno}</td>
                           <td style={{ whiteSpace: "nowrap" }}>{row.date}</td>
                           <td><span className="pa2-machine-chip" style={{ fontWeight: "700" }}>{row.macNo}</span></td>
@@ -4336,6 +4746,14 @@ export default function ProductionAnalysis() {
                   )}
                 </tbody>
               </table>
+              <PaginationControl
+                currentPage={setupCurrentPage}
+                totalPages={totalSetupPages}
+                totalRows={sortedSettingTableData.length}
+                rowsPerPage={setupRowsPerPage}
+                onPageChange={setSetupCurrentPage}
+                onRowsPerPageChange={setSetupRowsPerPage}
+              />
             </div>
           </div>
         </div>
@@ -5128,251 +5546,33 @@ NEW §3 — NON-ACCEPTED IDLE: PRODUCTION LOSS
 
         {/* Modern Dedicated Table Toolbar & Filters */}
         <div className="pa2-daily-filter-toolbar">
-          {/* 1. Part No Wise Filter */}
-          <div className="pa2-daily-filter-group" ref={dailyPartRef}>
-            <span className="pa2-daily-filter-label">
-              <FiLayers size={13} style={{ color: "#2563eb" }} /> Part:
-            </span>
-            <div style={{ position: "relative" }}>
-              <button
-                type="button"
-                onClick={() => { setDailyPartDropdownOpen(o => !o); setDailyMacDropdownOpen(false); setDailyOperatorDropdownOpen(false); }}
-                className={`pa2-daily-filter-btn ${dailyPartFilter.length > 0 ? "is-active" : ""}`}
-              >
-                <div className="pa2-daily-filter-btn-text">
-                  <span>
-                    {dailyPartFilter.length === 0
-                      ? "All Parts"
-                      : dailyPartFilter.length === 1
-                        ? dailyPartFilter[0]
-                        : `${dailyPartFilter.length} Parts Selected`}
-                  </span>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: "2px" }}>
-                  {dailyPartFilter.length > 1 && (
-                    <span className="pa2-daily-badge-counter">{dailyPartFilter.length}</span>
-                  )}
-                  <FiChevronDown size={12} style={{ color: "#94a3b8", transform: dailyPartDropdownOpen ? "rotate(180deg)" : "none", transition: "transform 0.18s ease" }} />
-                </div>
-              </button>
-
-              {dailyPartDropdownOpen && (
-                <div className="pa2-daily-dropdown-panel" style={{ width: "280px" }}>
-                  <div className="pa2-daily-search-row">
-                    <FiSearch size={12} className="pa2-daily-search-icon" />
-                    <input
-                      type="text"
-                      placeholder="Search Part No..."
-                      value={dailyPartSearch}
-                      onChange={e => setDailyPartSearch(e.target.value)}
-                      onClick={e => e.stopPropagation()}
-                      className="pa2-daily-search-input"
-                      autoFocus
-                    />
-                    {dailyPartSearch && (
-                      <button type="button" onClick={(e) => { e.stopPropagation(); setDailyPartSearch(""); }} className="pa2-daily-search-clear">
-                        <FiX size={11} />
-                      </button>
-                    )}
-                  </div>
-                  <div className="pa2-daily-list-scroll">
-                    <div
-                      className={`pa2-daily-item ${dailyPartFilter.length === 0 ? "is-active" : ""}`}
-                      onClick={() => setDailyPartFilter([])}
-                    >
-                      <div className={`pa2-daily-checkbox ${dailyPartFilter.length === 0 ? "checked" : ""}`}>
-                        {dailyPartFilter.length === 0 && <FiCheck size={10} strokeWidth={3.5} />}
-                      </div>
-                      <span className="pa2-daily-item-title" style={{ fontWeight: 600 }}>All Parts</span>
-                      <span className="pa2-daily-item-count">{dailyUniqueParts.length}</span>
-                    </div>
-                    {filteredDailyParts.map((part, idx) => {
-                      const isSelected = dailyPartFilter.includes(part);
-                      return (
-                        <div
-                          key={idx}
-                          className={`pa2-daily-item ${isSelected ? "is-active" : ""}`}
-                          onClick={() => setDailyPartFilter(prev => prev.includes(part) ? prev.filter(p => p !== part) : [...prev, part])}
-                        >
-                          <div className={`pa2-daily-checkbox ${isSelected ? "checked" : ""}`}>
-                            {isSelected && <FiCheck size={10} strokeWidth={3.5} />}
-                          </div>
-                          <span className="pa2-daily-item-title" title={part}>{part}</span>
-                        </div>
-                      );
-                    })}
-                    {filteredDailyParts.length === 0 && (
-                      <div style={{ textAlign: "center", color: "#94a3b8", fontSize: "0.74rem", padding: "12px 4px" }}>No matching parts found</div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* 2. Machine Wise Filter */}
-          <div className="pa2-daily-filter-group" ref={dailyMacRef}>
-            <span className="pa2-daily-filter-label">
-              <FiCpu size={13} style={{ color: "#2563eb" }} /> Machine:
-            </span>
-            <div style={{ position: "relative" }}>
-              <button
-                type="button"
-                onClick={() => { setDailyMacDropdownOpen(o => !o); setDailyPartDropdownOpen(false); setDailyOperatorDropdownOpen(false); }}
-                className={`pa2-daily-filter-btn ${dailyMacFilter.length > 0 ? "is-active" : ""}`}
-              >
-                <div className="pa2-daily-filter-btn-text">
-                  <span>
-                    {dailyMacFilter.length === 0
-                      ? "All Machines"
-                      : dailyMacFilter.length === 1
-                        ? dailyMacFilter[0]
-                        : `${dailyMacFilter.length} Machines Selected`}
-                  </span>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: "2px" }}>
-                  {dailyMacFilter.length > 1 && (
-                    <span className="pa2-daily-badge-counter">{dailyMacFilter.length}</span>
-                  )}
-                  <FiChevronDown size={12} style={{ color: "#94a3b8", transform: dailyMacDropdownOpen ? "rotate(180deg)" : "none", transition: "transform 0.18s ease" }} />
-                </div>
-              </button>
-
-              {dailyMacDropdownOpen && (
-                <div className="pa2-daily-dropdown-panel" style={{ width: "270px" }}>
-                  <div className="pa2-daily-search-row">
-                    <FiSearch size={12} className="pa2-daily-search-icon" />
-                    <input
-                      type="text"
-                      placeholder="Search Machine..."
-                      value={dailyMacSearch}
-                      onChange={e => setDailyMacSearch(e.target.value)}
-                      onClick={e => e.stopPropagation()}
-                      className="pa2-daily-search-input"
-                      autoFocus
-                    />
-                    {dailyMacSearch && (
-                      <button type="button" onClick={(e) => { e.stopPropagation(); setDailyMacSearch(""); }} className="pa2-daily-search-clear">
-                        <FiX size={11} />
-                      </button>
-                    )}
-                  </div>
-                  <div className="pa2-daily-list-scroll">
-                    <div
-                      className={`pa2-daily-item ${dailyMacFilter.length === 0 ? "is-active" : ""}`}
-                      onClick={() => setDailyMacFilter([])}
-                    >
-                      <div className={`pa2-daily-checkbox ${dailyMacFilter.length === 0 ? "checked" : ""}`}>
-                        {dailyMacFilter.length === 0 && <FiCheck size={10} strokeWidth={3.5} />}
-                      </div>
-                      <span className="pa2-daily-item-title" style={{ fontWeight: 600 }}>All Machines</span>
-                      <span className="pa2-daily-item-count">{dailyUniqueMacs.length}</span>
-                    </div>
-                    {filteredDailyMacs.map((mac, idx) => {
-                      const isSelected = dailyMacFilter.includes(mac);
-                      return (
-                        <div
-                          key={idx}
-                          className={`pa2-daily-item ${isSelected ? "is-active" : ""}`}
-                          onClick={() => setDailyMacFilter(prev => prev.includes(mac) ? prev.filter(m => m !== mac) : [...prev, mac])}
-                        >
-                          <div className={`pa2-daily-checkbox ${isSelected ? "checked" : ""}`}>
-                            {isSelected && <FiCheck size={10} strokeWidth={3.5} />}
-                          </div>
-                          <span className="pa2-daily-item-title" title={mac}>{mac}</span>
-                        </div>
-                      );
-                    })}
-                    {filteredDailyMacs.length === 0 && (
-                      <div style={{ textAlign: "center", color: "#94a3b8", fontSize: "0.74rem", padding: "12px 4px" }}>No matching machines found</div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* 3. Operator Wise Filter */}
-          <div className="pa2-daily-filter-group" ref={dailyOperatorRef}>
-            <span className="pa2-daily-filter-label">
-              <FiUser size={13} style={{ color: "#2563eb" }} /> Operator:
-            </span>
-            <div style={{ position: "relative" }}>
-              <button
-                type="button"
-                onClick={() => { setDailyOperatorDropdownOpen(o => !o); setDailyPartDropdownOpen(false); setDailyMacDropdownOpen(false); }}
-                className={`pa2-daily-filter-btn ${dailyOperatorFilter.length > 0 ? "is-active" : ""}`}
-              >
-                <div className="pa2-daily-filter-btn-text">
-                  <span>
-                    {dailyOperatorFilter.length === 0
-                      ? "All Operators"
-                      : dailyOperatorFilter.length === 1
-                        ? dailyOperatorFilter[0]
-                        : `${dailyOperatorFilter.length} Operators Selected`}
-                  </span>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: "2px" }}>
-                  {dailyOperatorFilter.length > 1 && (
-                    <span className="pa2-daily-badge-counter">{dailyOperatorFilter.length}</span>
-                  )}
-                  <FiChevronDown size={12} style={{ color: "#94a3b8", transform: dailyOperatorDropdownOpen ? "rotate(180deg)" : "none", transition: "transform 0.18s ease" }} />
-                </div>
-              </button>
-
-              {dailyOperatorDropdownOpen && (
-                <div className="pa2-daily-dropdown-panel" style={{ width: "280px" }}>
-                  <div className="pa2-daily-search-row">
-                    <FiSearch size={12} className="pa2-daily-search-icon" />
-                    <input
-                      type="text"
-                      placeholder="Search Operator..."
-                      value={dailyOperatorSearch}
-                      onChange={e => setDailyOperatorSearch(e.target.value)}
-                      onClick={e => e.stopPropagation()}
-                      className="pa2-daily-search-input"
-                      autoFocus
-                    />
-                    {dailyOperatorSearch && (
-                      <button type="button" onClick={(e) => { e.stopPropagation(); setDailyOperatorSearch(""); }} className="pa2-daily-search-clear">
-                        <FiX size={11} />
-                      </button>
-                    )}
-                  </div>
-                  <div className="pa2-daily-list-scroll">
-                    <div
-                      className={`pa2-daily-item ${dailyOperatorFilter.length === 0 ? "is-active" : ""}`}
-                      onClick={() => setDailyOperatorFilter([])}
-                    >
-                      <div className={`pa2-daily-checkbox ${dailyOperatorFilter.length === 0 ? "checked" : ""}`}>
-                        {dailyOperatorFilter.length === 0 && <FiCheck size={10} strokeWidth={3.5} />}
-                      </div>
-                      <span className="pa2-daily-item-title" style={{ fontWeight: 600 }}>All Operators</span>
-                      <span className="pa2-daily-item-count">{dailyUniqueOperators.length}</span>
-                    </div>
-                    {filteredDailyOperators.map((op, idx) => {
-                      const isSelected = dailyOperatorFilter.includes(op);
-                      return (
-                        <div
-                          key={idx}
-                          className={`pa2-daily-item ${isSelected ? "is-active" : ""}`}
-                          onClick={() => setDailyOperatorFilter(prev => prev.includes(op) ? prev.filter(o => o !== op) : [...prev, op])}
-                        >
-                          <div className={`pa2-daily-checkbox ${isSelected ? "checked" : ""}`}>
-                            {isSelected && <FiCheck size={10} strokeWidth={3.5} />}
-                          </div>
-                          <span className="pa2-daily-item-title" title={op}>{op}</span>
-                        </div>
-                      );
-                    })}
-                    {filteredDailyOperators.length === 0 && (
-                      <div style={{ textAlign: "center", color: "#94a3b8", fontSize: "0.74rem", padding: "12px 4px" }}>No matching operators found</div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
+          <DailyTableFilterDropdown
+            icon={FiLayers}
+            label="Part"
+            iconColor="#2563eb"
+            items={dailyUniqueParts}
+            selected={dailyPartFilter}
+            onChange={setDailyPartFilter}
+            width="280px"
+          />
+          <DailyTableFilterDropdown
+            icon={FiCpu}
+            label="Machine"
+            iconColor="#2563eb"
+            items={dailyUniqueMacs}
+            selected={dailyMacFilter}
+            onChange={setDailyMacFilter}
+            width="270px"
+          />
+          <DailyTableFilterDropdown
+            icon={FiUser}
+            label="Operator"
+            iconColor="#2563eb"
+            items={dailyUniqueOperators}
+            selected={dailyOperatorFilter}
+            onChange={setDailyOperatorFilter}
+            width="280px"
+          />
 
           {/* Clear Filters Button */}
           {(dailyPartFilter.length > 0 || dailyMacFilter.length > 0 || dailyOperatorFilter.length > 0) && (
@@ -5485,18 +5685,17 @@ NEW §3 — NON-ACCEPTED IDLE: PRODUCTION LOSS
                   {!tableLoading && filteredTableData.length === 0 && (
                     <NoDataFound isTableRow={true} colSpan={15} title="No Data Found on this period" sub="No shift production records found matching the selected period and filters." icon={FiTable} />
                   )}
-                  {!tableLoading && sortedTableData.map((row, i) => {
+                  {!tableLoading && paginatedTableData.map((row, i) => {
                     const isRejected = row.Status === "Rejected";
                     const badge = isRejected ? "pa2-badge--bad" : "pa2-badge--ok";
-                    const formattedDate = row.Date ? (() => { const p = row.Date.split("T")[0].split("-"); return `${p[2]}-${p[1]}-${p[0]}`; })() : "—";
-
-                    const matRej = row.MaterialRejection ?? row.MatRej ?? (row.Rej ? Math.floor(row.Rej * 0.6) : 0);
-                    const macRej = row.MachineRejection ?? row.MacRej ?? (row.Rej ? (row.Rej - matRej) : 0);
-                    const rwQty = row.ReworkQty ?? row.RwQty ?? (row.OKQty ? Math.max(0, (row.SNo % 3 === 0 ? Math.floor(row.OKQty * 0.05) : 0)) : 0);
-                    const idleHrs = row.IdleHours ?? row.IdleHrs ?? (row.Rej > 0 || row.OKQty < row.Target ? parseFloat((Math.max(0.2, (row.Target - row.OKQty) * 0.1)).toFixed(1)) : 0);
+                    const formattedDate = row._formattedDate || "—";
+                    const matRej = row._matRej ?? 0;
+                    const macRej = row._macRej ?? 0;
+                    const rwQty = row._rwQty ?? 0;
+                    const idleHrs = row._idleHrs ?? 0;
 
                     return (
-                      <tr key={i} className="pa2-anim" style={{ "--d": `${i * 40}ms` }}>
+                      <tr key={row._rowKey || i} className="pa2-table-row-hover">
                         <td className="pa2-td-muted">{row.SNo}</td>
                         <td>{formattedDate}</td>
                         <td><span className="pa2-machine-chip">{row.Machine || "—"}</span></td>
@@ -5562,6 +5761,14 @@ NEW §3 — NON-ACCEPTED IDLE: PRODUCTION LOSS
               </tfoot>
             )}
           </table>
+          <PaginationControl
+            currentPage={dailyCurrentPage}
+            totalPages={totalDailyPages}
+            totalRows={sortedTableData.length}
+            rowsPerPage={dailyRowsPerPage}
+            onPageChange={setDailyCurrentPage}
+            onRowsPerPageChange={setDailyRowsPerPage}
+          />
         </div>
       </div>
     </div>

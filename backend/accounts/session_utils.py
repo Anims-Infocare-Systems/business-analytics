@@ -4,6 +4,17 @@ from django.db import connection
 logger = logging.getLogger(__name__)
 
 
+def _is_session_alive(session_key):
+    if not session_key:
+        return False
+    try:
+        from django.contrib.sessions.models import Session
+        from django.utils import timezone
+        return Session.objects.filter(session_key=session_key, expire_date__gt=timezone.now()).exists()
+    except Exception:
+        return True
+
+
 def get_or_restore_session_tenant(request, allow_expired=False):
     """
     Get tenant from session and verify that this request's session_key matches
@@ -37,7 +48,27 @@ def get_or_restore_session_tenant(request, allow_expired=False):
                 except Exception:
                     pass
 
+            # Ignore ghost/dead active sessions that no longer exist in Django session store
+            if active_session_key and not _is_session_alive(active_session_key):
+                active_session_key = None
+                try:
+                    cache.delete(f"user_active_session:{c_code_upper}:{u_name_upper}")
+                except Exception:
+                    pass
+
             curr_session_key = request.session.session_key
+            if not active_session_key and curr_session_key:
+                active_session_key = curr_session_key
+                try:
+                    cache.set(f"user_active_session:{c_code_upper}:{u_name_upper}", curr_session_key, timeout=86400)
+                    with connection.cursor() as cursor:
+                        cursor.execute(
+                            "UPDATE tenants_userssession SET session_key = %s, last_seen = GETUTCDATE() WHERE company_code = %s AND UPPER(username) = UPPER(%s)",
+                            [curr_session_key, company_code, username],
+                        )
+                except Exception:
+                    pass
+
             if active_session_key and curr_session_key and curr_session_key != active_session_key:
                 logger.warning(
                     f"Concurrent login detected: superseded session {curr_session_key} for {username} ({company_code}) blocked."
@@ -68,11 +99,33 @@ def get_or_restore_session_tenant(request, allow_expired=False):
             c_code_upper = company_code.upper()
             u_name_upper = username.upper()
             active_session_key = cache.get(f"user_active_session:{c_code_upper}:{u_name_upper}")
+
+            if not active_session_key:
+                try:
+                    with connection.cursor() as cursor:
+                        cursor.execute(
+                            "SELECT session_key FROM tenants_userssession WHERE company_code = %s AND UPPER(username) = UPPER(%s)",
+                            [company_code, username],
+                        )
+                        row = cursor.fetchone()
+                        if row and row[0]:
+                            active_session_key = row[0]
+                            cache.set(f"user_active_session:{c_code_upper}:{u_name_upper}", active_session_key, timeout=86400)
+                except Exception:
+                    pass
+
+            if active_session_key and not _is_session_alive(active_session_key):
+                active_session_key = None
+                try:
+                    cache.delete(f"user_active_session:{c_code_upper}:{u_name_upper}")
+                except Exception:
+                    pass
+
             curr_session_key = request.session.session_key
 
             # If this user already has an active session elsewhere and this request does not hold that session,
             # fresh login is required with password.
-            if active_session_key and curr_session_key != active_session_key:
+            if active_session_key and curr_session_key and curr_session_key != active_session_key:
                 logger.info(
                     f"Auto-restoration blocked for {username} ({company_code}): active session {active_session_key} exists. Fresh login required."
                 )

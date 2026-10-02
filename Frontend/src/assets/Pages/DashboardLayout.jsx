@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo, memo, lazy, Suspense } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo, memo, lazy, Suspense, startTransition } from "react";
 import { useNavigate } from "react-router-dom";
 import { resolveApiBase } from "../../apiBase";
 import "./DashboardLayout.css";
@@ -35,6 +35,7 @@ const ProductionAnalysis = lazy(() => import("./ProductionAnalysis"));
 const UserRights = lazy(() => import("./UserRights"));
 const UsersSetting = lazy(() => import("./UsersSetting"));
 const Settings = lazy(() => import("./Settings"));
+const SpotlightSettingsTab = lazy(() => import("./SpotlightSettingsTab"));
 import Welcome from "./Welcome";
 import PasswordExpiryModal from "./PasswordExpiryModal";
 import TourGuide from "./TourGuide";
@@ -154,7 +155,7 @@ const HEADING_MAP = {
     "Charts": "Charts & Visualizations",
     "User Rights": "Utility — User Rights",
     "Users Setting": "Utility — Users Setting",
-    "Spotlight": "Spotlight",
+    "Spotlight": "Spotlight Navigator",
     "Settings": "Settings",
     "Welcome": "Workspace Overview",
     "Dashboard": "Dashboard Overview",
@@ -255,13 +256,14 @@ function CategoryLanding({ menuKey, children, onSubClick }) {
 ─────────────────────────────────────────────────────────── */
 function getEffectivePageKey(ai, si) {
     if (ai === "Welcome") return "Welcome";
+    if (ai === "Spotlight") return "Spotlight";
     if (si) return si;
     if (ai === "Charts") return "Charts";
     return `category_${ai || "blank"}`;
 }
 
 function renderModuleByKey(key, props) {
-    const { userName, companyName, onNavigate, userRights, isSuperAdmin, allowedMenuItems, onOpenSpotlight } = props;
+    const { userName, companyName, onNavigate, userRights, isSuperAdmin, allowedMenuItems, onOpenSpotlight, onSpotlightNavigate } = props;
 
     if (key === "Welcome") {
         return (
@@ -298,6 +300,14 @@ function renderModuleByKey(key, props) {
     if (key === "Charts") return <Charts />;
     if (key === "User Rights") return <UserRights />;
     if (key === "Users Setting") return <UsersSetting />;
+    if (key === "Spotlight") {
+        return (
+            <SpotlightSettingsTab
+                onSelectSection={onSpotlightNavigate || onOpenSpotlight}
+                onOpenSpotlight={onOpenSpotlight}
+            />
+        );
+    }
 
     if (key.startsWith("category_")) {
         const menuKey = key.replace("category_", "");
@@ -332,8 +342,23 @@ const KeepAlivePane = memo(function KeepAlivePane({
     userRights,
     isSuperAdmin,
     allowedMenuItems,
-    onOpenSpotlight
+    onOpenSpotlight,
+    onSpotlightNavigate
 }) {
+    // Memoize rendered module once per paneKey so switching back to it never re-evaluates or reloads the module
+    const moduleElement = useMemo(() => {
+        return renderModuleByKey(paneKey, {
+            userName,
+            companyName,
+            onNavigate,
+            userRights,
+            isSuperAdmin,
+            allowedMenuItems,
+            onOpenSpotlight,
+            onSpotlightNavigate
+        });
+    }, [paneKey]);
+
     return (
         <div
             className={`dl-keepalive-pane${isActive ? " dl-keepalive-pane--active" : " dl-keepalive-pane--hidden"}${isPlant ? " dl-page-wrap--plant" : ""}`}
@@ -365,36 +390,52 @@ const KeepAlivePane = memo(function KeepAlivePane({
                     </span>
                 </div>
             )}>
-                {renderModuleByKey(paneKey, {
-                    userName,
-                    companyName,
-                    onNavigate,
-                    userRights,
-                    isSuperAdmin,
-                    allowedMenuItems,
-                    onOpenSpotlight
-                })}
+                {moduleElement}
             </Suspense>
         </div>
     );
+}, (prevProps, nextProps) => {
+    // If the pane was inactive and remains inactive, SKIP re-rendering completely
+    if (!prevProps.isActive && !nextProps.isActive) {
+        return true;
+    }
+    return prevProps.isActive === nextProps.isActive &&
+           prevProps.paneKey === nextProps.paneKey;
 });
 
-const PageContent = memo(function PageContent({ activeSubItem, activeItem, onNavigate, userName, companyName, userRights, isSuperAdmin, allowedMenuItems, onOpenSpotlight }) {
+// Heavy analysis modules each hold multi-MB datasets plus several Chart.js
+// instances. Keep the active one plus the most recently used N in memory;
+// older ones are unmounted (their filters persist via sessionStorage).
+const KEEPALIVE_MAX_HEAVY = 2;
+const HEAVY_MODULE_KEYS = new Set([
+    "Top Management Dashboard", "Plant Performance Dashboard",
+    "Sales Analysis", "Purchase Analysis", "Quality Analysis", "Production Analysis",
+    "Idle Time Report", "Efficiency Report", "Charts",
+]);
+
+const PageContent = memo(function PageContent({ activeSubItem, activeItem, onNavigate, userName, companyName, userRights, isSuperAdmin, allowedMenuItems, onOpenSpotlight, onSpotlightNavigate }) {
     const currentKey = getEffectivePageKey(activeItem, activeSubItem);
-    const [visitedKeys, setVisitedKeys] = useState(() => new Set([currentKey]));
+    // Ordered most-recent-last so eviction is LRU.
+    const [visitedKeys, setVisitedKeys] = useState(() => [currentKey]);
 
     useEffect(() => {
         setVisitedKeys(prev => {
-            if (prev.has(currentKey)) return prev;
-            const next = new Set(prev);
-            next.add(currentKey);
+            const next = prev.filter(k => k !== currentKey);
+            next.push(currentKey);
+            // Evict least-recently-used heavy modules beyond the cap (never the active one).
+            let heavy = next.filter(k => HEAVY_MODULE_KEYS.has(k) && k !== currentKey);
+            while (heavy.length > KEEPALIVE_MAX_HEAVY) {
+                const victim = heavy.shift();
+                next.splice(next.indexOf(victim), 1);
+            }
+            if (next.length === prev.length && next.every((k, i) => k === prev[i])) return prev;
             return next;
         });
     }, [currentKey]);
 
     return (
         <div className="dl-keepalive-viewport">
-            {Array.from(visitedKeys).map((key) => {
+            {visitedKeys.map((key) => {
                 const isActive = (key === currentKey);
                 const isPlant = (key === "Plant Performance Dashboard");
 
@@ -411,6 +452,7 @@ const PageContent = memo(function PageContent({ activeSubItem, activeItem, onNav
                         isSuperAdmin={isSuperAdmin}
                         allowedMenuItems={allowedMenuItems}
                         onOpenSpotlight={onOpenSpotlight}
+                        onSpotlightNavigate={onSpotlightNavigate}
                     />
                 );
             })}
@@ -504,20 +546,9 @@ function Clock() {
 
 /* ── Animated topbar heading ─────────────────────────────── */
 function TopbarHeading({ text }) {
-    const [displayed, setDisplayed] = useState(text);
-    const [phase, setPhase] = useState("idle");
-
-    useEffect(() => {
-        if (text === displayed) return;
-        setPhase("out");
-        const t1 = setTimeout(() => { setDisplayed(text); setPhase("in"); }, 200);
-        const t2 = setTimeout(() => setPhase("idle"), 420);
-        return () => { clearTimeout(t1); clearTimeout(t2); };
-    }, [text]);
-
     return (
-        <span className={`dl-topbar__heading dl-topbar__heading--${phase}`}>
-            {displayed}
+        <span className="dl-topbar__heading dl-topbar__heading--idle">
+            {text}
         </span>
     );
 }
@@ -538,13 +569,18 @@ const SidebarItem = memo(function SidebarItem({ item, isActive, isOpen, isExpand
         setHovered(true);
         if (item.key === "Settings" || item.key === "Spotlight") {
             import("./Settings");
-            if (item.key === "Spotlight") {
-                import("./SpotlightSettingsTab");
-            }
         }
     };
     const handleMouseLeave = () => { leaveTimer.current = setTimeout(() => setHovered(false), 90); };
     useEffect(() => () => clearTimeout(leaveTimer.current), []);
+
+    const handleSubHover = (sub) => {
+        if (sub === "Sales Analysis") import("./SalesAnalysis");
+        else if (sub === "Purchase Analysis") import("./PurchaseAnalysis");
+        else if (sub === "Quality Analysis") import("./QualityAnalysis");
+        else if (sub === "Production Analysis") import("./ProductionAnalysis");
+        else if (sub === "Users Setting") import("./UsersSetting");
+    };
 
     const handleSubSelect = (sub) => {
         clearTimeout(leaveTimer.current);
@@ -593,6 +629,7 @@ const SidebarItem = memo(function SidebarItem({ item, isActive, isOpen, isExpand
                             key={sub}
                             className={`dl-submenu__item ${activeSubItem === sub ? "dl-submenu__item--active" : ""}`}
                             style={{ "--si": si }}
+                            onMouseEnter={() => handleSubHover(sub)}
                             onClick={() => handleSubSelect(sub)}
                         >
                             <span className="dl-submenu__dot" />
@@ -612,6 +649,7 @@ const SidebarItem = memo(function SidebarItem({ item, isActive, isOpen, isExpand
                             key={sub}
                             className={`dl-flyout__item ${activeSubItem === sub ? "dl-flyout__item--active" : ""}`}
                             style={{ "--si": si }}
+                            onMouseEnter={() => handleSubHover(sub)}
                             onClick={() => handleSubSelect(sub)}
                         >
                             <Icons.ChevronRight /><span>{sub}</span>
@@ -769,7 +807,7 @@ export default function DashboardLayout() {
     let initMenu = savedNav?.openMenu ?? null;
 
     // Validate navigation against plan limits
-    if (initItem !== "Welcome" && initItem !== "Settings") {
+    if (initItem !== "Welcome" && initItem !== "Settings" && initItem !== "Spotlight") {
         const matchingItem = allowedMenuItems.find(m => m.key === initItem);
         if (!matchingItem) {
             initItem = "Welcome";
@@ -794,6 +832,10 @@ export default function DashboardLayout() {
     const [openMenu, setOpenMenu] = useState(initMenu);
     const [activeItem, setActiveItem] = useState(initItem);
     const [activeSubItem, setActiveSubItem] = useState(initSubItem);
+    const activeItemRef = useRef(activeItem);
+    activeItemRef.current = activeItem;
+    const activeSubItemRef = useRef(activeSubItem);
+    activeSubItemRef.current = activeSubItem;
     const [mounted, setMounted] = useState(false);
     const [settingsOpen, setSettingsOpen] = useState(() => {
         try { return sessionStorage.getItem("ba_settings_open") === "1"; }
@@ -951,6 +993,15 @@ export default function DashboardLayout() {
         preTourExpandedStateRef.current = expanded;
         preTourNavStateRef.current = { activeItem, activeSubItem, openMenu };
         setExpanded(true); // Always un-collapse sidebar for tour
+
+        // High-Speed Pre-warming: Preload all tour module bundles in parallel immediately
+        import("./SalesAnalysis");
+        import("./PurchaseAnalysis");
+        import("./QualityAnalysis");
+        import("./ProductionAnalysis");
+        import("./UsersSetting");
+        import("./SpotlightSettingsTab");
+
         const steps = getTourStepsForVersion(ver);
         const firstStep = steps[0];
         if (firstStep && firstStep.navItem) {
@@ -982,6 +1033,7 @@ export default function DashboardLayout() {
             }
         }
         if (step.navItem) {
+            // Instantaneous synchronous page switch for zero-lag tour alignment
             setActiveItem(step.navItem);
             setActiveSubItem(step.navSubItem || null);
             setOpenMenu(step.navItem);
@@ -1055,11 +1107,15 @@ export default function DashboardLayout() {
         return () => clearTimeout(t);
     }, []);
 
-    /* Background idle prefetch of Settings & Spotlight after dashboard stabilizes */
+    /* Background idle prefetch of core modules after dashboard stabilizes */
     useEffect(() => {
         const warmUp = () => {
             import("./Settings");
             import("./SpotlightSettingsTab");
+            import("./SalesAnalysis");
+            import("./PurchaseAnalysis");
+            import("./QualityAnalysis");
+            import("./ProductionAnalysis");
         };
         if ("requestIdleCallback" in window) {
             const id = window.requestIdleCallback(warmUp, { timeout: 2500 });
@@ -1136,7 +1192,7 @@ export default function DashboardLayout() {
 
     // Safety guard to auto-navigate away if the current active tab gets restricted (e.g. on plan downgrade)
     useEffect(() => {
-        if (activeItem !== "Welcome" && activeItem !== "Settings") {
+        if (activeItem !== "Welcome" && activeItem !== "Settings" && activeItem !== "Spotlight") {
             const matchingItem = allowedMenuItems.find(m => m.key === activeItem);
             if (!matchingItem) {
                 setActiveItem("Welcome");
@@ -1441,13 +1497,11 @@ export default function DashboardLayout() {
             if (!activeSpotlightTarget && !isTourActive && contentRef.current) {
                 contentRef.current.scrollTo({ top: 0, behavior: "instant" });
 
-                requestAnimationFrame(() => {
-                    if (contentRef.current) {
-                        contentRef.current.scrollTo({ top: 0, behavior: "instant" });
-                    }
-                    // Trigger resize event so Chart.js / canvas elements recalculate bounds smoothly
+                // Defer chart recalculation to avoid blocking the navigation animation frame
+                const resizeTimer = setTimeout(() => {
                     window.dispatchEvent(new Event("resize"));
-                });
+                }, 120);
+                return () => clearTimeout(resizeTimer);
             }
         }
     }, [activeSubItem, activeItem, activeSpotlightTarget, isTourActive]);
@@ -1483,10 +1537,10 @@ export default function DashboardLayout() {
     /* parent-level toggle */
     const handleToggle = useCallback((key) => {
         if (key === "Spotlight") {
-            import("./SpotlightSettingsTab");
-            setSettingsInitialTab("spotlight");
-            try { sessionStorage.setItem("ba_settings_tab", "spotlight"); } catch { }
-            setSettingsOpen(true);
+            setActiveItem("Spotlight");
+            setActiveSubItem(null);
+            setOpenMenu(null);
+            writeNav({ activeItem: "Spotlight", activeSubItem: null, openMenu: null });
             if (isMobile) setDrawerOpen(false);
             return;
         }
@@ -1508,21 +1562,22 @@ export default function DashboardLayout() {
             setOpenMenu(prevMenu => {
                 const nextMenu = prevMenu === key ? null : key;
                 setActiveItem(key);
+                const currentSub = activeSubItemRef.current;
                 setActiveSubItem(prevSub => (item.children && item.children.includes(prevSub)) ? prevSub : null);
                 writeNav({
                     activeItem: key,
-                    activeSubItem: (item.children && item.children.includes(activeSubItem)) ? activeSubItem : null,
+                    activeSubItem: (item.children && item.children.includes(currentSub)) ? currentSub : null,
                     openMenu: nextMenu
                 });
                 return nextMenu;
             });
         }
-    }, [isMobile, activeSubItem]);
+    }, [isMobile]);
 
     /* sub-item click */
     const handleSubClick = useCallback((sub) => {
         const parent = MENU_ITEMS.find(m => m.children?.includes(sub));
-        const parentKey = parent ? parent.key : activeItem;
+        const parentKey = parent ? parent.key : activeItemRef.current;
         if (parent) setActiveItem(parentKey);
         setActiveSubItem(sub);
         const isExp = expandedRef.current;
@@ -1532,7 +1587,7 @@ export default function DashboardLayout() {
             return nextMenu;
         });
         if (isMobile) setDrawerOpen(false);
-    }, [activeItem, isMobile]);
+    }, [isMobile]);
 
     const handleLogoClick = () => {
         setSettingsOpen(false);
@@ -1711,7 +1766,7 @@ export default function DashboardLayout() {
                         <SidebarItem
                             item={SPOTLIGHT_SIDEBAR_ITEM}
                             index={allowedMenuItems.length}
-                            isActive={settingsOpen && settingsInitialTab === "spotlight"}
+                            isActive={activeItem === "Spotlight" || (settingsOpen && settingsInitialTab === "spotlight")}
                             isOpen={false}
                             isExpanded={showExpanded}
                             isMobile={isMobile}
@@ -1851,6 +1906,7 @@ export default function DashboardLayout() {
                         isSuperAdmin={isSuperAdmin}
                         allowedMenuItems={allowedMenuItems}
                         onOpenSpotlight={handleOpenSpotlightModal}
+                        onSpotlightNavigate={handleSpotlightNavigate}
                     />
                 </main>
             </div>

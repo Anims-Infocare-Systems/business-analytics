@@ -1055,7 +1055,7 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false, onSta
                                         <div className="st-stats-list">
                                             <div className="st-stats-row">
                                                 <span>Software Version</span>
-                                                <strong>v2.4.0 (Stable)</strong>
+                                                <strong>v2.5.0 (Stable)</strong>
                                             </div>
                                             <div className="st-stats-row">
                                                 <span>Build Number</span>
@@ -1064,10 +1064,6 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false, onSta
                                             <div className="st-stats-row">
                                                 <span>Environment</span>
                                                 <strong>Production (Cloud)</strong>
-                                            </div>
-                                            <div className="st-stats-row">
-                                                <span>Platform</span>
-                                                <strong>React 18 & Vite</strong>
                                             </div>
                                         </div>
                                     </div>
@@ -1162,7 +1158,7 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false, onSta
                                 </button>
                                 <div className="st-upg-card__features">
                                     <div className="st-upg-card__feat-title">Includes:</div>
-                                    {["Access to dashboards", "Basic Reports", "6 months free from registration", "Upto 5 user access", "Standard support", "E-Approval & T-Approval workflows", "MIS Reports", "Email Notifications"].map(f => (
+                                    {["Access to dashboards", "Basic Reports", "6 months free from registration", "Upto 5 user access", "Standard support", "Approval workflows", "MIS Reports",].map(f => (
                                         <div key={f} className="st-upg-feat-row">
                                             <span className="st-upg-feat-icon"><Icons.Check /></span>
                                             <span>{f}</span>
@@ -1203,7 +1199,7 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false, onSta
                                 </button>
                                 <div className="st-upg-card__features">
                                     <div className="st-upg-card__feat-title">Everything in Free, plus:</div>
-                                    {["Top Management dashboards", "E-Approval & T-Approval workflows", "Standard support", "Email Notifications"].map(f => (
+                                    {["Top Management dashboards", "Approval workflows", "Charts", "Standard support"].map(f => (
                                         <div key={f} className="st-upg-feat-row">
                                             <span className="st-upg-feat-icon"><Icons.Check /></span>
                                             <span>{f}</span>
@@ -1246,7 +1242,7 @@ export default function Settings({ isOpen, onClose, isExpiredMode = false, onSta
                                 </button>
                                 <div className="st-upg-card__features">
                                     <div className="st-upg-card__feat-title">Everything in Pro, plus:</div>
-                                    {["Unlimited Dashboards", "Advanced Analytics Charts", "Full MIS & Reports", "E-Approval & T-Approval workflows", "Priority email support", "Email Notifications"].map(f => (
+                                    {["Unlimited Dashboards", "Advanced Analytics Charts", "Full MIS & Reports", "Approval workflows", "Priority email support"].map(f => (
                                         <div key={f} className="st-upg-feat-row">
                                             <span className="st-upg-feat-icon"><Icons.Check /></span>
                                             <span>{f}</span>

@@ -1,17 +1,24 @@
 /* ============================================================
-   TOUR PROMPT MODAL — FIRST TIME LOGIN WELCOME
-   Design: Modern Frosted Glassmorphism with Vibrant Gradient Mesh
+   TOUR PROMPT MODAL — VERSION WELCOME NOTE & WHAT'S NEW
+   Design: Modern SaaS Release Modal with Glassmorphism, 
+           Modular Filters, Rich Feature Cards, and Pinned Actions
+   Responsiveness: Fully adaptive for 4K, 1080p, Laptops (1366x768),
+                   Tablets (iPad), Mobile (iPhone/Galaxy), and Landscape
    ============================================================ */
 
 @keyframes tpm-fade-in {
-    from { opacity: 0; }
-    to { opacity: 1; }
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
 }
 
 @keyframes tpm-card-up {
     from {
         opacity: 0;
-        transform: translateY(32px) scale(0.96);
+        transform: translateY(24px) scale(0.97);
     }
     to {
         opacity: 1;
@@ -21,20 +28,37 @@
 
 @keyframes tpm-glow-pulse {
     0%, 100% {
-        opacity: 0.5;
+        opacity: 0.45;
         transform: scale(1) translate(0, 0);
     }
     50% {
-        opacity: 0.85;
+        opacity: 0.75;
         transform: scale(1.08) translate(-6px, 8px);
     }
 }
 
 @keyframes tpm-sparkle-float {
-    0%, 100% { transform: translateY(0) rotate(0deg); }
-    50% { transform: translateY(-6px) rotate(8deg); }
+    0%, 100% {
+        transform: translateY(0) rotate(0deg);
+    }
+    50% {
+        transform: translateY(-4px) rotate(8deg);
+    }
 }
 
+@keyframes tpm-pulse-dot {
+    0% {
+        box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.45);
+    }
+    70% {
+        box-shadow: 0 0 0 8px rgba(37, 99, 235, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(37, 99, 235, 0);
+    }
+}
+
+/* ── Overlay ────────────────────────────────────────────── */
 .tpm-overlay {
     position: fixed;
     inset: 0;
@@ -42,37 +66,48 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 20px;
-    background: rgba(10, 14, 28, 0.65);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    animation: tpm-fade-in 0.32s cubic-bezier(0.16, 1, 0.3, 1) both;
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    padding: clamp(10px, 2.5vw, 24px);
+    background: rgba(10, 15, 30, 0.72);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    animation: tpm-fade-in 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    box-sizing: border-box;
 }
 
+/* ── Modal Card (Rigid Max-Height & Viewport-Safe) ───────── */
 .tpm-card {
     position: relative;
     width: 100%;
-    max-width: 580px;
-    background: rgba(255, 255, 255, 0.98);
+    max-width: 860px;
+    height: 90vh;
+    height: 90dvh;
+    max-height: min(88vh, 700px);
+    max-height: min(88dvh, 700px);
+    display: flex;
+    flex-direction: column;
+    background: #ffffff;
     border-radius: 24px;
     box-shadow:
-        0 24px 64px rgba(10, 20, 50, 0.28),
-        0 4px 16px rgba(45, 109, 232, 0.12),
-        0 0 0 1px rgba(255, 255, 255, 0.8) inset;
+        0 25px 60px -15px rgba(15, 23, 42, 0.35),
+        0 0 0 1px rgba(226, 232, 240, 0.8),
+        0 0 80px -20px rgba(37, 99, 235, 0.18);
     overflow: hidden;
-    animation: tpm-card-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation: tpm-card-up 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
     color: #0f172a;
+    box-sizing: border-box;
 }
 
-/* Background Glow Effects */
+/* ── Ambient Glow Backdrops ─────────────────────────────── */
 .tpm-card__glow-1 {
     position: absolute;
-    top: -80px;
-    right: -80px;
-    width: 260px;
-    height: 260px;
-    background: radial-gradient(circle, rgba(45, 109, 232, 0.22) 0%, rgba(99, 102, 241, 0.08) 60%, transparent 80%);
+    top: -90px;
+    right: -90px;
+    width: 300px;
+    height: 300px;
+    background: radial-gradient(circle, rgba(37, 99, 235, 0.20) 0%, rgba(99, 102, 241, 0.08) 60%, transparent 80%);
     border-radius: 50%;
     pointer-events: none;
     animation: tpm-glow-pulse 6s ease-in-out infinite;
@@ -81,20 +116,20 @@
 .tpm-card__glow-2 {
     position: absolute;
     bottom: -100px;
-    left: -60px;
-    width: 240px;
-    height: 240px;
-    background: radial-gradient(circle, rgba(16, 185, 129, 0.15) 0%, rgba(6, 182, 212, 0.05) 60%, transparent 80%);
+    left: -70px;
+    width: 280px;
+    height: 280px;
+    background: radial-gradient(circle, rgba(16, 185, 129, 0.16) 0%, rgba(6, 182, 212, 0.06) 60%, transparent 80%);
     border-radius: 50%;
     pointer-events: none;
     animation: tpm-glow-pulse 8s ease-in-out infinite reverse;
 }
 
-/* Close button */
+/* ── Close Button ────────────────────────────────────────── */
 .tpm-close-btn {
     position: absolute;
-    top: 18px;
-    right: 18px;
+    top: 20px;
+    right: 20px;
     width: 34px;
     height: 34px;
     border-radius: 10px;
@@ -111,36 +146,39 @@
 
 .tpm-close-btn:hover {
     background: rgba(239, 68, 68, 0.1);
-    border-color: rgba(239, 68, 68, 0.2);
+    border-color: rgba(239, 68, 68, 0.25);
     color: #ef4444;
     transform: rotate(90deg);
 }
 
-/* Header & Banner */
+/* ── Pinned Header ───────────────────────────────────────── */
 .tpm-header {
     position: relative;
-    padding: 32px 32px 20px;
-    border-bottom: 1px solid rgba(45, 109, 232, 0.08);
-    background: linear-gradient(180deg, rgba(238, 242, 255, 0.6) 0%, rgba(255, 255, 255, 0) 100%);
+    flex-shrink: 0;
+    padding: 26px 32px 16px;
+    border-bottom: 1px solid rgba(226, 232, 240, 0.85);
+    background: linear-gradient(180deg, rgba(238, 242, 255, 0.55) 0%, rgba(255, 255, 255, 0.95) 100%);
+    box-sizing: border-box;
 }
 
 .tpm-badge-row {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 8px;
-    margin-bottom: 12px;
+    margin-bottom: 10px;
 }
 
 .tpm-version-chip {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    padding: 4px 12px;
+    padding: 4px 11px;
     border-radius: 20px;
-    background: linear-gradient(135deg, rgba(45, 109, 232, 0.12) 0%, rgba(99, 102, 241, 0.12) 100%);
-    border: 1px solid rgba(45, 109, 232, 0.25);
+    background: linear-gradient(135deg, rgba(37, 99, 235, 0.12) 0%, rgba(79, 70, 229, 0.12) 100%);
+    border: 1px solid rgba(37, 99, 235, 0.28);
     color: #1d4ed8;
-    font-size: 11.5px;
+    font-size: 11px;
     font-weight: 700;
     letter-spacing: 0.04em;
     text-transform: uppercase;
@@ -148,182 +186,957 @@
 
 .tpm-sparkle-icon {
     display: inline-flex;
-    animation: tpm-sparkle-float 3s ease-in-out infinite;
     color: #2563eb;
+    animation: tpm-sparkle-float 3s ease-in-out infinite;
+}
+
+.tpm-meta-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 3.5px 9px;
+    border-radius: 20px;
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    color: #64748b;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.tpm-stats-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 3.5px 9px;
+    border-radius: 20px;
+    background: rgba(16, 185, 129, 0.08);
+    border: 1px solid rgba(16, 185, 129, 0.22);
+    color: #047857;
+    font-size: 11px;
+    font-weight: 600;
 }
 
 .tpm-title {
     font-family: 'Outfit', 'Inter', sans-serif;
-    font-size: 24px;
+    font-size: 23px;
     font-weight: 800;
     line-height: 1.25;
     color: #0f172a;
-    margin: 0 0 8px;
+    margin: 0 0 6px;
     letter-spacing: -0.02em;
 }
 
 .tpm-title span {
     background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);
     -webkit-background-clip: text;
+    background-clip: text;
     -webkit-text-fill-color: transparent;
 }
 
 .tpm-desc {
-    font-size: 14px;
+    font-size: 13px;
     color: #475569;
-    line-height: 1.55;
-    margin: 0;
+    line-height: 1.5;
+    margin: 0 0 14px;
+    max-width: 720px;
 }
 
-/* Body: What's New List */
-.tpm-body {
-    padding: 24px 32px 20px;
+/* ── Filter Bar & Search ─────────────────────────────────── */
+.tpm-filter-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding-top: 2px;
 }
 
-.tpm-section-label {
-    font-size: 12px;
+.tpm-tabs {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    -webkit-overflow-scrolling: touch;
+    padding: 2px 0;
+}
+
+.tpm-tabs::-webkit-scrollbar {
+    display: none;
+}
+
+.tpm-tab-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 10px;
+    border-radius: 9px;
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    color: #475569;
+    font-family: inherit;
+    font-size: 11.5px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+    user-select: none;
+}
+
+.tpm-tab-btn:hover {
+    background: #e2e8f0;
+    color: #1e293b;
+    border-color: #cbd5e1;
+}
+
+.tpm-tab-btn--active {
+    background: linear-gradient(135deg, #2563eb 0%, #4338ca 100%);
+    color: #ffffff !important;
+    border-color: transparent;
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.28);
+}
+
+.tpm-tab-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 17px;
+    height: 17px;
+    padding: 0 4px;
+    border-radius: 10px;
+    font-size: 10px;
     font-weight: 700;
-    color: #64748b;
-    letter-spacing: 0.05em;
+    background: rgba(15, 23, 42, 0.08);
+    color: #475569;
+}
+
+.tpm-tab-btn--active .tpm-tab-count {
+    background: rgba(255, 255, 255, 0.25);
+    color: #ffffff;
+}
+
+.tpm-search-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+    min-width: 170px;
+    max-width: 220px;
+    flex-shrink: 0;
+}
+
+.tpm-search-icon {
+    position: absolute;
+    left: 10px;
+    color: #94a3b8;
+    pointer-events: none;
+}
+
+.tpm-search-input {
+    width: 100%;
+    padding: 5px 26px 5px 28px;
+    border-radius: 9px;
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    color: #0f172a;
+    font-family: inherit;
+    font-size: 11.5px;
+    outline: none;
+    transition: all 0.18s ease;
+    box-sizing: border-box;
+}
+
+.tpm-search-input:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.tpm-search-clear {
+    position: absolute;
+    right: 8px;
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px;
+}
+
+.tpm-search-clear:hover {
+    color: #ef4444;
+}
+
+/* ── Scrollable Body & Highlights Grid ───────────────────── */
+.tpm-body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 18px 32px 22px;
+    scroll-behavior: smooth;
+    box-sizing: border-box;
+}
+
+.tpm-body::-webkit-scrollbar {
+    width: 6px;
+}
+
+.tpm-body::-webkit-scrollbar-track {
+    background: rgba(241, 245, 249, 0.8);
+    border-radius: 4px;
+}
+
+.tpm-body::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+}
+
+.tpm-body::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
+
+.tpm-highlights-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+    gap: 12px;
+}
+
+/* ── Feature Cards ───────────────────────────────────────── */
+.tpm-feature-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px 14px;
+    background: #f8fafc;
+    border: 1px solid rgba(226, 232, 240, 0.85);
+    border-radius: 14px;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    position: relative;
+    box-sizing: border-box;
+}
+
+.tpm-feature-card:hover {
+    background: #ffffff;
+    border-color: rgba(37, 99, 235, 0.3);
+    box-shadow: 0 6px 18px -4px rgba(37, 99, 235, 0.08), 0 2px 6px -2px rgba(15, 23, 42, 0.04);
+    transform: translateY(-2px);
+}
+
+.tpm-feature-icon-box {
+    width: 32px;
+    height: 32px;
+    border-radius: 9px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-top: 1px;
+    transition: transform 0.2s ease;
+}
+
+.tpm-feature-card:hover .tpm-feature-icon-box {
+    transform: scale(1.08);
+}
+
+/* Module Themes */
+.tpm-icon--sales {
+    background: linear-gradient(135deg, rgba(37, 99, 235, 0.15) 0%, rgba(59, 130, 246, 0.1) 100%);
+    color: #2563eb;
+}
+
+.tpm-tag--sales {
+    background: rgba(37, 99, 235, 0.08);
+    color: #1d4ed8;
+    border: 1px solid rgba(37, 99, 235, 0.2);
+}
+
+.tpm-icon--purchase {
+    background: linear-gradient(135deg, rgba(5, 150, 105, 0.15) 0%, rgba(16, 185, 129, 0.1) 100%);
+    color: #059669;
+}
+
+.tpm-tag--purchase {
+    background: rgba(5, 150, 105, 0.08);
+    color: #047857;
+    border: 1px solid rgba(5, 150, 105, 0.2);
+}
+
+.tpm-icon--quality {
+    background: linear-gradient(135deg, rgba(217, 119, 6, 0.15) 0%, rgba(245, 158, 11, 0.1) 100%);
+    color: #d97706;
+}
+
+.tpm-tag--quality {
+    background: rgba(217, 119, 6, 0.08);
+    color: #b45309;
+    border: 1px solid rgba(217, 119, 6, 0.2);
+}
+
+.tpm-icon--production {
+    background: linear-gradient(135deg, rgba(124, 58, 237, 0.15) 0%, rgba(139, 92, 246, 0.1) 100%);
+    color: #7c3aed;
+}
+
+.tpm-tag--production {
+    background: rgba(124, 58, 237, 0.08);
+    color: #6d28d9;
+    border: 1px solid rgba(124, 58, 237, 0.2);
+}
+
+.tpm-icon--platform {
+    background: linear-gradient(135deg, rgba(2, 132, 199, 0.15) 0%, rgba(6, 182, 212, 0.1) 100%);
+    color: #0284c7;
+}
+
+.tpm-tag--platform {
+    background: rgba(2, 132, 199, 0.08);
+    color: #0369a1;
+    border: 1px solid rgba(2, 132, 199, 0.2);
+}
+
+.tpm-feature-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.tpm-feature-meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-bottom: 3px;
+}
+
+.tpm-module-tag {
+    font-size: 10px;
+    font-weight: 700;
     text-transform: uppercase;
-    margin-bottom: 14px;
+    letter-spacing: 0.04em;
+    padding: 2px 6px;
+    border-radius: 5px;
+}
+
+.tpm-category-tag {
+    font-size: 10px;
+    font-weight: 600;
+    color: #64748b;
+    background: rgba(148, 163, 184, 0.12);
+    padding: 2px 6px;
+    border-radius: 5px;
+}
+
+.tpm-badge-tag {
+    font-size: 9.5px;
+    font-weight: 600;
+    color: #059669;
+    background: rgba(16, 185, 129, 0.08);
+    border: 1px solid rgba(16, 185, 129, 0.2);
+    padding: 1.5px 5px;
+    border-radius: 5px;
+}
+
+.tpm-feature-title {
+    font-family: 'Outfit', 'Inter', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    color: #0f172a;
+    margin: 0 0 3px;
+    line-height: 1.35;
+}
+
+.tpm-feature-desc {
+    font-size: 11.5px;
+    color: #64748b;
+    line-height: 1.45;
+    margin: 0;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+/* ── Empty State ─────────────────────────────────────────── */
+.tpm-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 36px 16px;
+    text-align: center;
+    color: #64748b;
+}
+
+.tpm-empty-icon {
+    color: #94a3b8;
+    margin-bottom: 10px;
+}
+
+.tpm-empty h4 {
+    font-size: 15px;
+    font-weight: 700;
+    color: #1e293b;
+    margin: 0 0 6px;
+}
+
+.tpm-empty p {
+    font-size: 12.5px;
+    margin: 0 0 14px;
+}
+
+/* ── Pinned Footer Actions ───────────────────────────────── */
+.tpm-footer {
+    position: relative;
+    flex-shrink: 0;
+    padding: 15px 32px 16px;
+    background: rgba(248, 250, 252, 0.98);
+    border-top: 1px solid rgba(226, 232, 240, 0.9);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    box-sizing: border-box;
+}
+
+.tpm-footer__info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.tpm-tour-indicator {
     display: flex;
     align-items: center;
     gap: 6px;
 }
 
-.tpm-highlights-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
+.tpm-tour-pulse {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #2563eb;
+    animation: tpm-pulse-dot 2s infinite;
 }
 
-.tpm-highlight-item {
-    display: flex;
-    align-items: flex-start;
-    gap: 10px;
-    padding: 12px 14px;
-    background: #f8fafc;
-    border: 1px solid rgba(226, 232, 240, 0.8);
-    border-radius: 14px;
-    transition: all 0.22s ease;
+.tpm-tour-time {
+    font-size: 12px;
+    font-weight: 700;
+    color: #1e293b;
 }
 
-.tpm-highlight-item:hover {
-    background: #ffffff;
-    border-color: rgba(45, 109, 232, 0.25);
-    box-shadow: 0 4px 14px rgba(45, 109, 232, 0.08);
-    transform: translateY(-2px);
+.tpm-footer-hint {
+    font-size: 11px;
+    color: #64748b;
 }
 
-.tpm-highlight-icon {
-    width: 26px;
-    height: 26px;
-    border-radius: 8px;
-    background: linear-gradient(135deg, rgba(45, 109, 232, 0.14) 0%, rgba(99, 102, 241, 0.14) 100%);
+.tpm-footer-hint strong {
     color: #2563eb;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    font-size: 13px;
-}
-
-.tpm-highlight-text {
-    font-size: 12.5px;
-    font-weight: 500;
-    color: #334155;
-    line-height: 1.4;
-}
-
-/* Footer / Actions */
-.tpm-footer {
-    padding: 20px 32px 28px;
-    background: #f8fafc;
-    border-top: 1px solid rgba(226, 232, 240, 0.8);
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
+    font-weight: 600;
 }
 
 .tpm-actions {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
 }
 
 .tpm-btn-primary {
-    flex: 1.4;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 8px;
-    padding: 12px 20px;
-    border-radius: 14px;
+    padding: 10px 18px;
+    border-radius: 12px;
     border: none;
-    background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%);
+    background: linear-gradient(135deg, #2563eb 0%, #4338ca 100%);
     color: #ffffff;
-    font-family: inherit;
-    font-size: 14px;
-    font-weight: 600;
-    cursor: pointer;
-    box-shadow: 0 6px 20px rgba(37, 99, 235, 0.32);
-    transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.tpm-btn-primary:hover {
-    background: linear-gradient(135deg, #1d4ed8 0%, #4338ca 100%);
-    box-shadow: 0 8px 24px rgba(37, 99, 235, 0.42);
-    transform: translateY(-2px);
-}
-
-.tpm-btn-secondary {
-    flex: 1;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    padding: 12px 18px;
-    border-radius: 14px;
-    border: 1px solid #cbd5e1;
-    background: #ffffff;
-    color: #475569;
     font-family: inherit;
     font-size: 13.5px;
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.2s ease;
+    box-shadow: 0 4px 14px rgba(37, 99, 235, 0.32);
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    white-space: nowrap;
+}
+
+.tpm-btn-primary:hover {
+    background: linear-gradient(135deg, #1d4ed8 0%, #3730a3 100%);
+    box-shadow: 0 6px 20px rgba(37, 99, 235, 0.44);
+    transform: translateY(-1.5px);
+}
+
+.tpm-kbd-hint {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1px 5px;
+    border-radius: 5px;
+    background: rgba(255, 255, 255, 0.2);
+    font-size: 10px;
+    font-weight: 700;
+    margin-left: 2px;
+}
+
+.tpm-btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 16px;
+    border-radius: 12px;
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    color: #475569;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.18s ease;
+    white-space: nowrap;
 }
 
 .tpm-btn-secondary:hover {
     background: #f1f5f9;
     border-color: #94a3b8;
-    color: #1e293b;
+    color: #0f172a;
 }
 
-.tpm-tip-hint {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
+.tpm-btn-secondary--sm {
+    padding: 6px 14px;
     font-size: 12px;
-    color: #64748b;
-    text-align: center;
+    border-radius: 8px;
 }
 
-.tpm-tip-hint strong {
-    color: #2563eb;
-    font-weight: 600;
-}
+/* ============================================================
+   RESPONSIVE RESOLUTION BREAKPOINTS
+   ============================================================ */
 
-@media (max-width: 600px) {
+/* ── Tier 1: Laptops & Compact Desktops (900px – 1199px) ── */
+@media (max-width: 1199px) {
     .tpm-card {
-        max-width: 100%;
+        max-width: 800px;
+        max-height: min(90vh, 670px);
+        max-height: min(90dvh, 670px);
+    }
+
+    .tpm-header {
+        padding: 22px 28px 14px;
+    }
+
+    .tpm-body {
+        padding: 16px 28px 20px;
+    }
+
+    .tpm-footer {
+        padding: 14px 28px;
+    }
+}
+
+/* ── Tier 2: Tablets & Medium Screens (641px – 899px) ───── */
+@media (max-width: 899px) {
+    .tpm-card {
+        width: 100%;
+        max-width: 720px;
+        height: 92vh;
+        height: 92dvh;
+        max-height: 92dvh;
         border-radius: 20px;
     }
-    .tpm-header { padding: 24px 20px 16px; }
-    .tpm-body { padding: 18px 20px; }
-    .tpm-footer { padding: 16px 20px 22px; }
-    .tpm-highlights-grid { grid-template-columns: 1fr; }
-    .tpm-actions { flex-direction: column; }
-    .tpm-btn-primary, .tpm-btn-secondary { width: 100%; }
+
+    .tpm-header {
+        padding: 20px 22px 14px;
+    }
+
+    .tpm-title {
+        font-size: 21px;
+    }
+
+    .tpm-desc {
+        font-size: 12.5px;
+        margin-bottom: 12px;
+    }
+
+    .tpm-filter-bar {
+        gap: 8px;
+    }
+
+    .tpm-search-wrap {
+        min-width: 150px;
+        max-width: 180px;
+    }
+
+    .tpm-body {
+        padding: 14px 22px 18px;
+    }
+
+    .tpm-footer {
+        padding: 14px 22px;
+    }
+}
+
+/* ── Tier 3: Tablets (Portrait) & Phablets (481px – 640px) ─ */
+@media (max-width: 640px) {
+    .tpm-overlay {
+        padding: 10px;
+    }
+
+    .tpm-card {
+        height: 95vh;
+        height: 95dvh;
+        max-height: 95dvh;
+        border-radius: 18px;
+    }
+
+    .tpm-header {
+        padding: 18px 18px 12px;
+    }
+
+    .tpm-close-btn {
+        top: 14px;
+        right: 14px;
+        width: 32px;
+        height: 32px;
+    }
+
+    .tpm-badge-row {
+        gap: 5px;
+        margin-bottom: 8px;
+    }
+
+    .tpm-version-chip,
+    .tpm-meta-pill,
+    .tpm-stats-pill {
+        font-size: 10px;
+        padding: 3px 7px;
+    }
+
+    .tpm-title {
+        font-size: 19px;
+        margin-bottom: 4px;
+    }
+
+    .tpm-desc {
+        font-size: 12px;
+        line-height: 1.45;
+        margin-bottom: 10px;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+
+    .tpm-filter-bar {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+    }
+
+    .tpm-tabs {
+        width: 100%;
+        overflow-x: auto;
+        padding-bottom: 4px;
+        -webkit-overflow-scrolling: touch;
+        scroll-snap-type: x proximity;
+    }
+
+    .tpm-tab-btn {
+        scroll-snap-align: start;
+        padding: 5px 9px;
+        font-size: 11px;
+        flex-shrink: 0;
+    }
+
+    .tpm-search-wrap {
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+    }
+
+    .tpm-search-input {
+        padding: 6px 28px 6px 30px;
+        font-size: 12px;
+    }
+
+    .tpm-body {
+        padding: 12px 18px 16px;
+    }
+
+    .tpm-highlights-grid {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+
+    .tpm-footer {
+        padding: 12px 18px 14px;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+    }
+
+    .tpm-footer__info {
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .tpm-actions {
+        width: 100%;
+        display: flex;
+        gap: 8px;
+    }
+
+    .tpm-btn-primary,
+    .tpm-btn-secondary {
+        flex: 1;
+        padding: 10px 14px;
+        font-size: 13px;
+    }
+
+    .tpm-kbd-hint {
+        display: none;
+    }
+}
+
+/* ── Tier 4: Small Mobile Phones (<= 480px) ───────────────── */
+@media (max-width: 480px) {
+    .tpm-overlay {
+        padding: 8px;
+    }
+
+    .tpm-card {
+        height: 96vh;
+        height: 96dvh;
+        max-height: 96dvh;
+        border-radius: 16px;
+    }
+
+    .tpm-header {
+        padding: 14px 14px 10px;
+    }
+
+    .tpm-close-btn {
+        top: 12px;
+        right: 12px;
+        width: 30px;
+        height: 30px;
+    }
+
+    .tpm-title {
+        font-size: 17.5px;
+        margin-bottom: 3px;
+    }
+
+    .tpm-desc {
+        font-size: 11.5px;
+        margin-bottom: 8px;
+    }
+
+    .tpm-body {
+        padding: 10px 14px 14px;
+    }
+
+    .tpm-feature-card {
+        padding: 10px 12px;
+        gap: 10px;
+        border-radius: 12px;
+    }
+
+    .tpm-feature-icon-box {
+        width: 28px;
+        height: 28px;
+        border-radius: 8px;
+    }
+
+    .tpm-feature-title {
+        font-size: 12.5px;
+    }
+
+    .tpm-feature-desc {
+        font-size: 11px;
+    }
+
+    .tpm-footer {
+        padding: 10px 14px 12px;
+        gap: 8px;
+    }
+
+    .tpm-footer__info {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 2px;
+    }
+
+    .tpm-tour-time {
+        font-size: 11px;
+    }
+
+    .tpm-footer-hint {
+        font-size: 10.5px;
+    }
+
+    .tpm-actions {
+        flex-direction: column-reverse;
+        gap: 6px;
+    }
+
+    .tpm-btn-primary,
+    .tpm-btn-secondary {
+        width: 100%;
+        padding: 10px;
+        font-size: 12.5px;
+    }
+}
+
+/* ── Tier 5: Plant Laptops & Low Viewport Heights (<= 720px) ─ */
+@media (max-height: 720px) {
+    .tpm-card {
+        height: 94vh;
+        height: 94dvh;
+        max-height: 94dvh;
+    }
+
+    .tpm-header {
+        padding: 16px 24px 10px;
+    }
+
+    .tpm-title {
+        font-size: 20px;
+        margin-bottom: 3px;
+    }
+
+    .tpm-desc {
+        font-size: 12px;
+        margin-bottom: 8px;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+
+    .tpm-filter-bar {
+        padding-top: 0;
+    }
+
+    .tpm-body {
+        padding: 10px 24px 14px;
+    }
+
+    .tpm-footer {
+        padding: 11px 24px;
+    }
+}
+
+/* ── Tier 6: Ultra-Short Screens & Landscape Mobile (<= 560px) ─ */
+@media (max-height: 560px) {
+    .tpm-overlay {
+        padding: 6px;
+    }
+
+    .tpm-card {
+        height: 98vh;
+        height: 98dvh;
+        max-height: 98dvh;
+        border-radius: 14px;
+    }
+
+    .tpm-header {
+        padding: 10px 18px 8px;
+    }
+
+    .tpm-close-btn {
+        top: 8px;
+        right: 12px;
+        width: 28px;
+        height: 28px;
+    }
+
+    .tpm-badge-row {
+        margin-bottom: 4px;
+        gap: 4px;
+    }
+
+    .tpm-version-chip,
+    .tpm-meta-pill,
+    .tpm-stats-pill {
+        font-size: 9.5px;
+        padding: 2px 6px;
+    }
+
+    .tpm-title {
+        font-size: 16px;
+        margin-bottom: 2px;
+    }
+
+    /* Hide long subtitle on ultra-short screens to maximize usable scroll area */
+    .tpm-desc {
+        display: none;
+    }
+
+    .tpm-filter-bar {
+        margin-top: 2px;
+        gap: 6px;
+    }
+
+    .tpm-tab-btn {
+        padding: 4px 8px;
+        font-size: 10.5px;
+    }
+
+    .tpm-search-wrap {
+        max-width: 160px;
+    }
+
+    .tpm-search-input {
+        padding: 4px 22px 4px 26px;
+        font-size: 11px;
+    }
+
+    .tpm-body {
+        padding: 8px 18px 10px;
+    }
+
+    .tpm-highlights-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 8px;
+    }
+
+    .tpm-feature-card {
+        padding: 8px 10px;
+        gap: 8px;
+    }
+
+    .tpm-feature-icon-box {
+        width: 26px;
+        height: 26px;
+        border-radius: 7px;
+    }
+
+    .tpm-feature-title {
+        font-size: 12px;
+        margin-bottom: 2px;
+    }
+
+    .tpm-feature-desc {
+        font-size: 10.5px;
+    }
+
+    .tpm-footer {
+        padding: 8px 18px 8px;
+    }
+
+    .tpm-footer__info {
+        flex-direction: row;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .tpm-footer-hint {
+        display: none;
+    }
+
+    .tpm-btn-primary,
+    .tpm-btn-secondary {
+        padding: 6px 12px;
+        font-size: 12px;
+    }
 }

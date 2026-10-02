@@ -103,13 +103,35 @@ function Pp1SearchableMultiSelect({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const isAllSelected = !value || value === allLabel || value === "";
+  const isAllSelected = !value || value === allLabel || value === "" || (Array.isArray(value) && value.length === 0);
 
-  const selectedList = isAllSelected ? [] : (Array.isArray(value) ? value : String(value).split(",").map(v => v.trim()).filter(Boolean));
+  const selectedList = useMemo(() => {
+    if (isAllSelected) return [];
+    if (Array.isArray(value)) return value.filter(Boolean);
+    const strVal = String(value).trim();
+    if (!strVal) return [];
+    if (options && options.includes(strVal)) return [strVal];
+    if (options && Array.isArray(options) && options.length > 0) {
+      const sorted = [...options].sort((a, b) => b.length - a.length);
+      let rem = strVal;
+      const matched = [];
+      for (const opt of sorted) {
+        if (!opt) continue;
+        const esc = opt.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const re = new RegExp(`(^|[,|;]\\s*)${esc}(\\s*([,|;]|$))`, 'i');
+        if (re.test(rem)) {
+          matched.push(opt);
+          rem = rem.replace(re, '$1$3').trim();
+        }
+      }
+      if (matched.length > 0) return matched;
+    }
+    return strVal.split(",").map(v => v.trim()).filter(Boolean);
+  }, [value, isAllSelected, options, allLabel]);
 
   const toggleOption = (opt) => {
     if (opt === allLabel) {
-      onChange("");
+      onChange(Array.isArray(value) ? [] : "");
       return;
     }
 
@@ -122,7 +144,9 @@ function Pp1SearchableMultiSelect({
     }
 
     if (nextList.length === 0) {
-      onChange("");
+      onChange(Array.isArray(value) ? [] : "");
+    } else if (Array.isArray(value) || nextList.some(item => String(item).includes(","))) {
+      onChange(nextList);
     } else {
       onChange(nextList.join(", "));
     }
@@ -1140,7 +1164,15 @@ function buildStateSidebar(card, data, loading) {
     rejection_qty: { value: fmtNum(kpis.rejection_qty), unit: "Qty", sub: "All inspection types", trend: -1 },
     rework_qty: { value: fmtNum(kpis.rework_grand_total), unit: "Qty", sub: "Rework total", trend: 0 },
     oee_efficiency: { value: (kpis.oa_efficiency ?? 0).toFixed(2), unit: "%", sub: "Target 80%", trend: (kpis.oa_efficiency ?? 0) >= 80 ? 1 : -1 },
-    machine_efficiency: { value: (kpis.oa_efficiency ?? 0).toFixed(2), unit: "%", sub: "Overall avg", trend: (kpis.oa_efficiency ?? 0) >= 80 ? 1 : -1 },
+    machine_efficiency: {
+      value: (data.operatorEfficiencyCompare?.kpis?.avgEfficiency != null
+        ? Number(data.operatorEfficiencyCompare.kpis.avgEfficiency)
+        : (kpis.oa_efficiency ?? 0)
+      ).toFixed(2),
+      unit: "%",
+      sub: "Target 85%",
+      trend: (data.operatorEfficiencyCompare?.kpis?.avgEfficiency ?? kpis.oa_efficiency ?? 0) >= 85 ? 1 : -1
+    },
     idle_summary: { value: fmtHours(idle.total_idle_hours), unit: "", sub: `Non-acc ${fmtHours(idle.non_accepted_hours)}`, trend: 0 },
     production_data: { value: shifts.length ? `${shifts.length}` : "—", unit: "shifts", sub: "By shift", trend: 0 },
     otd_trend: { value: otd.on_time_delivery_pct != null ? fmtPct(otd.on_time_delivery_pct) : "—", unit: "", sub: `${data.otd?.trend?.length ?? 0} months`, trend: 0 },
@@ -3738,25 +3770,34 @@ const CHART1_BASE = [
   { customer: "Customer D", month: "Jun-26", date: "2026-06-15", orderValue: 15.0, salesValue: 8.0, pendingValue: 7.0, poNumber: "PO-D03", partNumber: "PART-403" }
 ];
 
+function parseSelectedCustomers(custFilter, allCustomersList = []) {
+  if (!custFilter || custFilter === "All Customers") return [];
+  if (Array.isArray(custFilter)) return custFilter.filter(Boolean);
+  const str = String(custFilter).trim();
+  if (!str) return [];
+  if (allCustomersList && allCustomersList.length > 0) {
+    if (allCustomersList.includes(str)) return [str];
+    const sorted = [...allCustomersList].sort((a, b) => b.length - a.length);
+    let rem = str;
+    const found = [];
+    for (const c of sorted) {
+      if (!c) continue;
+      const esc = c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const re = new RegExp(`(^|[,|;]\\s*)${esc}(\\s*([,|;]|$))`, 'i');
+      if (re.test(rem)) {
+        found.push(c);
+        rem = rem.replace(re, '$1$3').trim();
+      }
+    }
+    if (found.length > 0) return found;
+  }
+  return str.split(",").map(c => c.trim()).filter(Boolean);
+}
+
 const CustomerPoCompareView = React.memo(function CustomerPoCompareView({ data, loading, uid, filters, onFilterChange, activeSlide, onActiveSlideChange, onClose, targetConfig, showTargetOnly, setShowTargetOnly }) {
   const [chartType, setChartType] = React.useState("line");
   const [chartTypeOpen, setChartTypeOpen] = React.useState(false);
   const chartTypeRef = React.useRef(null);
-
-  const allParts = React.useMemo(() => {
-    let source = (data?.customerPoCompare?.rows && Array.isArray(data.customerPoCompare.rows))
-      ? data.customerPoCompare.rows
-      : [];
-    if (filters.customer) {
-      const selectedCusts = filters.customer.split(",").map(c => c.trim()).filter(Boolean);
-      if (selectedCusts.length > 0) {
-        const filtered = source.filter(r => selectedCusts.includes(r.customer));
-        if (filtered.length > 0) source = filtered;
-      }
-    }
-    const parts = source.map(r => r.partNumber).filter(Boolean);
-    return Array.from(new Set(parts)).sort();
-  }, [data?.customerPoCompare?.rows, filters.customer]);
 
   const allCustomers = React.useMemo(() => {
     const source = (data?.customerPoCompare?.rows && Array.isArray(data.customerPoCompare.rows))
@@ -3765,6 +3806,23 @@ const CustomerPoCompareView = React.memo(function CustomerPoCompareView({ data, 
     const names = source.map(r => r.customer).filter(Boolean);
     return Array.from(new Set(names)).sort();
   }, [data?.customerPoCompare?.rows]);
+
+  const allParts = React.useMemo(() => {
+    let source = (data?.customerPoCompare?.rows && Array.isArray(data.customerPoCompare.rows))
+      ? data.customerPoCompare.rows
+      : [];
+    if (filters.customer && (!Array.isArray(filters.customer) || filters.customer.length > 0)) {
+      const selectedCusts = Array.isArray(filters.customer)
+        ? filters.customer
+        : parseSelectedCustomers(filters.customer, allCustomers);
+      if (selectedCusts.length > 0) {
+        const filtered = source.filter(r => selectedCusts.includes(r.customer));
+        if (filtered.length > 0) source = filtered;
+      }
+    }
+    const parts = source.map(r => r.partNumber).filter(Boolean);
+    return Array.from(new Set(parts)).sort();
+  }, [data?.customerPoCompare?.rows, filters.customer, allCustomers]);
 
   const allPoTypes = React.useMemo(() => {
     const source = (data?.customerPoCompare?.rows && Array.isArray(data.customerPoCompare.rows))
@@ -3829,8 +3887,10 @@ const CustomerPoCompareView = React.memo(function CustomerPoCompareView({ data, 
     const activeTo = filters.toDate || defaultTo;
 
     list = list.filter(r => r.date >= activeFrom && r.date <= activeTo);
-    if (filters.customer) {
-      const selectedCusts = filters.customer.split(",").map(c => c.trim()).filter(Boolean);
+    if (filters.customer && (!Array.isArray(filters.customer) || filters.customer.length > 0)) {
+      const selectedCusts = Array.isArray(filters.customer)
+        ? filters.customer
+        : parseSelectedCustomers(filters.customer, allCustomers);
       if (selectedCusts.length > 0) {
         list = list.filter(r => selectedCusts.includes(r.customer));
       }
@@ -4552,8 +4612,10 @@ function CustomerPoCompareBottomTable({ data, loading, uid, filters, showTargetO
     const activeTo = filters.toDate || defaultTo;
 
     list = list.filter(r => r.date >= activeFrom && r.date <= activeTo);
-    if (filters.customer) {
-      const selectedCusts = filters.customer.split(",").map(c => c.trim()).filter(Boolean);
+    if (filters.customer && (!Array.isArray(filters.customer) || filters.customer.length > 0)) {
+      const selectedCusts = Array.isArray(filters.customer)
+        ? filters.customer
+        : parseSelectedCustomers(filters.customer, (data?.customerPoCompare?.rows || []).map(r => r.customer));
       if (selectedCusts.length > 0) {
         list = list.filter(r => selectedCusts.includes(r.customer));
       }
@@ -8360,6 +8422,8 @@ function SalesAnalysisReportBottomTable({ data, loading, filters }) {
   const [activeTab, setActiveTab] = React.useState("turnover");
   const [sortField, setSortField] = React.useState("date"); // Default sorting by Date
   const [sortDirection, setSortDirection] = React.useState("asc");
+  const [turnoverSortCol, setTurnoverSortCol] = React.useState(0); // 0 = Customer Name
+  const [turnoverSortDir, setTurnoverSortDir] = React.useState("asc");
   const [selectedCustomers, setSelectedCustomers] = React.useState("");
   const [selectedInvoices, setSelectedInvoices] = React.useState("");
 
@@ -8433,6 +8497,15 @@ function SalesAnalysisReportBottomTable({ data, loading, filters }) {
 
   const columnsTurnover = ["Customer Name", ...uniqueMonths.map((m) => `${m} (Lakhs)`), "Total Value (Lakhs)"];
 
+  const handleTurnoverSort = (colIdx) => {
+    if (turnoverSortCol === colIdx) {
+      setTurnoverSortDir((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setTurnoverSortCol(colIdx);
+      setTurnoverSortDir(colIdx === 0 ? "asc" : "desc");
+    }
+  };
+
   const rowsTurnover = React.useMemo(() => {
     const custGroups = {};
     filteredRows.forEach((r) => {
@@ -8447,14 +8520,32 @@ function SalesAnalysisReportBottomTable({ data, loading, filters }) {
       }
     });
 
-    return Object.values(custGroups)
-      .map((group) => {
-        const row = [group.customer];
-        uniqueMonths.forEach((m) => row.push(group[m] || 0));
-        return row;
-      })
-      .sort((a, b) => a[0].localeCompare(b[0]));
-  }, [filteredRows, uniqueMonths]);
+    const rows = Object.values(custGroups).map((group) => {
+      const row = [group.customer];
+      uniqueMonths.forEach((m) => row.push(group[m] || 0));
+      return row;
+    });
+
+    const totalColIdx = uniqueMonths.length + 1;
+
+    return rows.sort((a, b) => {
+      if (turnoverSortCol === 0) {
+        const valA = (a[0] || "").toLowerCase();
+        const valB = (b[0] || "").toLowerCase();
+        if (valA < valB) return turnoverSortDir === "asc" ? -1 : 1;
+        if (valA > valB) return turnoverSortDir === "asc" ? 1 : -1;
+        return 0;
+      } else if (turnoverSortCol === totalColIdx) {
+        const valA = a.slice(1).reduce((s, v) => s + Number(v || 0), 0);
+        const valB = b.slice(1).reduce((s, v) => s + Number(v || 0), 0);
+        return turnoverSortDir === "asc" ? valA - valB : valB - valA;
+      } else {
+        const valA = Number(a[turnoverSortCol] || 0);
+        const valB = Number(b[turnoverSortCol] || 0);
+        return turnoverSortDir === "asc" ? valA - valB : valB - valA;
+      }
+    });
+  }, [filteredRows, uniqueMonths, turnoverSortCol, turnoverSortDir]);
 
   const sortedInvoiceRows = React.useMemo(() => {
     let rawRows = filteredRows.map((r) => ({
@@ -8607,9 +8698,39 @@ function SalesAnalysisReportBottomTable({ data, loading, filters }) {
           <table className="pp1-cc-tbl" style={{ minWidth: "100%" }}>
             <thead>
               <tr>
-                {columnsTurnover.map((col, idx) => (
-                  <th key={idx} style={{ textAlign: idx > 0 ? "right" : "left", position: "sticky", top: 0, zIndex: 3 }}>{col}</th>
-                ))}
+                {columnsTurnover.map((col, idx) => {
+                  const isActive = turnoverSortCol === idx;
+                  const isRight = idx > 0;
+                  return (
+                    <th
+                      key={idx}
+                      onClick={() => handleTurnoverSort(idx)}
+                      style={{
+                        textAlign: isRight ? "right" : "left",
+                        position: "sticky",
+                        top: 0,
+                        zIndex: 3,
+                        cursor: "pointer",
+                        userSelect: "none",
+                        transition: "all 0.15s ease"
+                      }}
+                      className="pp1-tbl-th-sortable"
+                    >
+                      <div
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "5px",
+                          justifyContent: isRight ? "flex-end" : "flex-start",
+                          width: "100%"
+                        }}
+                      >
+                        <span>{col}</span>
+                        <SortIcon active={isActive} direction={turnoverSortDir} />
+                      </div>
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody>
@@ -9865,10 +9986,23 @@ const formatLossValue = (val) => {
   return `₹${val.toLocaleString()}`;
 };
 
-function IdleHoursReportDashboardView({ filters, onFilterChange, activeTab, onActiveTabChange, onClose, targetConfig, onIdleData }) {
+function IdleHoursReportDashboardView({ data, loading, filters, onFilterChange, activeTab, onActiveTabChange, onClose, targetConfig, uid, initialData, onIdleData, defaultFrom, defaultTo }) {
   const [chartType, setChartType] = React.useState("bar");
   const [chartTypeOpen, setChartTypeOpen] = React.useState(false);
-  const [liveLogs, setLiveLogs] = React.useState([]);
+  const [liveLogs, setLiveLogs] = React.useState(() => {
+    if (Array.isArray(initialData?.rows) && initialData.rows.length > 0) {
+      return initialData.rows.map(row => ({
+        date: row.entry_date ? row.entry_date.slice(0, 10) : "",
+        machine: row.mac_no || "",
+        operator: row.operator || "",
+        reason: row.reason || "",
+        shift: row.shift || "",
+        duration: Number(row.total_idle_hours_decimal) || 0,
+        ratePerHour: Number(row.rate_per_hour) || 500,
+      }));
+    }
+    return [];
+  });
   const [isLoading, setIsLoading] = React.useState(false);
   const [filterOptions, setFilterOptions] = React.useState({ machines: [], reasons: [] });
   const chartTypeRef = React.useRef(null);
@@ -9887,14 +10021,29 @@ function IdleHoursReportDashboardView({ filters, onFilterChange, activeTab, onAc
     };
   }, []);
 
+  React.useEffect(() => {
+    if (liveLogs.length === 0 && Array.isArray(initialData?.rows) && initialData.rows.length > 0) {
+      const mapped = initialData.rows.map(row => ({
+        date: row.entry_date ? row.entry_date.slice(0, 10) : "",
+        machine: row.mac_no || "",
+        operator: row.operator || "",
+        reason: row.reason || "",
+        shift: row.shift || "",
+        duration: Number(row.total_idle_hours_decimal) || 0,
+        ratePerHour: Number(row.rate_per_hour) || 500,
+      }));
+      setLiveLogs(mapped);
+    }
+  }, [initialData]);
+
   const handleInputChange = (field, val) => {
     onFilterChange(prev => ({ ...prev, [field]: val }));
   };
 
   const handleReset = () => {
     onFilterChange({
-      fromDate: "",
-      toDate: "",
+      fromDate: defaultFrom || "",
+      toDate: defaultTo || "",
       machine: "",
       operator: "",
       idleReason: "",
@@ -9903,15 +10052,17 @@ function IdleHoursReportDashboardView({ filters, onFilterChange, activeTab, onAc
   };
 
   const pickerFrom = React.useMemo(() => {
-    if (filters.fromDate) return new Date(filters.fromDate);
+    const raw = filters.fromDate || defaultFrom;
+    if (raw) return new Date(raw);
     const today = new Date();
     return new Date(today.getFullYear(), today.getMonth(), 1);
-  }, [filters.fromDate]);
+  }, [filters.fromDate, defaultFrom]);
 
   const pickerTo = React.useMemo(() => {
-    if (filters.toDate) return new Date(filters.toDate);
+    const raw = filters.toDate || defaultTo;
+    if (raw) return new Date(raw);
     return new Date();
-  }, [filters.toDate]);
+  }, [filters.toDate, defaultTo]);
 
   const handlePickerChange = React.useCallback(({ from, to }) => {
     const formatLocalDate = (d) => {
@@ -9929,22 +10080,26 @@ function IdleHoursReportDashboardView({ filters, onFilterChange, activeTab, onAc
   }, [onFilterChange]);
 
   const activeFromStr = React.useMemo(() => {
+    if (filters?.fromDate) return filters.fromDate;
+    if (defaultFrom) return defaultFrom;
     const d = pickerFrom;
     if (!d) return "";
     const year = d.getFullYear();
     const month = String(d.getMonth() + 1).padStart(2, "0");
     const day = String(d.getDate()).padStart(2, "0");
     return `${year}-${month}-${day}`;
-  }, [pickerFrom]);
+  }, [filters?.fromDate, defaultFrom, pickerFrom]);
 
   const activeToStr = React.useMemo(() => {
+    if (filters?.toDate) return filters.toDate;
+    if (defaultTo) return defaultTo;
     const d = pickerTo;
     if (!d) return "";
     const year = d.getFullYear();
     const month = String(d.getMonth() + 1).padStart(2, "0");
     const day = String(d.getDate()).padStart(2, "0");
     return `${year}-${month}-${day}`;
-  }, [pickerTo]);
+  }, [filters?.toDate, defaultTo, pickerTo]);
 
   React.useEffect(() => {
     if (!activeFromStr || !activeToStr) return;
@@ -9960,45 +10115,41 @@ function IdleHoursReportDashboardView({ filters, onFilterChange, activeTab, onAc
       credentials: "include",
       signal: ctrl.signal
     })
-      .then(res => res.json())
-      .then(json => {
-        if (json) {
-          onIdleData?.(json);
-          if (json.filter_options) {
-            setFilterOptions({
-              machines: Array.isArray(json.filter_options.machines) ? json.filter_options.machines : [],
-              reasons: Array.isArray(json.filter_options.reasons) ? json.filter_options.reasons : [],
-              operators: Array.isArray(json.filter_options.operators) ? json.filter_options.operators : [],
-            });
-          }
-          if (Array.isArray(json.rows)) {
-            const mapped = json.rows.map(row => ({
-              date: row.entry_date ? row.entry_date.slice(0, 10) : "",
-              machine: row.mac_no || "",
-              operator: row.operator || "",
-              reason: row.reason || "",
-              shift: row.shift || "",
-              duration: Number(row.total_idle_hours_decimal) || 0,
-              ratePerHour: Number(row.rate_per_hour) || 500,
-            }));
-            setLiveLogs(mapped);
-          } else {
-            setLiveLogs([]);
-          }
+      .then(res => res.json().then(json => ({ ok: res.ok, json })))
+      .then(({ ok, json }) => {
+        if (!ok || !json) throw new Error("Idle Report fetch failed");
+        onIdleData?.(json);
+        if (json.filter_options) {
+          setFilterOptions({
+            machines: Array.isArray(json.filter_options.machines) ? json.filter_options.machines : [],
+            reasons: Array.isArray(json.filter_options.reasons) ? json.filter_options.reasons : [],
+            operators: Array.isArray(json.filter_options.operators) ? json.filter_options.operators : [],
+          });
+        }
+        if (Array.isArray(json.rows)) {
+          const mapped = json.rows.map(row => ({
+            date: row.entry_date ? row.entry_date.slice(0, 10) : "",
+            machine: row.mac_no || "",
+            operator: row.operator || "",
+            reason: row.reason || "",
+            shift: row.shift || "",
+            duration: Number(row.total_idle_hours_decimal) || 0,
+            ratePerHour: Number(row.rate_per_hour) || 500,
+          }));
+          setLiveLogs(mapped);
         } else {
-          onIdleData?.(null);
           setLiveLogs([]);
         }
       })
-      .catch(() => {
-        onIdleData?.(null);
+      .catch((e) => {
+        if (e.name === "AbortError") return;
         setLiveLogs([]);
       })
       .finally(() => {
         setIsLoading(false);
       });
     return () => ctrl.abort();
-  }, [activeFromStr, activeToStr, filters.machine, filters.idleReason]);
+  }, [uid, activeFromStr, activeToStr, filters.machine, filters.idleReason]);
 
   const filteredLogs = React.useMemo(() => {
     let list = liveLogs;
@@ -10023,7 +10174,18 @@ function IdleHoursReportDashboardView({ filters, onFilterChange, activeTab, onAc
     return list;
   }, [liveLogs, filters.operator, filters.machine, filters.idleReason]);
 
+  const busy = loading || isLoading;
+
   const kpis = React.useMemo(() => {
+    if (busy && filteredLogs.length === 0) {
+      return [
+        { label: "Total Idle Hours", value: "…", icon: Timer, color: "#ef4444" },
+        { label: "Total Loss Value", value: "…", icon: IndianRupee, color: "#ea580c" },
+        { label: "Highest Loss Machine", value: "…", icon: Settings, color: "#3b82f6" },
+        { label: "Highest Loss Reason", value: "…", icon: AlertTriangle, color: "#f59e0b" }
+      ];
+    }
+
     const totalIdleHours = filteredLogs.reduce((sum, r) => sum + r.duration, 0);
     const totalLossValue = filteredLogs.reduce((sum, r) => sum + (r.duration * r.ratePerHour), 0);
 
@@ -10055,15 +10217,13 @@ function IdleHoursReportDashboardView({ filters, onFilterChange, activeTab, onAc
     });
     const highestLossReason = maxReasonLoss > 0 ? `${maxReason}\n₹${(maxReasonLoss / 100000).toFixed(3)} L` : "—";
 
-
-
     return [
       { label: "Total Idle Hours", value: fmtHours(totalIdleHours), icon: Timer, color: "#ef4444" },
       { label: "Total Loss Value", value: `₹${(totalLossValue / 100000).toFixed(3)} L`, icon: IndianRupee, color: "#ea580c" },
       { label: "Highest Loss Machine", value: highestLossMachine, icon: Settings, color: "#3b82f6" },
       { label: "Highest Loss Reason", value: highestLossReason, icon: AlertTriangle, color: "#f59e0b" }
     ];
-  }, [filteredLogs, filters.fromDate, filters.operator, filters.machine, filters.idleReason]);
+  }, [busy, filteredLogs, filters.fromDate, filters.operator, filters.machine, filters.idleReason]);
 
   const [xAxisGroup, setXAxisGroup] = React.useState("Month Wise");
 
@@ -10408,7 +10568,12 @@ function IdleHoursReportDashboardView({ filters, onFilterChange, activeTab, onAc
         </div>
       </div>
       <div className="pp1-dt-chart-wrap pp1-center-chart__wrap" style={{ height: 220, display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
-        {chart1Data.labels.length === 0 ? (
+        {busy && filteredLogs.length === 0 ? (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: "8px", color: "var(--pp1-text-muted, #94a3b8)" }}>
+            <div className="pp1-spinner" style={{ width: 28, height: 28, border: "3px solid rgba(239, 68, 68, 0.15)", borderTopColor: "#ef4444", borderRadius: "50%", animation: "pp1-spin 0.8s linear infinite" }} />
+            <span style={{ fontSize: "12px", fontWeight: 500 }}>Loading Idle Hours...</span>
+          </div>
+        ) : chart1Data.labels.length === 0 ? (
           <Pp1NoDataOverlay />
         ) : (
           <ChartJsCanvas setup={setupChart1} height={220} rebuildToken={`c1-${chartType}-${xAxisGroup}-${JSON.stringify(chart1Data)}`} />
@@ -10427,7 +10592,7 @@ function IdleHoursReportDashboardView({ filters, onFilterChange, activeTab, onAc
       chartControls={carouselControls}
       rangeHint=""
       onClose={onClose}
-      noData={chart1Data.labels.length === 0}
+      noData={!busy && chart1Data.labels.length === 0}
     >
       <div className="pp1-filters-bar" style={{ marginBottom: "6px" }}>
         {/* Date Range Picker */}
@@ -10552,25 +10717,86 @@ function IdleHoursReportDashboardView({ filters, onFilterChange, activeTab, onAc
   );
 }
 
-function IdleHoursReportBottomTable({ filters }) {
+function IdleHoursReportBottomTable({ filters, defaultFrom, defaultTo, initialRows }) {
   const [sortIndex, setSortIndex] = React.useState(null);
   const [sortDirection, setSortDirection] = React.useState("asc");
   const [hoveredHeader, setHoveredHeader] = React.useState(null);
-  const [liveLogs, setLiveLogs] = React.useState([]);
+  const [liveLogs, setLiveLogs] = React.useState(() => {
+    if (Array.isArray(initialRows) && initialRows.length > 0) {
+      const aggMap = {};
+      initialRows.forEach(row => {
+        const date = (row.entry_date || row.date || "").slice(0, 10);
+        const machine = (row.mac_no || row.machine || "").trim();
+        if (!date || !machine) return;
+        const key = `${date}||${machine}`;
+        if (!aggMap[key]) {
+          aggMap[key] = {
+            date,
+            machine,
+            idleHours: 0,
+            ratePerHour: Number(row.rate_per_hour || 0),
+          };
+        }
+        aggMap[key].idleHours += Number(row.total_idle_hours_decimal || 0);
+        if (Number(row.rate_per_hour || 0) > aggMap[key].ratePerHour) {
+          aggMap[key].ratePerHour = Number(row.rate_per_hour || 0);
+        }
+      });
+      return Object.values(aggMap).sort((a, b) => {
+        if (a.date < b.date) return -1;
+        if (a.date > b.date) return 1;
+        return a.machine.localeCompare(b.machine);
+      });
+    }
+    return [];
+  });
   const [isLoading, setIsLoading] = React.useState(false);
+
+  React.useEffect(() => {
+    if (liveLogs.length === 0 && Array.isArray(initialRows) && initialRows.length > 0) {
+      const aggMap = {};
+      initialRows.forEach(row => {
+        const date = (row.entry_date || row.date || "").slice(0, 10);
+        const machine = (row.mac_no || row.machine || "").trim();
+        if (!date || !machine) return;
+        const key = `${date}||${machine}`;
+        if (!aggMap[key]) {
+          aggMap[key] = {
+            date,
+            machine,
+            idleHours: 0,
+            ratePerHour: Number(row.rate_per_hour || 0),
+          };
+        }
+        aggMap[key].idleHours += Number(row.total_idle_hours_decimal || 0);
+        if (Number(row.rate_per_hour || 0) > aggMap[key].ratePerHour) {
+          aggMap[key].ratePerHour = Number(row.rate_per_hour || 0);
+        }
+      });
+      setLiveLogs(
+        Object.values(aggMap).sort((a, b) => {
+          if (a.date < b.date) return -1;
+          if (a.date > b.date) return 1;
+          return a.machine.localeCompare(b.machine);
+        })
+      );
+    }
+  }, [initialRows]);
 
   // Compute active date range from filters
   const activeFromStr = React.useMemo(() => {
     if (filters?.fromDate) return filters.fromDate;
+    if (defaultFrom) return defaultFrom;
     const today = new Date();
     return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-01`;
-  }, [filters?.fromDate]);
+  }, [filters?.fromDate, defaultFrom]);
 
   const activeToStr = React.useMemo(() => {
     if (filters?.toDate) return filters.toDate;
+    if (defaultTo) return defaultTo;
     const today = new Date();
     return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-  }, [filters?.toDate]);
+  }, [filters?.toDate, defaultTo]);
 
   // Fetch real data from /api/idle-time-report/
   React.useEffect(() => {
@@ -10622,7 +10848,10 @@ function IdleHoursReportBottomTable({ filters }) {
           setLiveLogs([]);
         }
       })
-      .catch(() => setLiveLogs([]))
+      .catch((e) => {
+        if (e.name === "AbortError") return;
+        setLiveLogs([]);
+      })
       .finally(() => setIsLoading(false));
     return () => ctrl.abort();
   }, [activeFromStr, activeToStr, filters?.machine, filters?.idleReason]);
@@ -16011,13 +16240,52 @@ function StoreStockValueReportDashboardView({ data, filters, onFilterChange, onC
     }
   }, [filters.category, groupItemCodes]);
 
-  const chartLabels = React.useMemo(() => {
-    return Array.isArray(stockSource?.chart?.labels) ? stockSource.chart.labels : [];
-  }, [stockSource?.chart?.labels]);
+  const { chartLabels, chartValues } = React.useMemo(() => {
+    const rawLabels = Array.isArray(stockSource?.chart?.labels) ? stockSource.chart.labels : [];
+    const rawValues = Array.isArray(stockSource?.chart?.values) ? stockSource.chart.values : [];
+    if (!filters?.fromDate || !filters?.toDate || rawLabels.length === 0) {
+      return { chartLabels: rawLabels, chartValues: rawValues };
+    }
 
-  const chartValues = React.useMemo(() => {
-    return Array.isArray(stockSource?.chart?.values) ? stockSource.chart.values : [];
-  }, [stockSource?.chart?.values]);
+    const start = new Date(`${filters.fromDate}T00:00:00`);
+    const end = new Date(`${filters.toDate}T23:59:59`);
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      return { chartLabels: rawLabels, chartValues: rawValues };
+    }
+
+    const startKey = start.getFullYear() * 12 + start.getMonth();
+    const endKey = end.getFullYear() * 12 + end.getMonth();
+
+    const MONTH_MAP = {
+      jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
+      jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11
+    };
+
+    const labels = [];
+    const values = [];
+
+    rawLabels.forEach((lbl, idx) => {
+      const parts = String(lbl).trim().split(/[- /]+/);
+      if (parts.length >= 2) {
+        const mStr = parts[0].toLowerCase();
+        let yNum = parseInt(parts[1], 10);
+        if (yNum < 100) yNum += 2000;
+        const mNum = MONTH_MAP[mStr];
+        if (mNum !== undefined && !isNaN(yNum)) {
+          const itemKey = yNum * 12 + mNum;
+          if (itemKey >= startKey && itemKey <= endKey) {
+            labels.push(lbl);
+            values.push(rawValues[idx] ?? 0);
+          }
+          return;
+        }
+      }
+      labels.push(lbl);
+      values.push(rawValues[idx] ?? 0);
+    });
+
+    return { chartLabels: labels, chartValues: values };
+  }, [stockSource?.chart?.labels, stockSource?.chart?.values, filters?.fromDate, filters?.toDate]);
 
   const totalValLakhs = stockSource?.kpi?.totalStockValueLakhs ?? 0;
   const kpis = React.useMemo(() => [
@@ -16177,6 +16445,7 @@ function StoreStockValueReportDashboardView({ data, filters, onFilterChange, onC
             borderWidth: isBar || isCombo ? 1.5 : 2.5,
             borderRadius: isBar || isCombo ? 4 : 0,
             tension: isBar || isCombo ? 0 : 0.3,
+            maxBarThickness: 75,
             pointBackgroundColor: "#059669",
             pointRadius: getPointRadius(),
             fill: getFill(),
@@ -16250,7 +16519,7 @@ function StoreStockValueReportDashboardView({ data, filters, onFilterChange, onC
     });
   }, [chartLabels, chartValues, targetConfig, chartType]);
 
-  const rebuildToken = `store-stock-chart|${targetConfig?.store_stock_value?.maxStockValueL ?? 50.0}|${JSON.stringify(chartValues)}|${JSON.stringify(chartLabels)}|${chartType}`;
+  const rebuildToken = `store-stock-chart|${targetConfig?.store_stock_value?.maxStockValueL ?? 50.0}|${JSON.stringify(chartValues)}|${JSON.stringify(chartLabels)}|${chartType}|${filters?.fromDate}|${filters?.toDate}`;
 
   return (
     <PremiumDashboardView
@@ -19809,9 +20078,9 @@ function buildOpEffChartSeries(filteredRows, filters, defaultFrom, defaultTo) {
       }),
       data: dayDates.map((d) => {
         const dayRows = filteredRows.filter((r) => (r.date || "").slice(0, 10) === d);
-        if (!dayRows.length) return 0;
+        if (!dayRows.length) return null;
         const sum = dayRows.reduce((acc, r) => acc + Number(r.operatorPct || 0), 0);
-        return Number((sum / dayRows.length).toFixed(1));
+        return Number((sum / dayRows.length).toFixed(2));
       }),
     };
   }
@@ -19820,9 +20089,9 @@ function buildOpEffChartSeries(filteredRows, filters, defaultFrom, defaultTo) {
     labels: monthLabels,
     data: monthLabels.map((mo) => {
       const moRows = filteredRows.filter((r) => r.month === mo);
-      if (!moRows.length) return 0;
+      if (!moRows.length) return null;
       const sum = moRows.reduce((acc, r) => acc + Number(r.operatorPct || 0), 0);
-      return Number((sum / moRows.length).toFixed(1));
+      return Number((sum / moRows.length).toFixed(2));
     }),
   };
 }
@@ -19952,10 +20221,15 @@ function OperatorEfficiencyDashboardView({ data, loading, filters, onFilterChang
   const totalRejections = React.useMemo(() => filteredData.reduce((acc, r) => acc + Number(r.rejectionQty || 0) + Number(r.reworkQty || 0), 0), [filteredData]);
 
   const avgEfficiency = React.useMemo(() => {
-    if (filteredData.length === 0) return 0;
+    if (filteredData.length === 0) {
+      if (opEffSource?.kpis?.avgEfficiency != null && !filters?.operator && !filters?.effLimit) {
+        return Number(opEffSource.kpis.avgEfficiency).toFixed(2);
+      }
+      return "0.00";
+    }
     const sum = filteredData.reduce((acc, r) => acc + Number(r.operatorPct || 0), 0);
-    return (sum / filteredData.length).toFixed(1);
-  }, [filteredData]);
+    return (sum / filteredData.length).toFixed(2);
+  }, [filteredData, opEffSource?.kpis?.avgEfficiency, filters?.operator, filters?.effLimit]);
 
   const chartSeries = React.useMemo(
     () => buildOpEffChartSeries(filteredData, filters, defaultRange.from, defaultRange.to),
@@ -19967,7 +20241,7 @@ function OperatorEfficiencyDashboardView({ data, loading, filters, onFilterChang
 
   const setupChart = React.useCallback(
     (canvas) => {
-      const targetVal = targetConfig?.operator_efficiency?.minEfficiencyPct ?? 90.0;
+      const targetVal = targetConfig?.operator_efficiency?.minEfficiencyPct ?? 85.0;
       const datasets = [
         {
           label: getOperatorLabel(),
@@ -19978,6 +20252,7 @@ function OperatorEfficiencyDashboardView({ data, loading, filters, onFilterChang
           borderColor: "#8b5cf6",
           borderWidth: (chartType === "line" || chartType === "combo") ? 2.5 : 1,
           tension: 0.3,
+          spanGaps: true,
           fill: chartType === "area" || chartType === "radar" || chartType === "stepped",
           stepped: chartType === "stepped" ? "middle" : false,
           pointRadius: (chartType === "bar" || chartType === "polarArea") ? 0 : 3,
@@ -20036,7 +20311,7 @@ function OperatorEfficiencyDashboardView({ data, loading, filters, onFilterChang
     { label: "Avg Efficiency", value: (loading || opEffLoading) && !filteredData.length ? "…" : `${avgEfficiency}%`, icon: Users, color: "#8b5cf6" }
   ];
 
-  const rebuildToken = `operator-efficiency-chart|${chartType}|${targetConfig?.operator_efficiency?.minEfficiencyPct ?? 90.0}|${JSON.stringify(monthwiseData)}|${JSON.stringify(monthLabels)}|${filters.operator}|${filters.effLimit}|${filters.fromDate}|${filters.toDate}|${filteredData.length}|${opEffLoading}`;
+  const rebuildToken = `operator-efficiency-chart|${chartType}|${targetConfig?.operator_efficiency?.minEfficiencyPct ?? 85.0}|${JSON.stringify(monthwiseData)}|${JSON.stringify(monthLabels)}|${filters.operator}|${filters.effLimit}|${filters.fromDate}|${filters.toDate}|${filteredData.length}|${opEffLoading}`;
 
   return (
     <PremiumDashboardView
@@ -20269,10 +20544,10 @@ function OperatorEfficiencyBottomTable({ data, filters, targetConfig }) {
       String(idx + 1),
       formatOpEffDisplayDate(g.date),
       g.operator,
-      `${(g.oaEffCount ? g.oaEffSum / g.oaEffCount : 0).toFixed(1)}%`,
-      `${(g.operatorPctCount ? g.operatorPctSum / g.operatorPctCount : 0).toFixed(1)}%`,
-      `${(g.qfEffCount ? g.qfEffSum / g.qfEffCount : 0).toFixed(1)}%`,
-      `${(g.idleCount ? g.idleSum / g.idleCount : 0).toFixed(1)}%`,
+      `${(g.oaEffCount ? g.oaEffSum / g.oaEffCount : 0).toFixed(2)}%`,
+      `${(g.operatorPctCount ? g.operatorPctSum / g.operatorPctCount : 0).toFixed(2)}%`,
+      `${(g.qfEffCount ? g.qfEffSum / g.qfEffCount : 0).toFixed(2)}%`,
+      `${(g.idleCount ? g.idleSum / g.idleCount : 0).toFixed(2)}%`,
       `# ${idx + 1}`
     ]);
   }, [opEffRows, filters, defaultRange]);
@@ -22437,7 +22712,7 @@ export default function PlantPerformance1() {
         minFulfillmentPct: 90.0
       },
       operator_efficiency: {
-        minEfficiencyPct: 90.0
+        minEfficiencyPct: 85.0
       },
       purchase_value: {
         minPurchaseValueL: 100
@@ -22702,10 +22977,24 @@ export default function PlantPerformance1() {
       setTargetVsActualPanelData(null);
 
       const errEntries = Object.entries(allErrors);
-      if (!hasAnyData && errEntries.some(([, msg]) => String(msg).includes("Session expired"))) {
-        setFetchError("Session expired — please log in again.");
-      } else if (errEntries.length) {
+      const isAuthErr = errEntries.some(([, msg]) =>
+        String(msg).includes("Logged in from another device") ||
+        String(msg).includes("Session expired") ||
+        String(msg).includes("login again")
+      );
+      if (isAuthErr && !hasAnyData) {
+        setFetchError("Session expired or active on another device — please log in again.");
+      } else if (errEntries.length && !hasAnyData) {
         setFetchError(`Some panels failed: ${errEntries.slice(0, 2).map(([k, m]) => `${k}: ${m}`).join("; ")}`);
+      } else if (errEntries.length) {
+        const nonAuthErrors = errEntries.filter(([, msg]) =>
+          !String(msg).includes("Logged in from another device") &&
+          !String(msg).includes("Session expired") &&
+          !String(msg).includes("login again")
+        );
+        if (nonAuthErrors.length) {
+          setFetchError(`Some panels failed: ${nonAuthErrors.slice(0, 2).map(([k, m]) => `${k}: ${m}`).join("; ")}`);
+        }
       }
     } catch (e) {
       if (e.name === "AbortError") return;
@@ -22845,8 +23134,10 @@ export default function PlantPerformance1() {
       poCompareRows.forEach(r => {
         if (fromStr && r.date < fromStr) return;
         if (toStr && r.date > toStr) return;
-        if (poFilters.customer) {
-          const selectedCusts = poFilters.customer.split(",").map(c => c.trim()).filter(Boolean);
+        if (poFilters.customer && (!Array.isArray(poFilters.customer) || poFilters.customer.length > 0)) {
+          const selectedCusts = Array.isArray(poFilters.customer)
+            ? poFilters.customer
+            : parseSelectedCustomers(poFilters.customer, (poCompareRows || []).map(row => row.customer));
           if (selectedCusts.length > 0 && !selectedCusts.includes(r.customer)) return;
         }
         if (poFilters.poNumber && (!r.poNumber || !String(r.poNumber).toLowerCase().includes(poFilters.poNumber.toLowerCase()))) return;
@@ -22967,7 +23258,7 @@ export default function PlantPerformance1() {
     const idleSummary = data?.idle?.summary ?? {};
     const totalIdle = (idlePanelData && Array.isArray(idlePanelData.rows))
       ? idleRows.reduce((sum, r) => sum + (Number(r.total_idle_hours_decimal) || 0), 0)
-      : Number(idleSummary.total_idle_hours ?? 0);
+      : Number(idleSummary.total_idle_hours_decimal ?? idleSummary.total_idle_hours ?? 0);
     const maxIdle = targetConfig.idle_hours?.maxIdleHours ?? 15;
     const idleOk = totalIdle > 0 ? totalIdle <= maxIdle : true;
     const idleDiff = maxIdle > 0 ? (((maxIdle - totalIdle) / maxIdle) * 100).toFixed(1) : "0.0";
@@ -23359,7 +23650,7 @@ export default function PlantPerformance1() {
     const opEffTrendTo = operatorEfficiencyFilters.toDate || (dateRange.to
       ? `${dateRange.to.getFullYear()}-${String(dateRange.to.getMonth() + 1).padStart(2, "0")}-${String(dateRange.to.getDate()).padStart(2, "0")}`
       : defaultTo);
-    const oeLimit = targetConfig.operator_efficiency?.minEfficiencyPct ?? 90.0;
+    const oeLimit = targetConfig.operator_efficiency?.minEfficiencyPct ?? 85.0;
     if (opEffRowsForTrend.length || opEffSource?.kpis) {
       let oeVal = null;
       const trendFiltered = filterOpEffRows(
@@ -23369,9 +23660,9 @@ export default function PlantPerformance1() {
         opEffTrendTo
       );
       if (trendFiltered.length) {
-        oeVal = Math.round(trendFiltered.reduce((acc, r) => acc + Number(r.operatorPct || 0), 0) / trendFiltered.length);
+        oeVal = Number((trendFiltered.reduce((acc, r) => acc + Number(r.operatorPct || 0), 0) / trendFiltered.length).toFixed(2));
       } else if (opEffSource?.kpis?.avgEfficiency != null && !operatorEfficiencyFilters.operator && !operatorEfficiencyFilters.effLimit) {
-        oeVal = Math.round(Number(opEffSource.kpis.avgEfficiency));
+        oeVal = Number(Number(opEffSource.kpis.avgEfficiency).toFixed(2));
       }
       if (oeVal != null) {
         const oeOk = oeVal >= oeLimit;
@@ -23583,7 +23874,7 @@ export default function PlantPerformance1() {
         return `Min: ${val}%`;
       }
       case "operator_efficiency_report_dashboard": {
-        const val = targetConfig.operator_efficiency?.minEfficiencyPct ?? 90.0;
+        const val = targetConfig.operator_efficiency?.minEfficiencyPct ?? 85.0;
         return `Min: ${val}%`;
       }
       case "machine_efficiency_report_dashboard": {
@@ -24500,7 +24791,7 @@ export default function PlantPerformance1() {
                             <div className="pp1-target-input-container">
                               <input
                                 type="number" step="0.5" min="0" max="100"
-                                value={tempConfig.operator_efficiency?.minEfficiencyPct ?? 90.0}
+                                value={tempConfig.operator_efficiency?.minEfficiencyPct ?? 85.0}
                                 onChange={(e) => handleNestedTempConfigChange("operator_efficiency", "minEfficiencyPct", e.target.value === "" ? "" : (parseFloat(e.target.value) || 0))}
                                 className="pp1-target-input"
                               />
@@ -24774,7 +25065,7 @@ export default function PlantPerformance1() {
                       </div>
                     ) : selectionId === "idle_hours_report_dashboard" ? (
                       <div data-spotlight="ppd-downtime-reasons" data-spotlight-alt="ppd-idle-summary" style={{ width: "100%" }}>
-                        <IdleHoursReportDashboardView filters={idleFilters} onFilterChange={setIdleFilters} activeTab={idleActiveTab} onActiveTabChange={setIdleActiveTab} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); setIdlePanelData(null); }} targetConfig={targetConfig} onIdleData={setIdlePanelData} />
+                        <IdleHoursReportDashboardView data={data} loading={loading} filters={idleFilters} onFilterChange={setIdleFilters} activeTab={idleActiveTab} onActiveTabChange={setIdleActiveTab} onClose={() => { setSelAction(null); setCenterKey((k) => k + 1); }} targetConfig={targetConfig} uid={centerKey} initialData={idlePanelData} onIdleData={setIdlePanelData} defaultFrom={defaultFrom} defaultTo={defaultTo} />
                       </div>
                     ) : selectionId === "idle_hours_non_accepted_reason_production_loss_report" ? (
                       <div data-spotlight="ppd-downtime-reasons" style={{ width: "100%" }}>
@@ -25164,7 +25455,7 @@ export default function PlantPerformance1() {
             ) : selectionId === "production_analysis_report_dashboard" ? (
               <ProductionAnalysisReportBottomTable data={{ productionValueCompare: prodValuePanelData ?? { machineRows: [], detailRows: [], rows: [] } }} filters={prodFilters} xAxisGroup={prodXAxisGroup} defaultFrom={defaultFrom} defaultTo={defaultTo} />
             ) : selectionId === "idle_hours_report_dashboard" ? (
-              <IdleHoursReportBottomTable filters={idleFilters} activeTab={idleActiveTab} setActiveTab={setIdleActiveTab} />
+              <IdleHoursReportBottomTable filters={idleFilters} activeTab={idleActiveTab} setActiveTab={setIdleActiveTab} defaultFrom={defaultFrom} defaultTo={defaultTo} initialRows={idlePanelData?.rows} />
             ) : selectionId === "idle_hours_non_accepted_reason_production_loss_report" ? (
               <IdleHoursNonAcceptedReasonLossReportBottomTable filters={nonAccFilters} />
             ) : selectionId === "oee_comparison_report_dashboard" ? (

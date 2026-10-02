@@ -218,7 +218,7 @@ export default function SpotlightSettingsTab({ onSelectSection, onOpenSpotlight 
             </div>
 
             {/* ── Luminous Tour Hero Banner ── */}
-            <div className="sst-hero-banner">
+            <div className="sst-hero-banner" data-spotlight="spotlight-navigator-hero">
                 <div className="sst-hero-banner__mesh" />
                 <div className="sst-hero-banner__mesh sst-hero-banner__mesh--alt" />
                 <div className="sst-hero-banner__grid-pattern" />

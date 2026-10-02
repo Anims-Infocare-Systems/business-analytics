@@ -24,35 +24,14 @@ from .views import (
     dashboard2_parse_date_range_default_month,
 )
 
-# In-memory schema cache to prevent 260+ redundant INFORMATION_SCHEMA round-trips per request
-_PA_TABLE_EXISTS_CACHE = {}
-_PA_COL_CI_CACHE = {}
-_PA_FIRST_COL_CACHE = {}
-_PA_RESOLVE_ERP_CACHE = {}
-
-def table_exists(cursor, table_name):
-    key = str(table_name).strip().lower()
-    if key not in _PA_TABLE_EXISTS_CACHE:
-        _PA_TABLE_EXISTS_CACHE[key] = _raw_table_exists(cursor, table_name)
-    return _PA_TABLE_EXISTS_CACHE[key]
-
-def find_column_ci(cursor, table_schema, table_name, candidates):
-    key = (str(table_schema).strip().lower(), str(table_name).strip().lower(), tuple(str(c).strip().lower() for c in candidates))
-    if key not in _PA_COL_CI_CACHE:
-        _PA_COL_CI_CACHE[key] = _raw_find_column_ci(cursor, table_schema, table_name, candidates)
-    return _PA_COL_CI_CACHE[key]
-
-def find_first_column(cursor, table_name, candidates):
-    key = (str(table_name).strip().lower(), tuple(str(c).strip().lower() for c in candidates))
-    if key not in _PA_FIRST_COL_CACHE:
-        _PA_FIRST_COL_CACHE[key] = _raw_find_first_column(cursor, table_name, candidates)
-    return _PA_FIRST_COL_CACHE[key]
-
-def resolve_erp_table(cursor, candidates):
-    key = tuple(str(c).strip().lower() for c in candidates)
-    if key not in _PA_RESOLVE_ERP_CACHE:
-        _PA_RESOLVE_ERP_CACHE[key] = _raw_resolve_erp_table(cursor, candidates)
-    return _PA_RESOLVE_ERP_CACHE[key]
+# Schema probes are served from the tenant-scoped catalog (utils/schema.py):
+# one INFORMATION_SCHEMA load per tenant DB instead of one round-trip per probe,
+# and safe across tenants sharing a worker process.
+table_exists = _raw_table_exists
+find_column_ci = _raw_find_column_ci
+find_first_column = _raw_find_first_column
+resolve_erp_table = _raw_resolve_erp_table
+from .utils.schema import existing_columns as _existing_columns  # noqa: E402
 
 
 
@@ -235,22 +214,7 @@ def _supplier_filter_sql(request, cursor, table_alias="m", join_if_needed=False)
 def _get_table_search_columns(cursor, table_name, candidates):
     if not table_exists(cursor, table_name):
         return []
-    valid_cols = []
-    for col in candidates:
-        cursor.execute(
-            """
-            SELECT TOP 1 COLUMN_NAME 
-            FROM INFORMATION_SCHEMA.COLUMNS 
-            WHERE TABLE_SCHEMA = 'dbo' 
-              AND TABLE_NAME = ? 
-              AND UPPER(LTRIM(RTRIM(COLUMN_NAME))) = UPPER(LTRIM(RTRIM(?)))
-            """,
-            (table_name, col)
-        )
-        row = cursor.fetchone()
-        if row and row[0] not in valid_cols:
-            valid_cols.append(row[0])
-    return valid_cols
+    return _existing_columns(cursor, table_name, candidates, schema="dbo")
 
 
 def _build_po_search_sql(request, cursor, po_alias="m"):
@@ -404,7 +368,7 @@ def purchase_analysis_summary(request):
               {dtype_clause_po}
               {where_flt}
               {srch_sql}
-              AND CAST(podate AS DATE) BETWEEN ? AND ?
+              AND podate >= ? AND podate < DATEADD(DAY, 1, ?)
             """,
             tuple(dtype_params_po + params_flt + srch_params + [start_date, end_date]),
         )
@@ -433,7 +397,7 @@ def purchase_analysis_summary(request):
                   {dtype_clause_po.replace("dtype", "m.dtype")}
                   {where_flt_grn}
                   {srch_sql_m}
-                  AND CAST(m.podate AS DATE) BETWEEN ? AND ?
+                  AND m.podate >= ? AND m.podate < DATEADD(DAY, 1, ?)
                 """,
                 tuple(dtype_params_po + params_flt_grn + srch_params_m + [start_date, end_date]),
             )
@@ -457,7 +421,7 @@ def purchase_analysis_summary(request):
                             {dtype_clause_po.replace("dtype", "m.dtype")}
                             {where_flt_grn}
                             {srch_sql_m}
-                            AND CAST(m.podate AS DATE) BETWEEN ? AND ?
+                            AND m.podate >= ? AND m.podate < DATEADD(DAY, 1, ?)
                       )
                     """,
                     tuple(dtype_params_po + params_flt_grn + srch_params_m + [start_date, end_date]),
@@ -484,7 +448,7 @@ def purchase_analysis_summary(request):
                   {dtype_clause_po.replace("dtype", "m.dtype")}
                   {where_flt_grn}
                   {srch_sql_m}
-                  AND CAST(m.podate AS DATE) BETWEEN ? AND ?
+                  AND m.podate >= ? AND m.podate < DATEADD(DAY, 1, ?)
                 """,
                 tuple(dtype_params_po + params_flt_grn + srch_params_m + [start_date, end_date]),
             )
@@ -576,7 +540,7 @@ def purchase_analysis_weekly_trend(request):
             {join_flt}
             WHERE ISNULL(POMas.deleted, 0) = 0
               AND UPPER(LTRIM(RTRIM(ISNULL(POMas.dtype, '')))) <> 'JOB ORDER'
-              AND CAST(podate AS DATE) BETWEEN ? AND ?
+              AND podate >= ? AND podate < DATEADD(DAY, 1, ?)
               {dtype_clause}
               {where_flt}
               {srch_sql}
@@ -610,7 +574,7 @@ def purchase_analysis_weekly_trend(request):
                     INNER JOIN grn_mas gm ON rd.grnno = gm.grnno
                     WHERE ISNULL(gm.deleted, 0) = 0
                       AND ISNULL(rd.deleted, 0) = 0
-                      AND CAST(gm.grndate AS DATE) BETWEEN ? AND ?
+                      AND gm.grndate >= ? AND gm.grndate < DATEADD(DAY, 1, ?)
                       AND rd.grnno IN (
                           SELECT DISTINCT gs.grnno
                           FROM grninsubdet gs
@@ -642,7 +606,7 @@ def purchase_analysis_weekly_trend(request):
                     INNER JOIN grn_mas gm ON rd.grnno = gm.grnno
                     WHERE ISNULL(gm.deleted, 0) = 0
                       AND ISNULL(rd.deleted, 0) = 0
-                      AND CAST(gm.grndate AS DATE) BETWEEN ? AND ?
+                      AND gm.grndate >= ? AND gm.grndate < DATEADD(DAY, 1, ?)
                     GROUP BY
                         YEAR(CAST(gm.grndate AS DATE)),
                         MONTH(CAST(gm.grndate AS DATE)),
@@ -726,7 +690,7 @@ def purchase_analysis_charts(request):
               {dtype_clause}
               {where_flt}
               {srch_sql}
-              AND CAST(m.podate AS DATE) BETWEEN ? AND ?
+              AND m.podate >= ? AND m.podate < DATEADD(DAY, 1, ?)
             GROUP BY m.cid, {name_expr}
             ORDER BY spend DESC
             """,
@@ -778,7 +742,7 @@ def purchase_analysis_charts(request):
               {dtype_clause_cat}
               {where_flt_cat}
               {srch_sql_cat}
-              AND CAST(podate AS DATE) BETWEEN ? AND ?
+              AND podate >= ? AND podate < DATEADD(DAY, 1, ?)
             GROUP BY LTRIM(RTRIM(ISNULL(POMas.dtype, 'General')))
             ORDER BY spend DESC
             """,
@@ -863,7 +827,7 @@ def purchase_analysis_pipeline(request):
             WHERE ISNULL(deleted, 0) = 0
               AND ISNULL(dtype, '') <> 'Job Order'
               {srch_sql_po}
-              AND CAST(podate AS DATE) BETWEEN ? AND ?
+              AND podate >= ? AND podate < DATEADD(DAY, 1, ?)
             """,
             tuple(srch_params_po + [start_date, end_date]),
         )
@@ -894,7 +858,7 @@ def purchase_analysis_pipeline(request):
                 WHERE ISNULL(m.deleted, 0) = 0
                   AND ISNULL(m.dtype, '') <> 'Job Order'
                   {srch_sql_m}
-                  AND CAST(m.podate AS DATE) BETWEEN ? AND ?
+                  AND m.podate >= ? AND m.podate < DATEADD(DAY, 1, ?)
                 GROUP BY m.pono, m.totamt
                 """,
                 tuple(srch_params_m + [start_date, end_date]),
@@ -1048,12 +1012,12 @@ def purchase_analysis_po_details(request):
                 INNER JOIN grn_mas gm2 ON gs2.grnno = gm2.grnno
                 WHERE ISNULL(gs2.deleted, 0) = 0
                   AND ISNULL(gm2.deleted, 0) = 0
-                  AND CAST(gm2.grndate AS DATE) BETWEEN ? AND ?
+                  AND gm2.grndate >= ? AND gm2.grndate < DATEADD(DAY, 1, ?)
                 GROUP BY gs2.pono, gs2.rmname
             ) gs ON gs.pono = m.pono AND gs.icode = pd.icode
             WHERE ISNULL(m.deleted, 0) = 0
               AND ISNULL(m.dtype, '') <> 'Job Order'
-              AND CAST(m.podate AS DATE) BETWEEN ? AND ?
+              AND m.podate >= ? AND m.podate < DATEADD(DAY, 1, ?)
               {supplier_where}
               {search_where}
         """
@@ -1169,15 +1133,19 @@ def purchase_analysis_grn_aging(request):
                 INNER JOIN grn_mas gm2 ON gs2.grnno = gm2.grnno
                 WHERE ISNULL(gs2.deleted, 0) = 0
                   AND ISNULL(gm2.deleted, 0) = 0
+                  AND gs2.pono IN (
+                      SELECT pw.pono FROM POMas pw
+                      WHERE pw.podate >= ? AND pw.podate < DATEADD(DAY, 1, ?)
+                  )
                 GROUP BY gs2.pono, gs2.rmname
             ) gs ON gs.pono = m.pono AND gs.icode = pd.icode
             WHERE ISNULL(m.deleted, 0) = 0
               {dtype_clause_po}
-              AND CAST(m.podate AS DATE) BETWEEN ? AND ?
+              AND m.podate >= ? AND m.podate < DATEADD(DAY, 1, ?)
               AND ISNULL(gs.grn_qty, 0) < ISNULL(CAST(pd.qty AS FLOAT), 0)
             ORDER BY days_open DESC
             """,
-            tuple([today] + dtype_params_po + [start_date, end_date]),
+            tuple([today, start_date, end_date] + dtype_params_po + [start_date, end_date]),
         )
 
         for pono, sup, part, desc, oq, rq, po_date, days_open in cursor.fetchall():
@@ -1277,7 +1245,7 @@ def purchase_analysis_month_summary(request):
               {dtype_clause_po}
               {where_flt}
               {srch_sql}
-              AND CAST(m.podate AS DATE) BETWEEN ? AND ?
+              AND m.podate >= ? AND m.podate < DATEADD(DAY, 1, ?)
             GROUP BY
                 YEAR(CAST(m.podate AS DATE)),
                 MONTH(CAST(m.podate AS DATE))
@@ -1311,7 +1279,7 @@ def purchase_analysis_month_summary(request):
                   {dtype_clause_po}
                   {where_flt}
                   {srch_sql}
-                  AND CAST(m.podate AS DATE) BETWEEN ? AND ?
+                  AND m.podate >= ? AND m.podate < DATEADD(DAY, 1, ?)
                 GROUP BY
                     YEAR(CAST(m.podate AS DATE)),
                     MONTH(CAST(m.podate AS DATE))
@@ -1732,7 +1700,7 @@ def purchase_analysis_po_table(request):
             params.append(company_code)
 
         where_clause = (
-            f"CAST(M.[{po_date}] AS DATE) BETWEEN ? AND ?"
+            f"M.[{po_date}] >= ? AND M.[{po_date}] < DATEADD(DAY, 1, ?)"
             f" AND {del_po_sql}"
             f"{exclude_filter}"
             f"{dtype_filter_sql}"
@@ -1773,17 +1741,17 @@ def purchase_analysis_po_table(request):
             ORDER BY M.[{po_date}], M.[{po_pono}]
         """
 
+        def _iso(d):
+            if d is None: return ""
+            if hasattr(d, "isoformat"): return d.isoformat()[:10]
+            return str(d)[:10]
+
         cursor.execute(detail_sql, params)
         rows_out = []
         for row in cursor.fetchall() or []:
             po_dt  = row[8]
             grn_dt = row[10]
             pi_dt  = row[14]
-
-            def _iso(d):
-                if d is None: return ""
-                if hasattr(d, "isoformat"): return d.isoformat()[:10]
-                return str(d)[:10]
 
             rows_out.append({
                 "po_number":     str(row[0] or "").strip(),
@@ -1867,7 +1835,7 @@ def purchase_analysis_po_table(request):
                    AND ISNULL(PID.[poindcancel], 0) = 0
                 {pi_cm_join}
                 WHERE ISNULL(PIM.[deleted], 0) = 0
-                  AND CAST(PIM.[pidate] AS DATE) BETWEEN ? AND ?
+                  AND PIM.[pidate] >= ? AND PIM.[pidate] < DATEADD(DAY, 1, ?)
                   AND (PID.[pono] IS NULL OR ISNULL(PID.[pono], '') = '')
                   {pi_dtype_flt}
                   {pis_not_exists}
@@ -2147,7 +2115,7 @@ def purchase_analysis_amended_po_table(request):
             {g_agg}
             {gm_join}
             {join_flt}
-            WHERE CAST(M.[{po_date}] AS DATE) BETWEEN ? AND ?
+            WHERE M.[{po_date}] >= ? AND M.[{po_date}] < DATEADD(DAY, 1, ?)
               AND {del_po_sql}
               {exclude_filter}
               {dtype_filter_sql}
@@ -2320,7 +2288,7 @@ def purchase_analysis_short_close_table(request):
                 ON M.[{po_pono}] = D.[{det_pono}] AND {del_det_sql}
             {cm_join}
             {join_flt}
-            WHERE CAST(M.[{po_date}] AS DATE) BETWEEN ? AND ?
+            WHERE M.[{po_date}] >= ? AND M.[{po_date}] < DATEADD(DAY, 1, ?)
               AND {del_po_sql}
               AND {where_condition}
               {exclude_filter}
@@ -2602,16 +2570,21 @@ def purchase_analysis_management_alerts(request):
                     INNER JOIN grn_mas gm2 ON gs2.grnno = gm2.grnno
                     WHERE ISNULL(gs2.deleted, 0) = 0
                       AND ISNULL(gm2.deleted, 0) = 0
+                      -- scope GRN aggregation to POs raised in the selected window
+                      AND gs2.pono IN (
+                          SELECT pw.[{po_pono}] FROM {q_po} pw
+                          WHERE pw.[{po_date}] >= ? AND pw.[{po_date}] < DATEADD(DAY, 1, ?)
+                      )
                     GROUP BY gs2.pono, gs2.rmname
                 ) gs ON gs.pono = m.[{po_pono}] AND gs.icode = pd.[{det_rm}]
                 WHERE {del_po_sql}
                   {dtype_clause}
                   {where_flt}
                   {srch_sql}
-                  AND CAST(m.[{po_date}] AS DATE) BETWEEN ? AND ?
+                  AND m.[{po_date}] >= ? AND m.[{po_date}] < DATEADD(DAY, 1, ?)
             """
 
-            exec_params = dtype_params + params_flt + srch_params + [start_date, end_date]
+            exec_params = [start_date, end_date] + dtype_params + params_flt + srch_params + [start_date, end_date]
             cursor.execute(sql, exec_params)
             rows = cursor.fetchall()
 
@@ -2846,8 +2819,16 @@ def purchase_analysis_traceability_table(request):
         else:
             dtype_clause = f"AND UPPER(LTRIM(RTRIM(ISNULL(M.[{po_dtype}], '')))) <> 'JOB ORDER'"
 
-        # Build SQL Query dynamically with resolved tables and columns
+        del_po_sc = f"ISNULL(M_SC.[{po_del}], 0) = 0" if po_del else "1=1"
+
+        # Build SQL Query dynamically with resolved tables and columns (scoping IND & G to active POs)
         query = f"""
+            WITH SCOPED_POS AS (
+                SELECT DISTINCT LTRIM(RTRIM(M_SC.[{po_pono}])) AS scoped_pono
+                FROM {q_m} M_SC
+                WHERE {del_po_sc}
+                  AND M_SC.[{po_podate}] >= ? AND M_SC.[{po_podate}] < DATEADD(DAY, 1, ?)
+            )
             SELECT TOP 3000
                 IND.pino AS Ind_No,
                 PIM.[{pim_date}] AS Ind_Date,
@@ -2903,6 +2884,7 @@ def purchase_analysis_traceability_table(request):
                     ELSE 'N'
                 END AS Amnd
             FROM {q_m} M
+            INNER JOIN SCOPED_POS SP ON LTRIM(RTRIM(M.[{po_pono}])) = SP.scoped_pono
             INNER JOIN {q_d} D ON LTRIM(RTRIM(M.[{po_pono}])) = LTRIM(RTRIM(D.[{det_pono}])) {del_det_sql}
             LEFT JOIN {q_cm} CM ON M.[{po_cid}] = CM.[{cm_id}] {del_cm_sql}
             LEFT JOIN (
@@ -2910,6 +2892,7 @@ def purchase_analysis_traceability_table(request):
                     LTRIM(RTRIM(PIS.[{ind_pono}])) AS pono,
                     LTRIM(RTRIM(PIS.[{ind_pino}])) AS pino
                 FROM {q_ind} PIS
+                INNER JOIN SCOPED_POS SP_IND ON LTRIM(RTRIM(PIS.[{ind_pono}])) = SP_IND.scoped_pono
                 WHERE {del_ind_sql}
                   AND ISNULL(LTRIM(RTRIM(PIS.[{ind_pono}])), '') <> ''
                   AND ISNULL(LTRIM(RTRIM(PIS.[{ind_pino}])), '') <> ''
@@ -2921,6 +2904,7 @@ def purchase_analysis_traceability_table(request):
                     {sel_gx_rmname}
                     LTRIM(RTRIM(GX.[{gx_grnno}])) AS grnno_g
                 FROM {q_gx} GX
+                INNER JOIN SCOPED_POS SP_GX ON LTRIM(RTRIM(GX.[{gx_pono}])) = SP_GX.scoped_pono
                 WHERE {del_gx_sql}
                   AND ISNULL(LTRIM(RTRIM(GX.[{gx_pono}])), '') <> ''
                   AND ISNULL(LTRIM(RTRIM(GX.[{gx_grnno}])), '') <> ''
@@ -2939,11 +2923,11 @@ def purchase_analysis_traceability_table(request):
               {dtype_clause}
               {where_flt}
               {srch_sql}
-              AND CAST(M.[{po_podate}] AS DATE) BETWEEN ? AND ?
+              AND M.[{po_podate}] >= ? AND M.[{po_podate}] < DATEADD(DAY, 1, ?)
             ORDER BY M.[{po_podate}], M.[{po_pono}]{order_grn}
         """
 
-        cursor.execute(query, tuple(dtype_params + params_flt + srch_params + [start_date, end_date]))
+        cursor.execute(query, tuple([start_date, end_date] + dtype_params + params_flt + srch_params + [start_date, end_date]))
         
         rows_out = []
         for idx, row in enumerate(cursor.fetchall()):
@@ -3125,7 +3109,10 @@ def purchase_analysis_fulfillment_schedule(request):
                     SUM(ISNULL(CAST([{sd_shdqty}] AS FLOAT), 0)) AS SchdQty
                 FROM {q_sd}
                 WHERE [{sd_shddt}] IS NOT NULL
-                  AND YEAR([{sd_shddt}]) >= 2000
+                  AND (
+                      [{sd_pono}] IN (SELECT pono FROM ALL_PO_DATA)
+                      OR [{sd_shddt}] >= ? AND [{sd_shddt}] < DATEADD(DAY, 1, ?)
+                  )
                   {sd_del_clause}
                 GROUP BY
                     [{sd_pono}],
@@ -3144,6 +3131,7 @@ def purchase_analysis_fulfillment_schedule(request):
             """
 
         # ── GRN_DATA CTE ───────────────────────────────────────────
+        gx_del_filter = f"AND ISNULL([{gx_del}], 0) = 0" if gx_del else ""
         if q_gx and gx_pono and gx_rmname and gx_qty:
             grn_data_cte = f"""
                 SELECT
@@ -3151,7 +3139,8 @@ def purchase_analysis_fulfillment_schedule(request):
                     LTRIM(RTRIM(ISNULL([{gx_rmname}], N''))) AS rmname,
                     SUM(ISNULL(CAST([{gx_qty}] AS FLOAT), 0)) AS GRNQty
                 FROM {q_gx}
-                {gx_del_clause}
+                WHERE ([{gx_pono}] IN (SELECT pono FROM ALL_PO_DATA) OR [{gx_pono}] IN (SELECT pono FROM SCH_DATA))
+                  {gx_del_filter}
                 GROUP BY
                     [{gx_pono}],
                     LTRIM(RTRIM(ISNULL([{gx_rmname}], N'')))
@@ -3223,6 +3212,10 @@ def purchase_analysis_fulfillment_schedule(request):
             params.extend(dtype_params)
         params.extend([s_date_str, e_date_str])
 
+        # For SCH_DATA CTE:
+        if q_sd and sd_pono and sd_icode and sd_shddt and sd_shdqty:
+            params.extend([s_date_str, e_date_str])
+
         # For Set 2:
         if apply_dtype and po_dtype:
             params.extend(dtype_params)
@@ -3255,7 +3248,7 @@ def purchase_analysis_fulfillment_schedule(request):
                   {del_pm_sql}
                   {exclude_filter}
                   {dtype_filter_sql}
-                  AND CAST(PM.[{po_podate}] AS DATE) BETWEEN ? AND ?
+                  AND PM.[{po_podate}] >= ? AND PM.[{po_podate}] < DATEADD(DAY, 1, ?)
                 GROUP BY
                     PM.[{po_pono}],
                     CAST(PM.[{po_podate}] AS DATE),
@@ -3341,7 +3334,7 @@ def purchase_analysis_fulfillment_schedule(request):
                        OR (SD.itcode <> N'' AND SD.itcode = G.rmname)
                        OR (PD.[{det_rmname}] IS NOT NULL AND LTRIM(RTRIM(PD.[{det_rmname}])) = G.rmname)
                    )
-                WHERE CAST(SD.shddate AS DATE) BETWEEN ? AND ?
+                WHERE SD.shddate >= ? AND SD.shddate < DATEADD(DAY, 1, ?)
                   AND (
                       PM.[{po_podate}] IS NULL
                       OR CAST(PM.[{po_podate}] AS DATE) NOT BETWEEN ? AND ?
@@ -3548,6 +3541,7 @@ def purchase_analysis_fulfillment_schedule(request):
 
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="pa")
 def purchase_analysis_average_purchase_value(request):
     """
     Returns Average Purchase Value (APV) and line-item material classification data
@@ -3634,8 +3628,8 @@ def purchase_analysis_average_purchase_value(request):
             WHERE ISNULL(PM.deleted, 0) = 0
               AND UPPER(LTRIM(RTRIM(ISNULL(PM.dtype, '')))) <> 'JOB ORDER'
               {dtype_filter_sql}
-              AND CAST(PM.podate AS DATE) >= ?
-              AND CAST(PM.podate AS DATE) < DATEADD(DAY, 1, CAST(? AS DATE))
+              AND PM.podate >= CAST(? AS DATE)
+              AND PM.podate < DATEADD(DAY, 1, CAST(? AS DATE))
         ),
 
         ITEM_MASTER AS
@@ -3691,6 +3685,8 @@ def purchase_analysis_average_purchase_value(request):
             FROM {tbl_gx} G
             LEFT JOIN {tbl_gm} GM ON G.grnno = GM.grnno AND ISNULL(GM.deleted, 0) = 0
             WHERE ISNULL(G.deleted, 0) = 0
+              -- only GRNs belonging to the POs in the selected window (was: full GRN history)
+              AND G.pono IN (SELECT DISTINCT pono FROM PO_BASE)
             GROUP BY G.pono, LTRIM(RTRIM(G.rmname)), G.grnno
         )
 
@@ -4034,8 +4030,8 @@ def purchase_analysis_advanced_purchase_analytics(request):
             WHERE ISNULL(PM.deleted, 0) = 0
               AND UPPER(LTRIM(RTRIM(ISNULL(PM.dtype, '')))) <> 'JOB ORDER'
               {dtype_filter_sql}
-              AND CAST(PM.podate AS DATE) >= ?
-              AND CAST(PM.podate AS DATE) < DATEADD(DAY, 1, CAST(? AS DATE))
+              AND PM.podate >= CAST(? AS DATE)
+              AND PM.podate < DATEADD(DAY, 1, CAST(? AS DATE))
         ),
 
         ITEM_MASTER AS
@@ -4182,28 +4178,37 @@ def purchase_analysis_advanced_purchase_analytics(request):
         cursor.execute(query_po, params_po)
         po_rows = cursor.fetchall()
 
-        # 2. Query Commer_BaseRateDet for commercial rate changes (excluding Customer Product)
-        query_commer = f"""
-        SELECT
-            LTRIM(RTRIM(CBD.cmno)) AS cmno,
-            LTRIM(RTRIM(CBD.PartNo)) AS PartNo,
-            ISNULL(CBD.BaseRate, 0) AS BaseRate,
-            CONVERT(VARCHAR(10), CBD.BReffdt, 120) AS BReffdt,
-            ISNULL(CBD.deleted, 0) AS deleted,
-            ISNULL(CBD.SaleRate, 0) AS SaleRate,
-            LTRIM(RTRIM(ISNULL(CBD.CurrPref, ''))) AS CurrPref,
-            ISNULL(CBD.BRCurrRate, 0) AS BRCurrRate,
-            ISNULL(CBD.NetRate, 0) AS NetRate
-        FROM {tbl_commer} CBD
-        INNER JOIN {tbl_commas} CM
-            ON LTRIM(RTRIM(CBD.cmno)) = LTRIM(RTRIM(CM.cmno))
-           AND ISNULL(CM.deleted, 0) = 0
-           AND UPPER(LTRIM(RTRIM(ISNULL(CM.btype, '')))) <> 'CUSTOMER PRODUCT'
-        WHERE ISNULL(CBD.deleted, 0) = 0
-        ORDER BY CBD.BReffdt ASC;
-        """
-        cursor.execute(query_commer)
-        commer_rows = cursor.fetchall()
+        # 2. Query Commer_BaseRateDet for commercial rate changes (targeted strictly to active parts)
+        needed_parts = list({(r[3] or "").strip() for r in po_rows if (r[3] or "").strip()})
+        commer_rows = []
+        if needed_parts:
+            # Batch in chunks of 500 to stay well under SQL Server parameter limits
+            chunk_size = 500
+            for i in range(0, len(needed_parts), chunk_size):
+                chunk = needed_parts[i:i + chunk_size]
+                part_placeholders = ",".join(["?"] * len(chunk))
+                query_commer = f"""
+                SELECT
+                    LTRIM(RTRIM(CBD.cmno)) AS cmno,
+                    LTRIM(RTRIM(CBD.PartNo)) AS PartNo,
+                    ISNULL(CBD.BaseRate, 0) AS BaseRate,
+                    CONVERT(VARCHAR(10), CBD.BReffdt, 120) AS BReffdt,
+                    ISNULL(CBD.deleted, 0) AS deleted,
+                    ISNULL(CBD.SaleRate, 0) AS SaleRate,
+                    LTRIM(RTRIM(ISNULL(CBD.CurrPref, ''))) AS CurrPref,
+                    ISNULL(CBD.BRCurrRate, 0) AS BRCurrRate,
+                    ISNULL(CBD.NetRate, 0) AS NetRate
+                FROM {tbl_commer} CBD
+                INNER JOIN {tbl_commas} CM
+                    ON LTRIM(RTRIM(CBD.cmno)) = LTRIM(RTRIM(CM.cmno))
+                   AND ISNULL(CM.deleted, 0) = 0
+                   AND UPPER(LTRIM(RTRIM(ISNULL(CM.btype, '')))) <> 'CUSTOMER PRODUCT'
+                WHERE ISNULL(CBD.deleted, 0) = 0
+                  AND LTRIM(RTRIM(CBD.PartNo)) IN ({part_placeholders})
+                ORDER BY CBD.BReffdt ASC;
+                """
+                cursor.execute(query_commer, chunk)
+                commer_rows.extend(cursor.fetchall())
 
         # Map commercial rates by PartNo
         commercial_rates = {}
@@ -4327,3 +4332,58 @@ def purchase_analysis_advanced_purchase_analytics(request):
 
 
 
+
+
+# ─────────────────────────────────────────────────────────────
+#  BUNDLE — one HTTP request for the whole Purchase Analysis page
+#  ?keys=summary,weekly_trend,...  (two FE groups: "head" + "tables")
+# ─────────────────────────────────────────────────────────────
+from .utils.bundle import run_bundle  # noqa: E402
+
+
+@api_view(["GET"])
+def purchase_analysis_supplier_rating_for_bundle(request):
+    """supplier_rating_monthwise with type=supplier forced (used by the bundle)."""
+    import copy
+    from .views import supplier_rating_monthwise
+    django_request = getattr(request, "_request", request)
+    # Share the request-scoped ERP connection pool with the shallow copy.
+    if getattr(django_request, "_erp_conn_pool", None) is None:
+        django_request._erp_conn_pool = {}
+    req_copy = copy.copy(django_request)
+    q = django_request.GET.copy()
+    q["type"] = "supplier"
+    req_copy.GET = q
+    return supplier_rating_monthwise(req_copy)
+
+
+_PA_BUNDLE_REGISTRY = [
+    # Above the fold
+    ("summary", purchase_analysis_summary),
+    ("weekly_trend", purchase_analysis_weekly_trend),
+    ("charts", purchase_analysis_charts),
+    ("po_types", purchase_analysis_po_types),
+    ("management_alerts", purchase_analysis_management_alerts),
+    ("po_table", purchase_analysis_po_table),
+    ("supplier_rating", purchase_analysis_supplier_rating_for_bundle),
+    # Heavy tables (requested by the FE in a second, deferred call)
+    ("amended_po_table", purchase_analysis_amended_po_table),
+    ("short_close_table", purchase_analysis_short_close_table),
+    ("price_trend", purchase_analysis_price_trend_table),
+    ("traceability_table", purchase_analysis_traceability_table),
+    ("fulfillment_schedule", purchase_analysis_fulfillment_schedule),
+    ("average_purchase_value", purchase_analysis_average_purchase_value),
+    ("advanced_purchase_analytics", purchase_analysis_advanced_purchase_analytics),
+]
+
+
+@api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="pa_bundle")
+def purchase_analysis_bundle(request):
+    start_date, end_date = parse_date_range(request)
+    return run_bundle(
+        request,
+        _PA_BUNDLE_REGISTRY,
+        max_workers=3,
+        extra={"from": str(start_date), "to": str(end_date)},
+    )

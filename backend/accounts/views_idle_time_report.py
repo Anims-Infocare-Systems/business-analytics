@@ -9,6 +9,7 @@ from datetime import timedelta
 
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
+from .utils.cache import cache_analytics_response
 
 from .views import get_tenant_connection, parse_date_range, table_exists
 
@@ -2835,6 +2836,7 @@ def _fetch_operator_wise_idle(data_rows):
 
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="idle_rep")
 def idle_time_report(request):
     """
     Report filters: ?from=&to=&machine=&shift=&reason=

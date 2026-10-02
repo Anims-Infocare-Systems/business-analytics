@@ -6,6 +6,7 @@
 
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
+from .utils.cache import cache_analytics_response
 
 from .views import (
     get_tenant_connection,
@@ -129,7 +130,7 @@ def _build_union_branches(
             f"{oaeff_sql} AS OAEFF, {opreff_sql} AS OPREFF, "
             f"{_idle_hours_expr(idle_col, acc_col, nonacc_col, kind)} AS IdleHrs "
             f"FROM {qt} WHERE {_sql_deleted_safe(del_col)} "
-            f"AND CAST([{d_col}] AS DATE) BETWEEN ? AND ? AND {null_filter}"
+            f"AND [{d_col}] >= ? AND [{d_col}] < DATEADD(DAY, 1, ?) AND {null_filter}"
         )
         params.extend([start_date, end_date])
 
@@ -212,7 +213,7 @@ def _legacy_union_branches(include_cnc, include_conv, include_prod_date=False):
                 CAST(OPREFF AS FLOAT) AS OPREFF,
                 CAST((CASE WHEN idlTime IS NOT NULL AND DATEDIFF(SECOND, 0, idlTime) > 0 THEN DATEDIFF(SECOND, 0, idlTime) ELSE ISNULL(accidletimesecs, 0) + ISNULL(nonaccidletimesecs, 0) END) / 3600.0 AS FLOAT) AS IdleHrs
             FROM ProductionEntry
-            WHERE CAST(proddate AS DATE) BETWEEN ? AND ?
+            WHERE proddate >= ? AND proddate < DATEADD(DAY, 1, ?)
               AND deleted = 0
               AND (OAEFF IS NOT NULL OR OPREFF IS NOT NULL)
         """)
@@ -227,7 +228,7 @@ def _legacy_union_branches(include_cnc, include_conv, include_prod_date=False):
                     CAST(ISNULL(eff, 0) AS FLOAT) AS OPREFF,
                     CAST(DATEDIFF(SECOND, '1900-01-01 00:00:00', ISNULL(IdleTime, '1900-01-01 00:00:00')) / 3600.0 AS FLOAT) AS IdleHrs
                 FROM {tbl}
-                WHERE CAST(entrydate AS DATE) BETWEEN ? AND ?
+                WHERE entrydate >= ? AND entrydate < DATEADD(DAY, 1, ?)
                   AND deleted = 0
                   AND (OAEFF IS NOT NULL OR eff IS NOT NULL)
             """)
@@ -351,7 +352,7 @@ BasePE AS (
         N'ProductionEntry' AS SourceTable
     FROM ProductionEntry
     WHERE deleted = 0
-      AND CAST(proddate AS DATE) BETWEEN ? AND ?
+      AND proddate >= ? AND proddate < DATEADD(DAY, 1, ?)
       AND macno IS NOT NULL
       AND LTRIM(RTRIM(macno)) <> N''
       AND (OAEFF IS NOT NULL OR OPREFF IS NOT NULL)
@@ -399,7 +400,7 @@ BaseCPE AS (
         N'ConvProductionEntry' AS SourceTable
     FROM ConvProductionEntry
     WHERE deleted = 0
-      AND CAST(entrydate AS DATE) BETWEEN ? AND ?
+      AND entrydate >= ? AND entrydate < DATEADD(DAY, 1, ?)
       AND macno IS NOT NULL
       AND LTRIM(RTRIM(macno)) <> N''
       AND (OAEFF IS NOT NULL OR eff IS NOT NULL)
@@ -446,7 +447,7 @@ BaseCPR AS (
         N'ConvProductionEntryRod' AS SourceTable
     FROM ConvProductionEntryRod
     WHERE deleted = 0
-      AND CAST(entrydate AS DATE) BETWEEN ? AND ?
+      AND entrydate >= ? AND entrydate < DATEADD(DAY, 1, ?)
       AND macno IS NOT NULL
       AND LTRIM(RTRIM(macno)) <> N''
       AND (OAEFF IS NOT NULL OR eff IS NOT NULL)
@@ -1020,6 +1021,7 @@ def build_efficiency_compare_payload(
 
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="eff_rep")
 def efficiency_report(request):
     """
     MIS Efficiency Report — operator-wise (default) and machine-wise tables.

@@ -1,5 +1,6 @@
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
+from .utils.cache import cache_analytics_response
 from datetime import datetime
 from typing import Any
 import logging
@@ -369,7 +370,7 @@ def _get_quality_rejection_and_rework(cursor, from_date, to_date, machine=None, 
 
             rwk_expr = f"CAST(ISNULL(i.[{rwk_col}], 0) AS INT)" if rwk_col else "0"
 
-            where_inter = [f"CAST(i.[{inspdate_col}] AS DATE) BETWEEN ? AND ?"]
+            where_inter = [f"i.[{inspdate_col}] >= ? AND i.[{inspdate_col}] < DATEADD(DAY, 1, ?)"]
             params_inter = [from_date, to_date]
             if deleted_col:
                 where_inter.append(f"ISNULL(i.[{deleted_col}], 0) = 0")
@@ -481,7 +482,7 @@ def _get_quality_rejection_and_rework_by_machine(cursor, from_date, to_date, mac
 
     rwk_expr = f"CAST(ISNULL(i.[{rwk_col}], 0) AS INT)" if rwk_col else "0"
 
-    where_inter = [f"CAST(i.[{inspdate_col}] AS DATE) BETWEEN ? AND ?"]
+    where_inter = [f"i.[{inspdate_col}] >= ? AND i.[{inspdate_col}] < DATEADD(DAY, 1, ?)"]
     params_inter = [from_date, to_date]
     if deleted_col:
         where_inter.append(f"ISNULL(i.[{deleted_col}], 0) = 0")
@@ -552,6 +553,7 @@ def _get_quality_rejection_and_rework_by_machine(cursor, from_date, to_date, mac
 
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="pa_rep")
 def production_analysis_report(request):
     """
     Production Analysis Report endpoint with KPI calculations.
@@ -1118,119 +1120,183 @@ def production_analysis_report(request):
             GROUP BY RTD.TchEntryNo, RTD.RowNo, RTM.proddate
         """ if has_touch_rod else ""
 
-        # ── Query 1: Total Production Qty ─────────────────────────────
-        total_prod_query = f"""
-        SELECT COALESCE(SUM(Qty), 0) AS TotalProductionQty
-        FROM (
-            SELECT COALESCE(okqty, 0) AS Qty FROM ProductionEntry WHERE prodid IN (SELECT prodid FROM #FilteredPE)
-            UNION ALL
-            SELECT COALESCE(qty, 0) AS Qty FROM ConvProductionEntry WHERE entryno IN (SELECT entryno FROM #FilteredCPE)
-            UNION ALL
-            SELECT COALESCE(qty, 0) AS Qty FROM ConvProductionEntryRod WHERE entryno IN (SELECT entryno FROM #FilteredCPR)
-            {t_cnc_prod}
-            {t_conv_prod}
-            {t_rod_prod}
-        ) AS A
+        # ── Consolidated Queries 1 to 5, 8, 9, and Active Machines ───────
+        consolidated_scalars_query = f"""
+        SELECT
+            (SELECT COALESCE(SUM(Qty), 0) FROM (
+                SELECT COALESCE(okqty, 0) AS Qty FROM ProductionEntry WHERE prodid IN (SELECT prodid FROM #FilteredPE)
+                UNION ALL
+                SELECT COALESCE(qty, 0) AS Qty FROM ConvProductionEntry WHERE entryno IN (SELECT entryno FROM #FilteredCPE)
+                UNION ALL
+                SELECT COALESCE(qty, 0) AS Qty FROM ConvProductionEntryRod WHERE entryno IN (SELECT entryno FROM #FilteredCPR)
+                {t_cnc_prod}
+                {t_conv_prod}
+                {t_rod_prod}
+            ) AS A) AS TotalProductionQty,
+
+            (SELECT COALESCE(SUM(InspOkQty), 0) FROM (
+                SELECT COALESCE((SELECT SUM(COALESCE(I.okqty, 0)) FROM InterInspectionEntry I WHERE TRY_CAST(I.prodid AS INT) = P.prodid AND I.deleted = 0), 0) AS InspOkQty
+                FROM ProductionEntry P WHERE P.prodid IN (SELECT prodid FROM #FilteredPE)
+                UNION ALL SELECT COALESCE(C.qty, 0) AS InspOkQty FROM ConvProductionEntry C WHERE C.entryno IN (SELECT entryno FROM #FilteredCPE)
+                UNION ALL SELECT COALESCE(R.qty, 0) AS InspOkQty FROM ConvProductionEntryRod R WHERE R.entryno IN (SELECT entryno FROM #FilteredCPR)
+                {t_cnc_ok}
+                {t_conv_ok}
+                {t_rod_ok}
+            ) AS B) AS TotalInspectionOkQty,
+
+            (SELECT COALESCE(SUM(RejQty), 0) FROM (
+                SELECT COALESCE((SELECT SUM(COALESCE(RJ.qty, 0)) FROM InterInspectionEntry I INNER JOIN Insp_RejectionEntry RJ ON I.inter_inspno = RJ.inter_inspno WHERE TRY_CAST(I.prodid AS INT) = P.prodid AND I.deleted = 0 AND RJ.deleted = 0), 0) AS RejQty
+                FROM ProductionEntry P WHERE P.prodid IN (SELECT prodid FROM #FilteredPE)
+                UNION ALL SELECT 0 AS RejQty FROM ConvProductionEntry C WHERE C.entryno IN (SELECT entryno FROM #FilteredCPE)
+                UNION ALL SELECT ISNULL(R.ScrapQty, 0) AS RejQty FROM ConvProductionEntryRod R WHERE R.entryno IN (SELECT entryno FROM #FilteredCPR)
+                {t_rod_rej}
+            ) AS C) AS TotalRejectionQty,
+
+            (SELECT CAST(AVG(CAST(OEE AS FLOAT)) AS DECIMAL(18,2)) FROM (
+                SELECT CASE WHEN OAEFF IS NOT NULL AND QFNEW IS NOT NULL THEN (OAEFF * QFNEW) ELSE COALESCE(OEENEW, OAEFF, 0) END AS OEE FROM ProductionEntry WHERE prodid IN (SELECT prodid FROM #FilteredPE) AND (OAEFF IS NOT NULL OR OEENEW IS NOT NULL OR QFNEW IS NOT NULL)
+                UNION ALL SELECT COALESCE(OAEFF, OEENEW, 0) AS OEE FROM ConvProductionEntry WHERE entryno IN (SELECT entryno FROM #FilteredCPE) AND (OAEFF IS NOT NULL OR OEENEW IS NOT NULL)
+                UNION ALL SELECT COALESCE(OAEFF, OEENEW, 0) AS OEE FROM ConvProductionEntryRod WHERE entryno IN (SELECT entryno FROM #FilteredCPR) AND (OAEFF IS NOT NULL OR OEENEW IS NOT NULL)
+                {t_cnc_oee}
+                {t_conv_oee}
+                {t_rod_oee}
+            ) AS D) AS Overall_OEE,
+
+            (SELECT COALESCE(SUM(TotalRunSeconds), 0) FROM (
+                SELECT 
+                    CASE 
+                        WHEN PE.runto >= PE.runfrom THEN DATEDIFF(SECOND, PE.runfrom, PE.runto) 
+                        ELSE DATEDIFF(SECOND, PE.runfrom, DATEADD(DAY, 1, PE.runto)) 
+                    END AS TotalRunSeconds 
+                FROM ProductionEntry PE 
+                WHERE PE.prodid IN (SELECT prodid FROM #FilteredPE) 
+                  AND PE.deleted = 0
+                  AND PE.runfrom IS NOT NULL 
+                  AND PE.runto IS NOT NULL
+
+                UNION ALL 
+
+                SELECT 
+                    CASE 
+                        WHEN CPE.endtime >= CPE.starttime THEN DATEDIFF(SECOND, CPE.starttime, CPE.endtime) 
+                        ELSE DATEDIFF(SECOND, CPE.starttime, DATEADD(DAY, 1, CPE.endtime)) 
+                    END AS TotalRunSeconds 
+                FROM ConvProductionEntry CPE 
+                WHERE CPE.entryno IN (SELECT entryno FROM #FilteredCPE) 
+                  AND CPE.deleted = 0
+                  AND CPE.starttime IS NOT NULL 
+                  AND CPE.endtime IS NOT NULL
+
+                UNION ALL 
+
+                SELECT 
+                    CASE 
+                        WHEN CPR.endtime >= CPR.starttime THEN DATEDIFF(SECOND, CPR.starttime, CPR.endtime) 
+                        ELSE DATEDIFF(SECOND, CPR.starttime, DATEADD(DAY, 1, CPR.endtime)) 
+                    END AS TotalRunSeconds 
+                FROM ConvProductionEntryRod CPR 
+                WHERE CPR.entryno IN (SELECT entryno FROM #FilteredCPR) 
+                  AND CPR.deleted = 0
+                  AND CPR.starttime IS NOT NULL 
+                  AND CPR.endtime IS NOT NULL
+                {t_cnc_hours}
+                {t_conv_hours}
+                {t_rod_hours}
+            ) AS E) AS TotalRunSeconds,
+
+            (SELECT COALESCE(SUM(SettingSeconds), 0) FROM (
+                SELECT 
+                    CASE 
+                        WHEN PE.setto >= PE.setfrom THEN DATEDIFF(SECOND, PE.setfrom, PE.setto) 
+                        ELSE DATEDIFF(SECOND, PE.setfrom, DATEADD(DAY, 1, PE.setto)) 
+                    END AS SettingSeconds 
+                FROM ProductionEntry PE 
+                WHERE PE.prodid IN (SELECT prodid FROM #FilteredPE) 
+                  AND PE.deleted = 0
+                  AND PE.setfrom IS NOT NULL 
+                  AND PE.setto IS NOT NULL
+
+                UNION ALL 
+                SELECT 
+                    CASE 
+                        WHEN CPE.setto >= CPE.setfrom THEN DATEDIFF(SECOND, CPE.setfrom, CPE.setto) 
+                        ELSE DATEDIFF(SECOND, CPE.setfrom, DATEADD(DAY, 1, CPE.setto)) 
+                    END AS SettingSeconds 
+                FROM ConvProductionEntry CPE 
+                WHERE CPE.entryno IN (SELECT entryno FROM #FilteredCPE) 
+                  AND CPE.deleted = 0
+                  AND CPE.setfrom IS NOT NULL 
+                  AND CPE.setto IS NOT NULL
+
+                UNION ALL 
+                SELECT 
+                    CASE 
+                        WHEN CPR.setto >= CPR.setfrom THEN DATEDIFF(SECOND, CPR.setfrom, CPR.setto) 
+                        ELSE DATEDIFF(SECOND, CPR.setfrom, DATEADD(DAY, 1, CPR.setto)) 
+                    END AS SettingSeconds 
+                FROM ConvProductionEntryRod CPR 
+                WHERE CPR.entryno IN (SELECT entryno FROM #FilteredCPR) 
+                  AND CPR.deleted = 0
+                  AND CPR.setfrom IS NOT NULL 
+                  AND CPR.setto IS NOT NULL
+                {t_cnc_setting}
+                {t_conv_setting}
+                {t_rod_setting}
+            ) AS F) AS TotalSettingSeconds,
+
+            (SELECT CAST(AVG(CAST(G.OperEff AS FLOAT)) AS DECIMAL(18,2)) FROM (
+                SELECT CAST(OPREFF AS FLOAT) AS OperEff 
+                FROM ProductionEntry 
+                WHERE prodid IN (SELECT prodid FROM #FilteredPE) 
+                  AND OPREFF IS NOT NULL
+                  AND oprname IS NOT NULL AND LTRIM(RTRIM(oprname)) <> ''
+                UNION ALL 
+                SELECT CAST(eff AS FLOAT) AS OperEff 
+                FROM ConvProductionEntry 
+                WHERE entryno IN (SELECT entryno FROM #FilteredCPE) 
+                  AND eff IS NOT NULL
+                  AND oprname IS NOT NULL AND LTRIM(RTRIM(oprname)) <> ''
+                UNION ALL 
+                SELECT CAST(eff AS FLOAT) AS OperEff 
+                FROM ConvProductionEntryRod 
+                WHERE entryno IN (SELECT entryno FROM #FilteredCPR) 
+                  AND eff IS NOT NULL
+                  AND oprname IS NOT NULL AND LTRIM(RTRIM(oprname)) <> ''
+                {t_cnc_man_eff}
+                {t_conv_man_eff}
+                {t_rod_man_eff}
+            ) AS G) AS Overall_ManEfficiency,
+
+            (SELECT COUNT(DISTINCT macno) FROM (
+                SELECT macno FROM ProductionEntry WHERE prodid IN (SELECT prodid FROM #FilteredPE) AND macno IS NOT NULL
+                UNION SELECT macno FROM ConvProductionEntry WHERE entryno IN (SELECT entryno FROM #FilteredCPE) AND macno IS NOT NULL
+                UNION SELECT macno FROM ConvProductionEntryRod WHERE entryno IN (SELECT entryno FROM #FilteredCPR) AND macno IS NOT NULL
+                {t_cnc_active_mac}
+                {t_conv_active_mac}
+                {t_rod_active_mac}
+            ) AS H) AS ActiveMachines
         """
-        row = run_query(total_prod_query)
-        if row and row[0] is not None: result["totalProductionQty"] = int(row[0])
-
-        # ── Query 2: OK / Accepted Qty ────────────────────────────────
-        ok_qty_query = f"""
-        SELECT COALESCE(SUM(InspOkQty), 0) AS TotalInspectionOkQty
-        FROM (
-            SELECT COALESCE((SELECT SUM(COALESCE(I.okqty, 0)) FROM InterInspectionEntry I WHERE TRY_CAST(I.prodid AS INT) = P.prodid AND I.deleted = 0), 0) AS InspOkQty
-            FROM ProductionEntry P WHERE P.prodid IN (SELECT prodid FROM #FilteredPE)
-            UNION ALL SELECT COALESCE(C.qty, 0) AS InspOkQty FROM ConvProductionEntry C WHERE C.entryno IN (SELECT entryno FROM #FilteredCPE)
-            UNION ALL SELECT COALESCE(R.qty, 0) AS InspOkQty FROM ConvProductionEntryRod R WHERE R.entryno IN (SELECT entryno FROM #FilteredCPR)
-            {t_cnc_ok}
-            {t_conv_ok}
-            {t_rod_ok}
-        ) AS A
-        """
-        row = run_query(ok_qty_query)
-        if row and row[0] is not None: result["okAcceptedQty"] = int(row[0])
-
-        # ── Query 3: Rejection Qty ────────────────────────────────────
-        rej_qty_query = f"""
-        SELECT COALESCE(SUM(RejQty), 0) AS TotalRejectionQty
-        FROM (
-            SELECT COALESCE((SELECT SUM(COALESCE(RJ.qty, 0)) FROM InterInspectionEntry I INNER JOIN Insp_RejectionEntry RJ ON I.inter_inspno = RJ.inter_inspno WHERE TRY_CAST(I.prodid AS INT) = P.prodid AND I.deleted = 0 AND RJ.deleted = 0), 0) AS RejQty
-            FROM ProductionEntry P WHERE P.prodid IN (SELECT prodid FROM #FilteredPE)
-            UNION ALL SELECT 0 AS RejQty FROM ConvProductionEntry C WHERE C.entryno IN (SELECT entryno FROM #FilteredCPE)
-            UNION ALL SELECT ISNULL(R.ScrapQty, 0) AS RejQty FROM ConvProductionEntryRod R WHERE R.entryno IN (SELECT entryno FROM #FilteredCPR)
-            {t_rod_rej}
-        ) AS A
-        """
-        row = run_query(rej_qty_query)
-        if row and row[0] is not None: result["rejectionQty"] = int(row[0])
-
-        # ── Query 4: Overall OEE ──────────────────────────────────────
-        oee_query = f"""
-        SELECT CAST(AVG(CAST(OEE AS FLOAT)) AS DECIMAL(18,2)) AS Overall_OEE
-        FROM (
-            SELECT CASE WHEN OAEFF IS NOT NULL AND QFNEW IS NOT NULL THEN (OAEFF * QFNEW) ELSE COALESCE(OEENEW, OAEFF, 0) END AS OEE FROM ProductionEntry WHERE prodid IN (SELECT prodid FROM #FilteredPE) AND (OAEFF IS NOT NULL OR OEENEW IS NOT NULL OR QFNEW IS NOT NULL)
-            UNION ALL SELECT COALESCE(OAEFF, OEENEW, 0) AS OEE FROM ConvProductionEntry WHERE entryno IN (SELECT entryno FROM #FilteredCPE) AND (OAEFF IS NOT NULL OR OEENEW IS NOT NULL)
-            UNION ALL SELECT COALESCE(OAEFF, OEENEW, 0) AS OEE FROM ConvProductionEntryRod WHERE entryno IN (SELECT entryno FROM #FilteredCPR) AND (OAEFF IS NOT NULL OR OEENEW IS NOT NULL)
-            {t_cnc_oee}
-            {t_conv_oee}
-            {t_rod_oee}
-        ) A
-        """
-        row = run_query(oee_query)
-        if row and row[0] is not None: result["overallOee"] = round(float(row[0]), 2)
-
-        # ── Query 5: Production Hours (Machine Running Hrs) ───────────
-        hours_query = f"""
-        SELECT COALESCE(SUM(TotalRunSeconds), 0) AS TotalRunSeconds
-        FROM (
-            SELECT 
-                CASE 
-                    WHEN PE.runto >= PE.runfrom THEN DATEDIFF(SECOND, PE.runfrom, PE.runto) 
-                    ELSE DATEDIFF(SECOND, PE.runfrom, DATEADD(DAY, 1, PE.runto)) 
-                END AS TotalRunSeconds 
-            FROM ProductionEntry PE 
-            WHERE PE.prodid IN (SELECT prodid FROM #FilteredPE) 
-              AND PE.deleted = 0
-              AND PE.runfrom IS NOT NULL 
-              AND PE.runto IS NOT NULL
-
-            UNION ALL 
-
-            SELECT 
-                CASE 
-                    WHEN CPE.endtime >= CPE.starttime THEN DATEDIFF(SECOND, CPE.starttime, CPE.endtime) 
-                    ELSE DATEDIFF(SECOND, CPE.starttime, DATEADD(DAY, 1, CPE.endtime)) 
-                END AS TotalRunSeconds 
-            FROM ConvProductionEntry CPE 
-            WHERE CPE.entryno IN (SELECT entryno FROM #FilteredCPE) 
-              AND CPE.deleted = 0
-              AND CPE.starttime IS NOT NULL 
-              AND CPE.endtime IS NOT NULL
-
-            UNION ALL 
-
-            SELECT 
-                CASE 
-                    WHEN CPR.endtime >= CPR.starttime THEN DATEDIFF(SECOND, CPR.starttime, CPR.endtime) 
-                    ELSE DATEDIFF(SECOND, CPR.starttime, DATEADD(DAY, 1, CPR.endtime)) 
-                END AS TotalRunSeconds 
-            FROM ConvProductionEntryRod CPR 
-            WHERE CPR.entryno IN (SELECT entryno FROM #FilteredCPR) 
-              AND CPR.deleted = 0
-              AND CPR.starttime IS NOT NULL 
-              AND CPR.endtime IS NOT NULL
-            {t_cnc_hours}
-            {t_conv_hours}
-            {t_rod_hours}
-        ) A
-        """
-        row = run_query(hours_query)
+        row_scalars = run_query(consolidated_scalars_query)
         run_seconds = 0
-        if row and row[0] is not None:
-            run_seconds = int(row[0])
-            result["productionHours"] = float(row[0]) / 3600.0
-            result["productionSeconds"] = run_seconds
+        setting_seconds = 0
+        active_count = 0
+        if row_scalars:
+            if row_scalars[0] is not None: result["totalProductionQty"] = int(row_scalars[0])
+            if row_scalars[1] is not None: result["okAcceptedQty"] = int(row_scalars[1])
+            if row_scalars[2] is not None: result["rejectionQty"] = int(row_scalars[2])
+            if row_scalars[3] is not None: result["overallOee"] = round(float(row_scalars[3]), 2)
+            if row_scalars[4] is not None:
+                run_seconds = int(row_scalars[4])
+                result["productionHours"] = float(row_scalars[4]) / 3600.0
+                result["productionSeconds"] = run_seconds
+            if row_scalars[5] is not None:
+                setting_seconds = int(row_scalars[5])
+                result["settingSeconds"] = setting_seconds
+                result["settingHours"] = float(row_scalars[5]) / 3600.0
+            if row_scalars[6] is not None:
+                result["manEfficiency"] = round(float(row_scalars[6]), 2)
+            if row_scalars[7] is not None:
+                active_count = int(row_scalars[7] or 0)
+                result["activeMachines"] = active_count
 
         # ── Query 6: Total Machine Hours ──────────────────────────────
         total_machine_hours_query = f"""
@@ -1304,56 +1370,6 @@ def production_analysis_report(request):
         result["idleNonAcceptedSeconds"] = idle_non_accepted_seconds
         result["idleNonAcceptedHours"] = round(idle_non_accepted_seconds / 3600.0, 2)
 
-        # ── Query 8: Total Setting Hours ──────────────────────────────
-        setting_hours_query = f"""
-        SELECT COALESCE(SUM(SettingSeconds), 0) AS TotalSettingSeconds
-        FROM (
-            SELECT 
-                CASE 
-                    WHEN PE.setto >= PE.setfrom THEN DATEDIFF(SECOND, PE.setfrom, PE.setto) 
-                    ELSE DATEDIFF(SECOND, PE.setfrom, DATEADD(DAY, 1, PE.setto)) 
-                END AS SettingSeconds 
-            FROM ProductionEntry PE 
-            WHERE PE.prodid IN (SELECT prodid FROM #FilteredPE) 
-              AND PE.deleted = 0
-              AND PE.setfrom IS NOT NULL 
-              AND PE.setto IS NOT NULL
-
-            UNION ALL 
-            SELECT 
-                CASE 
-                    WHEN CPE.setto >= CPE.setfrom THEN DATEDIFF(SECOND, CPE.setfrom, CPE.setto) 
-                    ELSE DATEDIFF(SECOND, CPE.setfrom, DATEADD(DAY, 1, CPE.setto)) 
-                END AS SettingSeconds 
-            FROM ConvProductionEntry CPE 
-            WHERE CPE.entryno IN (SELECT entryno FROM #FilteredCPE) 
-              AND CPE.deleted = 0
-              AND CPE.setfrom IS NOT NULL 
-              AND CPE.setto IS NOT NULL
-
-            UNION ALL 
-            SELECT 
-                CASE 
-                    WHEN CPR.setto >= CPR.setfrom THEN DATEDIFF(SECOND, CPR.setfrom, CPR.setto) 
-                    ELSE DATEDIFF(SECOND, CPR.setfrom, DATEADD(DAY, 1, CPR.setto)) 
-                END AS SettingSeconds 
-            FROM ConvProductionEntryRod CPR 
-            WHERE CPR.entryno IN (SELECT entryno FROM #FilteredCPR) 
-              AND CPR.deleted = 0
-              AND CPR.setfrom IS NOT NULL 
-              AND CPR.setto IS NOT NULL
-            {t_cnc_setting}
-            {t_conv_setting}
-            {t_rod_setting}
-        ) A
-        """
-        row = run_query(setting_hours_query)
-        setting_seconds = 0
-        if row and row[0] is not None:
-            setting_seconds = int(row[0])
-            result["settingSeconds"] = setting_seconds
-            result["settingHours"] = float(row[0]) / 3600.0
-
         # ── Machine Running Hrs = Production Run Time (from/to) + Machine Idle Entry (264 hours on 01-09-2026) ──
         mac_idle_sql, mac_idle_outer, mac_idle_params = _get_idle_union_sql_and_params(request, conn, from_date, to_date, use_mis_idle=False)
         mac_idle_acc_query = f"""
@@ -1389,35 +1405,6 @@ def production_analysis_report(request):
         result["totProductionHoursDisplay"] = _pa_fmt_hms(net_prod_seconds)
         result["totalMachineHours"] = result["totProductionHours"]
 
-        # ── Query 9: Man Efficiency (Operator Eff: PE.OPREFF, CPE.eff, CPR.eff) ──
-        man_efficiency_query = f"""
-        SELECT CAST(AVG(CAST(A.OperEff AS FLOAT)) AS DECIMAL(18,2)) AS Overall_ManEfficiency
-        FROM (
-            SELECT CAST(OPREFF AS FLOAT) AS OperEff 
-            FROM ProductionEntry 
-            WHERE prodid IN (SELECT prodid FROM #FilteredPE) 
-              AND OPREFF IS NOT NULL
-              AND oprname IS NOT NULL AND LTRIM(RTRIM(oprname)) <> ''
-            UNION ALL 
-            SELECT CAST(eff AS FLOAT) AS OperEff 
-            FROM ConvProductionEntry 
-            WHERE entryno IN (SELECT entryno FROM #FilteredCPE) 
-              AND eff IS NOT NULL
-              AND oprname IS NOT NULL AND LTRIM(RTRIM(oprname)) <> ''
-            UNION ALL 
-            SELECT CAST(eff AS FLOAT) AS OperEff 
-            FROM ConvProductionEntryRod 
-            WHERE entryno IN (SELECT entryno FROM #FilteredCPR) 
-              AND eff IS NOT NULL
-              AND oprname IS NOT NULL AND LTRIM(RTRIM(oprname)) <> ''
-            {t_cnc_man_eff}
-            {t_conv_man_eff}
-            {t_rod_man_eff}
-        ) A
-        """
-        row = run_query(man_efficiency_query)
-        if row and row[0] is not None: result["manEfficiency"] = round(float(row[0]), 2)
-
         # ── Query 10: Daily Production Summary ───────────────────────
         shift_summary_query = f"""
         SELECT COUNT(*) AS TotalShifts, CAST(AVG(CAST(ShiftQty AS FLOAT)) AS DECIMAL(18,2)) AS AvgProdPerShift, MAX(ShiftQty) AS PeakShiftOutput, MIN(ShiftQty) AS LowestShiftOutput
@@ -1437,32 +1424,23 @@ def production_analysis_report(request):
             result["peakShiftOutput"]   = int(row[2] or 0)
             result["lowestShiftOutput"] = int(row[3] or 0)
 
-        active_mac_query = f"""
-        SELECT COUNT(DISTINCT macno) AS ActiveMachines
-        FROM (
-            SELECT macno FROM ProductionEntry WHERE prodid IN (SELECT prodid FROM #FilteredPE) AND macno IS NOT NULL
-            UNION SELECT macno FROM ConvProductionEntry WHERE entryno IN (SELECT entryno FROM #FilteredCPE) AND macno IS NOT NULL
-            UNION SELECT macno FROM ConvProductionEntryRod WHERE entryno IN (SELECT entryno FROM #FilteredCPR) AND macno IS NOT NULL
-            {t_cnc_active_mac}
-            {t_conv_active_mac}
-            {t_rod_active_mac}
-        ) AS ActiveMacs
+        # ── Consolidated MacMaster Counts (Total, CNC, Conv) ───────────
+        mac_counts_query = f"""
+        SELECT 
+            COUNT(*) AS TotalMac,
+            SUM(CASE WHEN cnc = 1 THEN 1 ELSE 0 END) AS TotCncMac,
+            SUM(CASE WHEN cnc = 0 OR cnc IS NULL THEN 1 ELSE 0 END) AS TotConvMac
+        FROM MacMaster 
+        WHERE deleted = 0 AND ISNULL(IsNonActive, 0) = 0 {mac_filter_sql}
         """
-        row = run_query(active_mac_query)
-        active_count = int(row[0] or 0) if row else 0
-        result["activeMachines"] = active_count
+        row_macs = run_query(mac_counts_query, mac_filter_params)
+        total_mac = int(row_macs[0] or 0) if row_macs and row_macs[0] is not None else 0
+        tot_cnc_mac = int(row_macs[1] or 0) if row_macs and row_macs[1] is not None else 0
+        tot_conv_mac = int(row_macs[2] or 0) if row_macs and row_macs[2] is not None else 0
 
-        total_mac_query = "SELECT COUNT(*) FROM MacMaster WHERE deleted = 0 AND ISNULL(IsNonActive,0) = 0" + mac_filter_sql
-        row = run_query(total_mac_query, mac_filter_params)
-        total_mac = int(row[0] or 0) if row else 0
         result["idleMachines"] = max(total_mac - active_count, 0)
-
-        # ── Query for CNC and Conventional machine counts ─────────────
-        cnc_mac_query = "SELECT SUM(CASE WHEN cnc = 1 THEN 1 ELSE 0 END) AS TotCncMac, SUM(CASE WHEN cnc = 0 OR cnc IS NULL THEN 1 ELSE 0 END) AS TotConvMac FROM MacMaster WHERE deleted = 0 AND ISNULL(IsNonActive, 0) = 0" + mac_filter_sql
-        row = run_query(cnc_mac_query, mac_filter_params)
-        if row:
-            result["totCncMac"] = int(row[0] or 0)
-            result["totConvMac"] = int(row[1] or 0)
+        result["totCncMac"] = tot_cnc_mac
+        result["totConvMac"] = tot_conv_mac
 
         # ── Query for all active/deleted=0 machines from MacMaster ─────
         machines_query = f"""
@@ -1758,13 +1736,14 @@ def production_analysis_report(request):
             {t_rod_overall_util}
         ) A
         """
-        row = run_query(overall_util_query)
         if result.get("productionHours", 0) > 0:
             result["machineUtilization"] = round(min(100.0, (result.get("totProductionHours", 0.0) / result["productionHours"]) * 100.0), 2)
-        elif row and row[0] is not None:
-            result["machineUtilization"] = round(float(row[0]), 2)
         else:
-            result["machineUtilization"] = 0.0
+            row = run_query(overall_util_query)
+            if row and row[0] is not None:
+                result["machineUtilization"] = round(float(row[0]), 2)
+            else:
+                result["machineUtilization"] = 0.0
         # ── Query 11b: Machine Efficiency ─────────────────────────────
         # Formula logic: sum(machine Utilization as per the record entry) / count of the record entry
         # in three production tables: ProductionEntry (prodid), ConvProductionEntry (entryno), and ConvProductionEntryRod (entryno)
@@ -2355,6 +2334,7 @@ def _get_mac_filter_sql(request, cursor, table_alias=""):
 # Value = Tot Production Minutes × RatePerMinute (from MacMaster RatePerHr / 60)
 # ─────────────────────────────────────────────────────────────────────────────
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="pa_val")
 def production_value_report(request):
     conn = None
     try:
@@ -2617,6 +2597,7 @@ def _pa_fmt_hms(total_seconds):
     return f"{h_str} {h_label} {m_str} mins"
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="pa_idle_bk")
 def production_idle_breakdown(request):
     conn = None
     try:
@@ -2677,38 +2658,7 @@ def production_idle_breakdown(request):
         ir_accept_1 = "IR.IsAccept = 1" if has_idle_reasons else "1 = 0"
         ir_accept_0 = "IR.IsAccept = 0" if has_idle_reasons else "1 = 0"
 
-        classify_sql = f"""
-        {cte_sql}
-        SELECT
-            ISNULL(SUM(
-                CASE
-                    WHEN F.IsEffCalc = 1 THEN F.IdleSeconds
-                    WHEN F.IsEffCalc = 0 THEN 0
-                    WHEN {ir_accept_1} THEN F.IdleSeconds
-                    WHEN {ir_accept_0} THEN 0
-                    ELSE F.IdleSeconds
-                END
-            ), 0) AS AccSecs,
-            ISNULL(SUM(
-                CASE
-                    WHEN F.IsEffCalc = 1 THEN 0
-                    WHEN F.IsEffCalc = 0 THEN F.IdleSeconds
-                    WHEN {ir_accept_1} THEN 0
-                    WHEN {ir_accept_0} THEN F.IdleSeconds
-                    ELSE 0
-                END
-            ), 0) AS NaSecs
-        FROM FilteredIdle F
-        {join_idle_reasons}
-        """
-
-        cursor.execute(classify_sql, idle_params)
-        row = cursor.fetchone()
-        acc_secs = int(row[0] or 0) if row else 0
-        na_secs  = int(row[1] or 0) if row else 0
-        total_secs = acc_secs + na_secs
-
-        # Step 2: Fetch RatePerHr for loss calculation
+        # Step 1: Fetch RatePerHr for loss calculation
         mac_rate = {}
         if has_mac_master:
             try:
@@ -2718,7 +2668,7 @@ def production_idle_breakdown(request):
             except Exception:
                 pass
 
-        # Step 3: Get reason-level breakdown and compute loss per machine
+        # Step 2: Single optimized execution of the CTE grouping by Reason & Machine
         reason_mac_sql = f"""
         {cte_sql}
         SELECT
@@ -2740,7 +2690,6 @@ def production_idle_breakdown(request):
             END) AS NaSecs
         FROM FilteredIdle F
         {join_idle_reasons}
-        WHERE LTRIM(RTRIM(CAST(F.Reason AS NVARCHAR(512)))) <> N''
         GROUP BY LTRIM(RTRIM(CAST(F.Reason AS NVARCHAR(512)))), LTRIM(RTRIM(CAST(F.MacNo AS NVARCHAR(512))))
         """
         cursor.execute(reason_mac_sql, idle_params)
@@ -2750,14 +2699,23 @@ def production_idle_breakdown(request):
         reason_acc_secs = defaultdict(int)
         reason_na_secs  = defaultdict(int)
         reason_na_loss  = defaultdict(float)
+        acc_secs = 0
+        na_secs = 0
 
         for r_row in reason_mac_rows:
             reason_raw = r_row[0]
             mac_raw = r_row[1]
             r_acc_s = int(r_row[2] or 0)
             r_na_s  = int(r_row[3] or 0)
+            # Totals include every idle row (as the original classify query did) ...
+            acc_secs += r_acc_s
+            na_secs  += r_na_s
 
-            r = (str(reason_raw).strip() if reason_raw else "") or "(blank)"
+            # ... but the per-reason breakdown excluded blank reasons (original
+            # WHERE LTRIM(RTRIM(Reason)) <> ''), so keep that behaviour here.
+            r = str(reason_raw).strip() if reason_raw else ""
+            if not r:
+                continue
             mn = str(mac_raw).strip() if mac_raw else ""
             rate = mac_rate.get(mn, 0.0)
 
@@ -2766,6 +2724,8 @@ def production_idle_breakdown(request):
             if r_na_s > 0:
                 reason_na_secs[r] += r_na_s
                 reason_na_loss[r] += (r_na_s / 3600.0) * rate
+
+        total_secs = acc_secs + na_secs
 
         # Build sorted lists for accepted and non_accepted reasons
         sorted_acc_reasons = sorted(reason_acc_secs.items(), key=lambda x: -x[1])
@@ -2849,6 +2809,7 @@ def production_idle_breakdown(request):
 # Returns row-level shift records for a given date (or date range).
 # ─────────────────────────────────────────────────────────────────────────────
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="pa_daily_det")
 def daily_production_details(request):
     conn = None
     try:
@@ -3032,6 +2993,7 @@ def daily_production_details(request):
         SUM(ISNULL(rejqty,0)) AS RejQty
     FROM InterInspectionEntry
     WHERE deleted = 0
+      AND TRY_CAST(prodid AS INT) IN (SELECT prodid FROM #FilteredPE)
     GROUP BY prodid
 ),
 
@@ -3277,6 +3239,7 @@ ORDER BY F.ProdDate DESC, F.Machine, F.Shift;
             except: pass
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="pa_mac_card")
 def machine_card_data(request, macno):
     """
     Get Machine Detail Card metrics and shift logs.
@@ -3922,6 +3885,7 @@ def machine_card_data(request, macno):
 
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="pa_filters")
 def production_analysis_filters(request):
     """
     Get dynamic list of machines, operators, and shifts for filters.
@@ -4321,3 +4285,23 @@ def production_mhr_inputs(request):
         if conn:
             try: conn.close()
             except: pass
+
+# ─────────────────────────────────────────────────────────────
+#  BUNDLE: report + value chart + idle breakdown + daily details in
+#  one HTTP request (shared tenant connection per worker thread).
+# ─────────────────────────────────────────────────────────────
+
+from .utils.bundle import run_bundle
+
+_PROD_BUNDLE_REGISTRY = [
+    ("report", production_analysis_report),
+    ("value", production_value_report),
+    ("idle_breakdown", production_idle_breakdown),
+    ("daily_details", daily_production_details),
+]
+
+
+@api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="pa_bundle")
+def production_analysis_bundle(request):
+    return run_bundle(request, _PROD_BUNDLE_REGISTRY, max_workers=3)

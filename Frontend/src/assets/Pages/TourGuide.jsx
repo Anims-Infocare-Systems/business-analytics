@@ -21,7 +21,8 @@ import {
     FiSliders,
     FiUserCheck,
     FiCpu,
-    FiLayers
+    FiLayers,
+    FiCompass
 } from "react-icons/fi";
 import { HiSparkles } from "react-icons/hi2";
 
@@ -44,6 +45,7 @@ function renderStepIcon(iconName) {
     if (key === "usercheck" || key === "operator") return <FiUserCheck className="tg-step-icon-svg" />;
     if (key === "cpu" || key === "machine") return <FiCpu className="tg-step-icon-svg" />;
     if (key === "layers" || key === "timeline") return <FiLayers className="tg-step-icon-svg" />;
+    if (key === "compass" || key === "radar" || key === "spotlight") return <FiCompass className="tg-step-icon-svg" />;
     return <span className="tg-step-icon-emoji">✨</span>;
 }
 
@@ -59,10 +61,26 @@ export default function TourGuide({
     const [targetRect, setTargetRect] = useState(null);
     const [popoverPos, setPopoverPos] = useState({ top: 0, left: 0, placement: "bottom" });
     const [isCelebrating, setIsCelebrating] = useState(false);
+    const [isCrossFading, setIsCrossFading] = useState(false);
+    const [isTargetMissing, setIsTargetMissing] = useState(false);
     const retryTimersRef = useRef([]);
     const popoverRef = useRef(null);
+    const rafPollRef = useRef(null);
+    const rafScrollRef = useRef(null);
+    const isAutoScrollingRef = useRef(false);
 
     const currentStep = steps[currentStepIndex];
+
+    // Proactively pre-warm all tour module bundles immediately on tour start
+    useEffect(() => {
+        if (!isOpen) return;
+        import("./SalesAnalysis");
+        import("./PurchaseAnalysis");
+        import("./QualityAnalysis");
+        import("./ProductionAnalysis");
+        import("./UsersSetting");
+        import("./SpotlightSettingsTab");
+    }, [isOpen]);
 
     // Notify parent on step change (to auto-open submenus or un-collapse sidebar)
     useEffect(() => {
@@ -72,22 +90,14 @@ export default function TourGuide({
         }
     }, [currentStepIndex, isOpen, isCelebrating, currentStep, onStepChange]);
 
-    // Helper: Check if element is genuinely rendered in DOM
+    // Helper: Zero-reflow DOM visibility check (No forced style recalculation!)
     const isElementVisible = (el) => {
         if (!el) return false;
-        try {
-            const style = window.getComputedStyle(el);
-            if (style.display === "none" || style.visibility === "hidden") {
-                return false;
-            }
-            return true;
-        } catch {
-            return false;
-        }
+        return el.offsetParent !== null || el.getClientRects().length > 0;
     };
 
-    // Measure target element position
-    const updateTargetPosition = useCallback(() => {
+    // Measure target element position (Pure Read & Math Calculation — Zero DOM mutations)
+    const updateTargetPosition = useCallback((markMissingIfNotFound = false) => {
         if (!isOpen || isCelebrating || !currentStep) return;
 
         let el = document.querySelector(currentStep.targetSelector);
@@ -96,23 +106,7 @@ export default function TourGuide({
         }
 
         if (isElementVisible(el)) {
-            let rect = el.getBoundingClientRect();
-
-            // If target is currently scrolled off-screen, auto-scroll enclosing section into view immediately
-            if (rect.bottom < 0 || rect.top > window.innerHeight) {
-                const contentContainer = document.querySelector(".dl-content");
-                const enclosingCard = el.closest(".qa2-card, .qa2-timeline-container, .qa2-filter-card, .pa2-card, .pa2-fs-section, .apa-root, .sa-card") || el;
-                if (contentContainer && enclosingCard) {
-                    const cRect = contentContainer.getBoundingClientRect();
-                    const eRect = enclosingCard.getBoundingClientRect();
-                    const targetScrollTop = contentContainer.scrollTop + (eRect.top - cRect.top) - 16;
-                    const finalScroll = Math.max(0, targetScrollTop);
-                    contentContainer.scrollTop = finalScroll;
-                    contentContainer.scrollTo({ top: finalScroll, behavior: "auto" });
-                    rect = el.getBoundingClientRect();
-                }
-            }
-
+            const rect = el.getBoundingClientRect();
             const padding = 6;
             const newRect = {
                 top: Math.max(4, rect.top - padding),
@@ -121,6 +115,8 @@ export default function TourGuide({
                 height: rect.height + (padding * 2)
             };
             setTargetRect(newRect);
+            setIsTargetMissing(false);
+            setIsCrossFading(false);
 
             // Compute popover position
             const isMobile = window.innerWidth <= 768;
@@ -157,7 +153,7 @@ export default function TourGuide({
                 + 65;
 
             const popoverHeight = Math.max(measuredHeight, estimatedHeight, 380);
-            const popoverWidth = Math.min(window.innerWidth - 32, measuredWidth > 0 ? measuredWidth : (hasSubItems ? 400 : 360));
+            const popoverWidth = Math.min(window.innerWidth - 32, measuredWidth > 0 ? measuredWidth : 440);
             const margin = 14;
 
             let top = 0;
@@ -166,7 +162,7 @@ export default function TourGuide({
 
             // Calculate safe bounds considering the left sidebar
             const sidebarEl = document.querySelector(".dl-sidebar");
-            const minAllowedLeft = sidebarEl && window.getComputedStyle(sidebarEl).position !== "fixed"
+            const minAllowedLeft = sidebarEl && window.innerWidth >= 768
                 ? Math.max(16, sidebarEl.getBoundingClientRect().right + 16)
                 : 16;
             const maxAllowedLeft = Math.max(minAllowedLeft, window.innerWidth - popoverWidth - 16);
@@ -179,11 +175,8 @@ export default function TourGuide({
 
             const spaceAbove = newRect.top - 16;
             const spaceBelow = window.innerHeight - (newRect.top + newRect.height) - 16;
-
-            // Check if card takes up majority of screen height (tall sections)
             const isTallCard = newRect.height > (window.innerHeight * 0.55);
 
-            // Smart horizontal alignment calculation
             const computeHorizontalLeft = () => {
                 if (currentStep.align === "start") {
                     return Math.max(minAllowedLeft, Math.min(maxAllowedLeft, newRect.left));
@@ -195,7 +188,6 @@ export default function TourGuide({
             };
 
             if (isTallCard) {
-                // When the target element is taller than 55% of the viewport:
                 if (placement === "top" && spaceAbove >= popoverHeight + margin) {
                     top = newRect.top - popoverHeight - margin;
                     left = computeHorizontalLeft();
@@ -203,7 +195,6 @@ export default function TourGuide({
                     top = newRect.top + newRect.height + margin;
                     left = computeHorizontalLeft();
                 } else {
-                    // Dock inside viewport cleanly near bottom, avoiding obstructing center data
                     top = window.innerHeight - popoverHeight - 24;
                     left = currentStep.align === "start"
                         ? Math.max(minAllowedLeft, Math.min(maxAllowedLeft, newRect.left + 16))
@@ -245,7 +236,6 @@ export default function TourGuide({
                 }
             }
 
-            // CRITICAL: Clamping ensures that popover NEVER exceeds viewport boundaries:
             left = Math.max(minAllowedLeft, Math.min(maxAllowedLeft, left));
             top = Math.max(16, Math.min(window.innerHeight - popoverHeight - 24, top));
 
@@ -253,13 +243,17 @@ export default function TourGuide({
             return;
         }
 
-        // Target not found on screen
-        setTargetRect(null);
-        setPopoverPos({ top: 0, left: 0, placement: "bottom", isMobileDocked: false });
+        // Target not found on screen yet
+        if (markMissingIfNotFound) {
+            setIsTargetMissing(true);
+            setTargetRect(null);
+            setIsCrossFading(false);
+            setPopoverPos({ top: 0, left: 0, placement: "bottom", isMobileDocked: false });
+        }
     }, [isOpen, isCelebrating, currentStep]);
 
     // Smart scroll & spotlight positioning
-    const attemptScrollAndPosition = useCallback(() => {
+    const attemptScrollAndPosition = useCallback((markMissingIfNotFound = false) => {
         if (!isOpen || isCelebrating || !currentStep) return;
 
         // 1. In-card tab switching (e.g. PO Fulfillment vs Futuristic Schedule)
@@ -283,7 +277,7 @@ export default function TourGuide({
         if (el) {
             // Smart scroll: position the section top neatly ~16px below the topbar in .dl-content
             const contentContainer = document.querySelector(".dl-content");
-            const enclosingCard = el.closest(".qa2-card, .qa2-timeline-container, .qa2-filter-card, .pa2-card, .pa2-fs-section, .apa-root, .sa-card") || el;
+            const enclosingCard = el.closest(".qa2-card, .qa2-timeline-container, .qa2-filter-card, .pa2-card, .pa2-filters, .pa2-pvmhr-card, .pa2-fs-section, .apa-root, .sa-card, .us-header, .us-root, .sst-hero-banner, .sst-root") || el;
 
             if (contentContainer && enclosingCard) {
                 const containerRect = contentContainer.getBoundingClientRect();
@@ -292,13 +286,9 @@ export default function TourGuide({
 
                 // If section is not already aligned ~16px below topbar, perform instant scroll
                 if (Math.abs(relativeTop - 16) > 20) {
+                    isAutoScrollingRef.current = true;
                     const targetScrollTop = contentContainer.scrollTop + relativeTop - 16;
-                    const finalScroll = Math.max(0, targetScrollTop);
-                    contentContainer.scrollTop = finalScroll;
-                    contentContainer.scrollTo({
-                        top: finalScroll,
-                        behavior: "auto"
-                    });
+                    contentContainer.scrollTop = Math.max(0, targetScrollTop);
                 }
             } else {
                 try {
@@ -309,32 +299,68 @@ export default function TourGuide({
             }
         }
 
-        updateTargetPosition();
+        updateTargetPosition(markMissingIfNotFound);
+        // Immediate post-scroll RAF pass ensures exact bounding box after layout settles
+        requestAnimationFrame(() => {
+            updateTargetPosition(markMissingIfNotFound);
+            setTimeout(() => {
+                isAutoScrollingRef.current = false;
+            }, 60);
+        });
     }, [isOpen, isCelebrating, currentStep, updateTargetPosition]);
 
-    // Handle step change & scroll target into view
+    // Handle step change, predictive prefetching & adaptive RAF element detector
     useEffect(() => {
         if (!isOpen || isCelebrating || !currentStep) return;
 
-        attemptScrollAndPosition();
+        // 1. Predictive bundle prefetching for upcoming tour modules (zero network wait!)
+        const nextStep = steps[currentStepIndex + 1];
+        if (nextStep && nextStep.navSubItem && nextStep.navSubItem !== currentStep.navSubItem) {
+            if (nextStep.navSubItem === "Purchase Analysis") import("./PurchaseAnalysis");
+            else if (nextStep.navSubItem === "Quality Analysis") import("./QualityAnalysis");
+            else if (nextStep.navSubItem === "Production Analysis") import("./ProductionAnalysis");
+            else if (nextStep.navSubItem === "Sales Analysis") import("./SalesAnalysis");
+            else if (nextStep.navSubItem === "Users Setting") import("./UsersSetting");
+        }
 
-        // Clear any prior timers
+        // Cancel previous polling and timers
+        if (rafPollRef.current) cancelAnimationFrame(rafPollRef.current);
         retryTimersRef.current.forEach(clearTimeout);
         retryTimersRef.current = [];
 
-        // Staggered checks to accommodate route transitions, table loading, CSS animations & mobile drawer
-        [80, 180, 320, 520, 850, 1200, 1800, 2600].forEach(delay => {
-            const t = setTimeout(attemptScrollAndPosition, delay);
-            retryTimersRef.current.push(t);
-        });
+        // Initial measurement attempt without forcing missing modal
+        attemptScrollAndPosition(false);
+
+        // 2. Adaptive RAF Polling: stops as soon as target element mounts in DOM
+        let frameCount = 0;
+        const maxFrames = 75; // ~1.2s max duration
+        const pollForElement = () => {
+            const el = document.querySelector(currentStep.targetSelector) ||
+                       (currentStep.fallbackSelector ? document.querySelector(currentStep.fallbackSelector) : null);
+            if (isElementVisible(el)) {
+                attemptScrollAndPosition(false);
+                return; // Target found and aligned! Terminate polling loop immediately!
+            }
+            if (++frameCount < maxFrames) {
+                rafPollRef.current = requestAnimationFrame(pollForElement);
+            }
+        };
+        rafPollRef.current = requestAnimationFrame(pollForElement);
+
+        // Safety fallback timer for delayed data fetches: only after 650ms if still missing, show centered modal
+        const fallbackTimer = setTimeout(() => {
+            attemptScrollAndPosition(true);
+        }, 650);
+        retryTimersRef.current.push(fallbackTimer);
 
         return () => {
+            if (rafPollRef.current) cancelAnimationFrame(rafPollRef.current);
             retryTimersRef.current.forEach(clearTimeout);
             retryTimersRef.current = [];
         };
-    }, [currentStepIndex, isOpen, isCelebrating, currentStep, attemptScrollAndPosition]);
+    }, [currentStepIndex, isOpen, isCelebrating, currentStep, attemptScrollAndPosition, steps]);
 
-    // Auto-adjust scroll & spotlight whenever content size changes (e.g. API data load, chart rendering)
+    // Content container resize observer (throttled via RAF)
     useEffect(() => {
         if (!isOpen || isCelebrating || !currentStep) return;
 
@@ -345,7 +371,7 @@ export default function TourGuide({
         const ro = new ResizeObserver(() => {
             cancelAnimationFrame(frameId);
             frameId = requestAnimationFrame(() => {
-                attemptScrollAndPosition();
+                updateTargetPosition(false);
             });
         });
 
@@ -354,42 +380,83 @@ export default function TourGuide({
             cancelAnimationFrame(frameId);
             ro.disconnect();
         };
-    }, [isOpen, isCelebrating, currentStepIndex, attemptScrollAndPosition]);
+    }, [isOpen, isCelebrating, currentStepIndex, updateTargetPosition]);
 
-    // Listen to resize and scroll
+    // Passive, RAF-throttled scroll and resize listeners
     useEffect(() => {
         if (!isOpen) return;
 
-        const handleUpdate = () => {
-            updateTargetPosition();
+        const handleThrottledUpdate = () => {
+            if (isAutoScrollingRef.current) return; // Prevent layout thrash during programmatic scroll
+            cancelAnimationFrame(rafScrollRef.current);
+            rafScrollRef.current = requestAnimationFrame(() => {
+                updateTargetPosition(false);
+            });
         };
 
-        window.addEventListener("resize", handleUpdate);
-        window.addEventListener("scroll", handleUpdate, true);
+        window.addEventListener("resize", handleThrottledUpdate, { passive: true });
+        const contentContainer = document.querySelector(".dl-content");
+        if (contentContainer) {
+            contentContainer.addEventListener("scroll", handleThrottledUpdate, { passive: true });
+        }
         return () => {
-            window.removeEventListener("resize", handleUpdate);
-            window.removeEventListener("scroll", handleUpdate, true);
+            cancelAnimationFrame(rafScrollRef.current);
+            window.removeEventListener("resize", handleThrottledUpdate);
+            if (contentContainer) {
+                contentContainer.removeEventListener("scroll", handleThrottledUpdate);
+            }
         };
     }, [isOpen, updateTargetPosition]);
 
-    // Prevent background scrolling while tour is active
-    useEffect(() => {
-        if (!isOpen) return;
-
-        const preventScroll = (e) => {
-            if (e.target && e.target.closest && e.target.closest(".tg-popover, .tg-celebration-card")) {
-                return;
+    const handleNext = useCallback(() => {
+        if (currentStepIndex < steps.length - 1) {
+            const nextIdx = currentStepIndex + 1;
+            const nextStep = steps[nextIdx];
+            const isCrossPage = nextStep && (
+                nextStep.navSubItem !== currentStep?.navSubItem ||
+                nextStep.navItem !== currentStep?.navItem
+            );
+            if (isCrossPage) {
+                setIsCrossFading(true);
             }
-            e.preventDefault();
-        };
+            setCurrentStepIndex(nextIdx);
+            if (typeof onStepChange === "function") {
+                onStepChange(nextStep, nextIdx);
+            }
+        } else {
+            setIsCelebrating(true);
+        }
+    }, [currentStepIndex, steps, currentStep, onStepChange]);
 
-        window.addEventListener("wheel", preventScroll, { passive: false });
-        window.addEventListener("touchmove", preventScroll, { passive: false });
-        return () => {
-            window.removeEventListener("wheel", preventScroll);
-            window.removeEventListener("touchmove", preventScroll);
-        };
-    }, [isOpen]);
+    const handleBack = useCallback(() => {
+        if (currentStepIndex > 0) {
+            const prevIdx = currentStepIndex - 1;
+            const prevStep = steps[prevIdx];
+            const isCrossPage = prevStep && (
+                prevStep.navSubItem !== currentStep?.navSubItem ||
+                prevStep.navItem !== currentStep?.navItem
+            );
+            if (isCrossPage) {
+                setIsCrossFading(true);
+            }
+            setCurrentStepIndex(prevIdx);
+            if (typeof onStepChange === "function") {
+                onStepChange(prevStep, prevIdx);
+            }
+        }
+    }, [currentStepIndex, steps, currentStep, onStepChange]);
+
+    const handleClose = useCallback(() => {
+        setCurrentStepIndex(0);
+        setIsCelebrating(false);
+        if (onClose) onClose();
+    }, [onClose]);
+
+    const handleFinishCelebration = useCallback(() => {
+        setCurrentStepIndex(0);
+        setIsCelebrating(false);
+        if (onComplete) onComplete();
+    }, [onComplete]);
 
     // Keyboard navigation & focus trap
     useEffect(() => {
@@ -428,33 +495,7 @@ export default function TourGuide({
 
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
-    });
-
-    const handleNext = () => {
-        if (currentStepIndex < steps.length - 1) {
-            setCurrentStepIndex(i => i + 1);
-        } else {
-            setIsCelebrating(true);
-        }
-    };
-
-    const handleBack = () => {
-        if (currentStepIndex > 0) {
-            setCurrentStepIndex(i => i - 1);
-        }
-    };
-
-    const handleClose = () => {
-        setCurrentStepIndex(0);
-        setIsCelebrating(false);
-        if (onClose) onClose();
-    };
-
-    const handleFinishCelebration = () => {
-        setCurrentStepIndex(0);
-        setIsCelebrating(false);
-        if (onComplete) onComplete();
-    };
+    }, [isOpen, handleClose, handleNext, handleBack]);
 
     if (!isOpen) return null;
 
@@ -470,11 +511,16 @@ export default function TourGuide({
             }}
             onMouseDown={(e) => e.stopPropagation()}
             onMouseUp={(e) => e.stopPropagation()}
+            onWheel={(e) => {
+                if (e.target && !e.target.closest(".tg-popover, .tg-celebration-card")) {
+                    e.preventDefault();
+                }
+            }}
         >
             {/* ── Spotlight Cutout or Backdrop ── */}
             {targetRect && !isCelebrating ? (
                 <div
-                    className="tg-spotlight"
+                    className={`tg-spotlight ${isCrossFading ? "tg-spotlight--cross-fading" : ""}`}
                     style={{
                         top: `${targetRect.top}px`,
                         left: `${targetRect.left}px`,
@@ -506,7 +552,8 @@ export default function TourGuide({
                     ref={popoverRef}
                     className={[
                         "tg-popover",
-                        !targetRect ? "tg-popover--centered" : "",
+                        isCrossFading ? "tg-popover--cross-fading" : "",
+                        (isTargetMissing && !targetRect) ? "tg-popover--centered" : "",
                         popoverPos.isMobileDocked
                             ? (popoverPos.mobileDock === "top" ? "tg-popover--mobile-top" : "tg-popover--mobile-bottom")
                             : ""

@@ -39,243 +39,229 @@ def dashboard2_customer_po_vs_sales(request):
     except ValueError as e:
         return Response({"error": str(e)}, status=401)
 
-    sql = """
-WITH SHD_PO_DET AS
-(
-    SELECT DISTINCT
-        S.Apono,
-        S.pono,
-        S.itcode,
-        S.poslno
-    FROM In_PoDet_ShdQty S
-    WHERE ISNULL(S.deleted, 0) = 0
-),
+    from collections import defaultdict
+    from datetime import datetime, date
 
-PO_DATA AS
-(
-    /* 1. PO items WITH Schedule Date (from In_PoDet_ShdQty) */
-    SELECT
-        YEAR(ISNULL(S.shddate, ISNULL(S.reqdate, PM.PODT))) AS POYear,
-        MONTH(ISNULL(S.shddate, ISNULL(S.reqdate, PM.PODT))) AS POMonth,
-        DATENAME(MONTH, ISNULL(S.shddate, ISNULL(S.reqdate, PM.PODT))) AS MonthName,
-        CAST(ISNULL(S.shddate, ISNULL(S.reqdate, PM.PODT)) AS DATE) AS PODate,
-        ISNULL(NULLIF(LTRIM(RTRIM(CM.CName)), N''), ISNULL(NULLIF(LTRIM(RTRIM(CA.CName)), N''), N'—')) AS CustomerName,
+    is_br_currency = 0
+    try:
+        cur_cs = conn.cursor()
+        cur_cs.execute("SELECT TOP 1 ISNULL(IsBRCurrency, 0) FROM CompanySetting")
+        cs_row = cur_cs.fetchone()
+        if cs_row and cs_row[0] is not None:
+            is_br_currency = int(cs_row[0])
+        cur_cs.close()
+    except Exception:
+        is_br_currency = 0
 
-        PM.Apono,
-        PD.ItCode,
-        ISNULL(PM.type, N'') AS PoType,
-
-        SUM(ISNULL(S.shdQty, 0) * ISNULL(PD.Rate, 0)) AS POValue,
-        ISNULL(MAX(PD.Rate), 0) AS PORate
-
-    FROM In_PoMas PM
-    INNER JOIN In_PoDet PD
-        ON PM.PONO = PD.PONO
-    INNER JOIN In_PoDet_ShdQty S
-        ON (S.Apono = PM.Apono OR S.pono = PM.PONO)
-       AND S.itcode = PD.ItCode
-       AND S.poslno = PD.poslno
-    LEFT JOIN CustMast CM
-        ON PM.CId = CM.Id
-    LEFT JOIN CustAliasMast CA
-        ON PM.CId = CA.Id
-    WHERE PM.Deleted = 0
-      AND PD.Deleted = 0
-      AND ISNULL(S.deleted, 0) = 0
-    GROUP BY
-        YEAR(ISNULL(S.shddate, ISNULL(S.reqdate, PM.PODT))),
-        MONTH(ISNULL(S.shddate, ISNULL(S.reqdate, PM.PODT))),
-        DATENAME(MONTH, ISNULL(S.shddate, ISNULL(S.reqdate, PM.PODT))),
-        CAST(ISNULL(S.shddate, ISNULL(S.reqdate, PM.PODT)) AS DATE),
-        ISNULL(NULLIF(LTRIM(RTRIM(CM.CName)), N''), ISNULL(NULLIF(LTRIM(RTRIM(CA.CName)), N''), N'—')),
-        PM.Apono,
-        PD.ItCode,
-        PM.type
-
-    UNION ALL
-
-    /* 2. PO items WITHOUT Schedule (fallback to PO Date and Amt) */
-    SELECT
-        YEAR(PM.PODT) AS POYear,
-        MONTH(PM.PODT) AS POMonth,
-        DATENAME(MONTH, PM.PODT) AS MonthName,
-        CAST(PM.PODT AS DATE) AS PODate,
-        ISNULL(NULLIF(LTRIM(RTRIM(CM.CName)), N''), ISNULL(NULLIF(LTRIM(RTRIM(CA.CName)), N''), N'—')) AS CustomerName,
-
-        PM.Apono,
-        PD.ItCode,
-        ISNULL(PM.type, N'') AS PoType,
-
-        SUM(ISNULL(PD.Amt, 0)) AS POValue,
-        ISNULL(MAX(PD.Rate), 0) AS PORate
-
-    FROM In_PoMas PM
-    INNER JOIN In_PoDet PD
-        ON PM.PONO = PD.PONO
-    LEFT JOIN CustMast CM
-        ON PM.CId = CM.Id
-    LEFT JOIN CustAliasMast CA
-        ON PM.CId = CA.Id
-    LEFT JOIN SHD_PO_DET SPD
-        ON (SPD.Apono = PM.Apono OR SPD.pono = PM.PONO)
-       AND SPD.itcode = PD.ItCode
-       AND SPD.poslno = PD.poslno
-    WHERE PM.Deleted = 0
-      AND PD.Deleted = 0
-      AND SPD.itcode IS NULL
-    GROUP BY
-        YEAR(PM.PODT),
-        MONTH(PM.PODT),
-        DATENAME(MONTH, PM.PODT),
-        CAST(PM.PODT AS DATE),
-        ISNULL(NULLIF(LTRIM(RTRIM(CM.CName)), N''), ISNULL(NULLIF(LTRIM(RTRIM(CA.CName)), N''), N'—')),
-        PM.Apono,
-        PD.ItCode,
-        PM.type
-),
-
-
-/* Step 1: Build a clean Apono+PartNo → Rate lookup from PO master/detail */
-PO_RATE AS
-(
-    SELECT
-        LTRIM(RTRIM(CAST(PM.Apono  AS NVARCHAR(512)))) AS Apono,
-        LTRIM(RTRIM(CAST(PD.ItCode AS NVARCHAR(512)))) AS ItCode,
-        MAX(ISNULL(PD.Rate, 0))                        AS Rate
-    FROM In_PoMas PM
-    INNER JOIN In_PoDet PD ON PD.PONO = PM.PONO AND PD.Deleted = 0
-    WHERE PM.Deleted = 0
-    GROUP BY
-        LTRIM(RTRIM(CAST(PM.Apono  AS NVARCHAR(512)))),
-        LTRIM(RTRIM(CAST(PD.ItCode AS NVARCHAR(512))))
-),
-
-/* Step 2: DC dispatched qty × PO rate for each Apono+PartNo */
-DC_SALES AS
-(
-    SELECT
-        LTRIM(RTRIM(CAST(D.Apono  AS NVARCHAR(512)))) AS Apono,
-        LTRIM(RTRIM(CAST(D.PartNo AS NVARCHAR(512)))) AS PartNo,
-        SUM(ISNULL(D.okqty, 0) * ISNULL(R.Rate, 0))  AS SalesValue
-    FROM DcInSubDet D
-    LEFT JOIN PO_RATE R
-        ON  R.Apono  = LTRIM(RTRIM(CAST(D.Apono  AS NVARCHAR(512))))
-        AND R.ItCode = LTRIM(RTRIM(CAST(D.PartNo AS NVARCHAR(512))))
-    WHERE ISNULL(D.Deleted, 0) = 0
-    GROUP BY
-        LTRIM(RTRIM(CAST(D.Apono  AS NVARCHAR(512)))),
-        LTRIM(RTRIM(CAST(D.PartNo AS NVARCHAR(512))))
-
-    UNION ALL
-
-    SELECT
-        LTRIM(RTRIM(CAST(D.Apono  AS NVARCHAR(512)))) AS Apono,
-        LTRIM(RTRIM(CAST(D.PartNo AS NVARCHAR(512)))) AS PartNo,
-        SUM(ISNULL(D.okqty, 0) * ISNULL(R.Rate, 0))  AS SalesValue
-    FROM DcInSubDetAssmPoDet D
-    LEFT JOIN PO_RATE R
-        ON  R.Apono  = LTRIM(RTRIM(CAST(D.Apono  AS NVARCHAR(512))))
-        AND R.ItCode = LTRIM(RTRIM(CAST(D.PartNo AS NVARCHAR(512))))
-    WHERE ISNULL(D.Deleted, 0) = 0
-    GROUP BY
-        LTRIM(RTRIM(CAST(D.Apono  AS NVARCHAR(512)))),
-        LTRIM(RTRIM(CAST(D.PartNo AS NVARCHAR(512))))
-),
-
-SALES_DATA AS
-(
-    SELECT Apono, PartNo, SUM(SalesValue) AS SalesValue
-    FROM DC_SALES
-    GROUP BY Apono, PartNo
-)
-
-
-SELECT
-    P.CustomerName,
-    P.POYear,
-    P.POMonth,
-    P.MonthName,
-    P.PODate,
-    P.Apono,
-    P.ItCode,
-    P.PoType,
-
-    SUM(P.POValue) AS POValue,
-
-    SUM(
-        CASE
-            WHEN ISNULL(S.SalesValue, 0) > P.POValue THEN P.POValue
-            ELSE ISNULL(S.SalesValue, 0)
-        END
-    ) AS SalesValue,
-
-    SUM(
-        CASE
-            WHEN ISNULL(S.SalesValue, 0) >= P.POValue THEN 0
-            ELSE P.POValue - ISNULL(S.SalesValue, 0)
-        END
-    ) AS PendingValue
-
-FROM PO_DATA P
-
-LEFT JOIN SALES_DATA S
-    ON  S.Apono  = LTRIM(RTRIM(CAST(P.Apono  AS NVARCHAR(512))))
-   AND  S.PartNo = LTRIM(RTRIM(CAST(P.ItCode AS NVARCHAR(512))))
-
-GROUP BY
-    P.CustomerName,
-    P.POYear,
-    P.POMonth,
-    P.MonthName,
-    P.PODate,
-    P.Apono,
-    P.ItCode,
-    P.PoType
-
-ORDER BY
-    P.PODate,
-    P.Apono;
-    """
-
-    
-    rows = []
     cursor = None
     try:
         cursor = conn.cursor()
-        cursor.execute(sql)
+
+        # Check CustAliasMast existence
+        try:
+            cursor.execute("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'CustAliasMast'")
+            use_alias = cursor.fetchone() is not None
+        except Exception:
+            use_alias = False
+
+        if use_alias:
+            cust_name_expr = "LTRIM(RTRIM(ISNULL(NULLIF(LTRIM(RTRIM(ISNULL(cm.CName, N''))), N''), NULLIF(LTRIM(RTRIM(ISNULL(ca.CName, N''))), N''))))"
+            cust_join = """
+                LEFT JOIN CustMast cm ON p.cid = cm.Id
+                LEFT JOIN CustAliasMast ca ON p.cid = ca.Id
+            """
+        else:
+            cust_name_expr = "LTRIM(RTRIM(ISNULL(cm.CName, N'')))"
+            cust_join = "LEFT JOIN CustMast cm ON p.cid = cm.Id"
+
+        # 1. Fetch all active schedules exactly as in Future Projections & Order Book Status
+        schedules_sql = f"""
+        SELECT 
+            s.Apono,
+            s.pono,
+            s.itcode AS partno,
+            s.poslno,
+            s.reqdate,
+            s.shddate,
+            s.shdQty,
+            p.podt,
+            {cust_name_expr} AS CustomerName,
+            pd.Rate,
+            ISNULL(pd.amt, 0) AS amt,
+            CASE WHEN ISNULL(pd.CurrRate, 0) = 0 THEN 1 ELSE pd.CurrRate END AS CurrRate,
+            ISNULL(pd.Qty, 0) AS poQty,
+            ISNULL(p.type, N'') AS PoType
+        FROM In_PoDet_ShdQty s
+        INNER JOIN In_PoMas p ON s.Apono = p.Apono
+        INNER JOIN In_PoDet pd ON pd.pono = p.pono AND pd.ItCode = s.itcode AND pd.poslno = s.poslno
+        {cust_join}
+        WHERE ISNULL(s.deleted, 0) = 0
+          AND ISNULL(p.deleted, 0) = 0
+          AND ISNULL(pd.deleted, 0) = 0
+          AND s.shddate IS NOT NULL
+        ORDER BY s.reqdate ASC
+        """
+        cursor.execute(schedules_sql)
+        schedules = []
         for row in cursor.fetchall() or []:
-            customer = str(row[0]) if row[0] else "—"
-            year_short = str(row[1])[-2:] if row[1] is not None else "00"
-            month_name = str(row[3])[:3] if row[3] else "—"
-            month_label = f"{month_name}-{year_short}" if row[3] and row[1] is not None else "—"
-            date_str = str(row[4])[:10] if row[4] else ""
-            po_number = str(row[5]) if row[5] else ""
-            part_number = str(row[6]) if row[6] else ""
-            po_type = str(row[7]).strip() if row[7] else ""
-            
-            po_val = float(row[8] or 0) / 100000.0
-            sales_val = float(row[9] or 0) / 100000.0
-            pending_val = float(row[10] or 0) / 100000.0
-            
-            rows.append({
-                "customer": customer,
-                "month": month_label,
-                "date": date_str,
-                "orderValue": round(po_val, 4),
-                "salesValue": round(sales_val, 4),
-                "pendingValue": round(pending_val, 4),
-                "poNumber": po_number,
-                "partNumber": part_number,
-                "poType": po_type
+            rate = float(row[9] or 0)
+            amt = float(row[10] or 0)
+            curr_rate = float(row[11] or 1) if row[11] is not None else 1.0
+            if curr_rate == 0:
+                curr_rate = 1.0
+            po_qty = float(row[12] or 0)
+
+            if is_br_currency == 1:
+                if po_qty > 0 and amt > 0:
+                    effective_rate = (amt * curr_rate) / po_qty
+                else:
+                    effective_rate = rate * curr_rate
+            else:
+                if po_qty > 0 and amt > 0:
+                    effective_rate = amt / po_qty
+                else:
+                    effective_rate = rate
+
+            schedules.append({
+                "apono": row[0],
+                "pono": row[1],
+                "partno": row[2],
+                "poslno": row[3],
+                "reqdate": row[4],
+                "shddate": row[5],
+                "shdQty": float(row[6] or 0),
+                "podt": row[7],
+                "customer": row[8] or "—",
+                "rate": rate,
+                "amt": amt,
+                "currRate": curr_rate,
+                "poQty": po_qty,
+                "effectiveRate": effective_rate,
+                "poType": row[13] or ""
             })
+
+        # 2. Fetch dispatches for all scheduled Aponos
+        aponos = list(set(s["apono"] for s in schedules if s["apono"]))
+        dispatches = []
+        if aponos:
+            batch_size = 900
+            for i in range(0, len(aponos), batch_size):
+                batch = aponos[i:i + batch_size]
+                placeholders = ",".join("?" for _ in batch)
+                dispatches_sql = f"""
+                SELECT d.Apono, d.partno, d.poslno, m.dcdate, d.okqty 
+                FROM DcInSubDetAssmPoDet d 
+                INNER JOIN DC_Mas m ON d.dcno = m.dcno 
+                WHERE ISNULL(d.deleted, 0) = 0 AND d.Apono IN ({placeholders})
+                UNION ALL 
+                SELECT d.Apono, d.partno, d.poslno, m.dcdate, d.okqty 
+                FROM DcInSubDet d 
+                INNER JOIN DC_Mas m ON d.dcno = m.dcno 
+                WHERE ISNULL(d.deleted, 0) = 0 AND d.Apono IN ({placeholders})
+                ORDER BY dcdate ASC
+                """
+                cursor.execute(dispatches_sql, batch + batch)
+                dispatches.extend(cursor.fetchall() or [])
+
+        cursor.close()
+        conn.close()
     except Exception as e:
         if cursor: cursor.close()
         conn.close()
         return Response({"error": f"Database error: {str(e)}"}, status=500)
-        
-    if cursor: cursor.close()
-    conn.close()
-    
+
+    # 3. Group dispatches by (apono, partno, poslno)
+    dispatches_by_key = defaultdict(list)
+    for row in dispatches:
+        key = (row[0], row[1], row[2])
+        dispatches_by_key[key].append({
+            "dcdate": row[3],
+            "okqty": float(row[4] or 0)
+        })
+
+    # 4. Group schedules by (apono, partno, poslno)
+    schedules_by_key = defaultdict(list)
+    for s in schedules:
+        key = (s["apono"], s["partno"], s["poslno"])
+        schedules_by_key[key].append(s)
+
+    # 5. Chronological dispatch allocation
+    for key, schs in schedules_by_key.items():
+        schs.sort(key=lambda x: x["reqdate"] if x["reqdate"] else datetime.min)
+        disps = dispatches_by_key.get(key, [])
+        disps.sort(key=lambda x: x["dcdate"] if x["dcdate"] else datetime.min)
+
+        disp_idx = 0
+        disp_rem = disps[disp_idx]["okqty"] if disp_idx < len(disps) else 0
+
+        for sch in schs:
+            sch["dispQty"] = 0.0
+            target = sch["shdQty"]
+
+            while target > 0 and disp_idx < len(disps):
+                allocated = min(target, disp_rem)
+                sch["dispQty"] += allocated
+                target -= allocated
+                disp_rem -= allocated
+
+                if disp_rem <= 0:
+                    disp_idx += 1
+                    if disp_idx < len(disps):
+                        disp_rem = disps[disp_idx]["okqty"]
+
+            sch["pendQty"] = max(0.0, sch["shdQty"] - sch["dispQty"])
+            eff_rate = sch.get("effectiveRate", sch["rate"])
+            sch["totAmt"] = sch["shdQty"] * eff_rate
+            sch["salesVal"] = sch["dispQty"] * eff_rate
+            sch["pendVal"] = sch["pendQty"] * eff_rate
+
+    # 6. Aggregate into rows expected by Customer PO Schedule Vs Sales Value UI
+    grouped_rows = defaultdict(lambda: {"orderVal": 0.0, "salesVal": 0.0, "pendVal": 0.0})
+
+    for s in schedules:
+        shd_date = s["shddate"]
+        if not shd_date:
+            continue
+        if isinstance(shd_date, (datetime, date)):
+            d_str = shd_date.strftime("%Y-%m-%d")
+            m_str = f"{shd_date.strftime('%b')}-{shd_date.strftime('%y')}"
+        else:
+            d_str = str(shd_date)[:10]
+            m_str = "—"
+
+        key = (
+            s["customer"],
+            m_str,
+            d_str,
+            s["pono"] or "",
+            s["partno"] or "",
+            s["poType"] or ""
+        )
+        grouped_rows[key]["orderVal"] += s["totAmt"]
+        grouped_rows[key]["salesVal"] += s["salesVal"]
+        grouped_rows[key]["pendVal"] += s["pendVal"]
+
+    rows = []
+    for (customer, month_label, date_str, po_number, part_number, po_type), vals in grouped_rows.items():
+        order_val = vals["orderVal"] / 100000.0
+        sales_val = vals["salesVal"] / 100000.0
+        pending_val = vals["pendVal"] / 100000.0
+
+        rows.append({
+            "customer": customer,
+            "month": month_label,
+            "date": date_str,
+            "orderValue": round(order_val, 4),
+            "salesValue": round(sales_val, 4),
+            "pendingValue": round(pending_val, 4),
+            "poNumber": po_number,
+            "partNumber": part_number,
+            "poType": po_type
+        })
+
+    # Sort chronologically by date then customer
+    rows.sort(key=lambda r: (r["date"], r["customer"]))
+
     return Response({
         "rows": rows
     })
@@ -1283,7 +1269,7 @@ def dashboard2_daily_production(request):
 
 # ── Production Value Vs Actual Value (machine capacity × rate) ───────────────
 
-def _pv_running_branch(tbl, date_col, shift_col, mac_col, start_col, end_col, del_col, opr_col=None):
+def _pv_running_branch(tbl, date_col, shift_col, mac_col, start_col, end_col, del_col, opr_col=None, idle_expr=None):
     from .views_daily_production_report import _del_filter, _span_seconds, _col_ref, _q
 
     del_sql = _del_filter(del_col, "P")
@@ -1293,13 +1279,24 @@ def _pv_running_branch(tbl, date_col, shift_col, mac_col, start_col, end_col, de
         if opr_col
         else "N''"
     )
+    if idle_expr:
+        prod_secs = f"""(
+            CASE 
+                WHEN ({run_secs} - ({idle_expr})) > 0 THEN ({run_secs} - ({idle_expr}))
+                ELSE 0 
+            END
+        )"""
+    else:
+        prod_secs = run_secs
+
     return f"""
         SELECT
             CAST(P.{_q(date_col)} AS DATE) AS ProdDate,
             LTRIM(RTRIM(CAST(P.{_q(shift_col)} AS NVARCHAR(64)))) AS Shift,
             LTRIM(RTRIM(CAST(P.{_q(mac_col)} AS NVARCHAR(128)))) AS MacNo,
             {opr_sel} AS Operator,
-            {run_secs} AS RunningSecs
+            {run_secs} AS RunningSecs,
+            {prod_secs} AS ProdSecs
         FROM {_q(tbl)} P
         WHERE P.{_q(date_col)} IS NOT NULL
           AND P.{_q(mac_col)} IS NOT NULL
@@ -1349,6 +1346,8 @@ def _pv_fetch_production_value_rows(cursor, start_date, end_date, machine_filter
         _float_expr,
         _q,
     )
+    from .views import find_first_column
+    from .views_dashboard1 import table_exists
 
     schema = _resolve_daily_production_schema(cursor)
     if not schema:
@@ -1359,6 +1358,22 @@ def _pv_fetch_production_value_rows(cursor, start_date, end_date, machine_filter
         return [], []
 
     schema = _pv_enrich_schema_operators(cursor, schema)
+
+    has_idl = find_first_column(cursor, schema["pe"], ["idlTime", "IdlTime", "IDLTIME"])
+    has_acc = find_first_column(cursor, schema["pe"], ["accidletimesecs", "AccIdleTimeSecs"])
+    has_nonacc = find_first_column(cursor, schema["pe"], ["nonaccidletimesecs", "NonAccIdleTimeSecs"])
+    if has_idl and (has_acc or has_nonacc):
+        acc_part = f"ISNULL(P.{_q(has_acc)}, 0)" if has_acc else "0"
+        nonacc_part = f"ISNULL(P.{_q(has_nonacc)}, 0)" if has_nonacc else "0"
+        pe_idle_expr = f"CASE WHEN P.{_q(has_idl)} IS NOT NULL AND DATEDIFF(SECOND, 0, P.{_q(has_idl)}) > 0 THEN DATEDIFF(SECOND, 0, P.{_q(has_idl)}) ELSE {acc_part} + {nonacc_part} END"
+    elif has_idl:
+        pe_idle_expr = f"CASE WHEN P.{_q(has_idl)} IS NOT NULL AND DATEDIFF(SECOND, 0, P.{_q(has_idl)}) > 0 THEN DATEDIFF(SECOND, 0, P.{_q(has_idl)}) ELSE 0 END"
+    elif has_acc or has_nonacc:
+        acc_part = f"ISNULL(P.{_q(has_acc)}, 0)" if has_acc else "0"
+        nonacc_part = f"ISNULL(P.{_q(has_nonacc)}, 0)" if has_nonacc else "0"
+        pe_idle_expr = f"{acc_part} + {nonacc_part}"
+    else:
+        pe_idle_expr = "0"
 
     params = [start_date, end_date]
     branches = [
@@ -1371,10 +1386,13 @@ def _pv_fetch_production_value_rows(cursor, start_date, end_date, machine_filter
             schema["pe_runto"],
             schema["pe_del"],
             schema.get("pe_opr"),
+            idle_expr=pe_idle_expr,
         )
     ]
 
     if schema.get("conv") and schema.get("conv_start") and schema.get("conv_end"):
+        conv_idle_col = find_first_column(cursor, schema["conv"], ["IdleTime", "idletime", "idlTime", "IdlTime"])
+        conv_idle_expr = f"DATEDIFF(SECOND, 0, ISNULL(P.{_q(conv_idle_col)}, '1900-01-01 00:00:00'))" if conv_idle_col else "0"
         branches.append(
             _pv_running_branch(
                 schema["conv"],
@@ -1385,11 +1403,14 @@ def _pv_fetch_production_value_rows(cursor, start_date, end_date, machine_filter
                 schema["conv_end"],
                 schema["conv_del"],
                 schema.get("conv_opr"),
+                idle_expr=conv_idle_expr,
             )
         )
         params.extend([start_date, end_date])
 
     if schema.get("rod") and schema.get("rod_start") and schema.get("rod_end"):
+        rod_idle_col = find_first_column(cursor, schema["rod"], ["IdleTime", "idletime", "idlTime", "IdlTime"])
+        rod_idle_expr = f"DATEDIFF(SECOND, 0, ISNULL(P.{_q(rod_idle_col)}, '1900-01-01 00:00:00'))" if rod_idle_col else "0"
         branches.append(
             _pv_running_branch(
                 schema["rod"],
@@ -1400,8 +1421,76 @@ def _pv_fetch_production_value_rows(cursor, start_date, end_date, machine_filter
                 schema["rod_end"],
                 schema["rod_del"],
                 schema.get("rod_opr"),
+                idle_expr=rod_idle_expr,
             )
         )
+        params.extend([start_date, end_date])
+
+    has_touch_cnc = table_exists(cursor, "CncProd_TouchDet") and table_exists(cursor, "CncProd_TouchMas")
+    has_touch_conv = table_exists(cursor, "ConvProd_TouchDet") and table_exists(cursor, "ConvProd_TouchMas")
+    has_touch_rod = table_exists(cursor, "ConvRodProd_TouchDet") and table_exists(cursor, "ConvRodProd_TouchMas")
+
+    if has_touch_cnc:
+        branches.append(f"""
+            SELECT
+                CAST(CTM.proddate AS DATE) AS ProdDate,
+                LTRIM(RTRIM(CAST(ISNULL(CTM.shift, '') AS NVARCHAR(64)))) AS Shift,
+                LTRIM(RTRIM(CAST(CTM.macno AS NVARCHAR(128)))) AS MacNo,
+                LTRIM(RTRIM(CAST(ISNULL(CTM.oprname, '') AS NVARCHAR(256)))) AS Operator,
+                CASE WHEN CTD.runto < CTD.runfrom THEN DATEDIFF(SECOND, CTD.runfrom, DATEADD(DAY, 1, CTD.runto)) ELSE DATEDIFF(SECOND, CTD.runfrom, CTD.runto) END AS RunningSecs,
+                CASE WHEN (CASE WHEN CTD.runto < CTD.runfrom THEN DATEDIFF(SECOND, CTD.runfrom, DATEADD(DAY, 1, CTD.runto)) ELSE DATEDIFF(SECOND, CTD.runfrom, CTD.runto) END) - (CASE WHEN CTD.idlTime IS NOT NULL AND DATEDIFF(SECOND, 0, CTD.idlTime) > 0 THEN DATEDIFF(SECOND, 0, CTD.idlTime) ELSE 0 END) > 0
+                     THEN (CASE WHEN CTD.runto < CTD.runfrom THEN DATEDIFF(SECOND, CTD.runfrom, DATEADD(DAY, 1, CTD.runto)) ELSE DATEDIFF(SECOND, CTD.runfrom, CTD.runto) END) - (CASE WHEN CTD.idlTime IS NOT NULL AND DATEDIFF(SECOND, 0, CTD.idlTime) > 0 THEN DATEDIFF(SECOND, 0, CTD.idlTime) ELSE 0 END)
+                     ELSE 0 END AS ProdSecs
+            FROM CncProd_TouchDet CTD
+            INNER JOIN CncProd_TouchMas CTM ON CTD.TchEntryNo = CTM.TchEntryNo
+            WHERE CTM.macno IS NOT NULL 
+              AND ISNULL(CTM.deleted, 0) = 0 
+              AND ISNULL(CTD.deleted, 0) = 0 
+              AND ISNULL(CTD.ProdTaken, 0) = 0
+              AND CAST(CTM.proddate AS DATE) BETWEEN ? AND ?
+        """)
+        params.extend([start_date, end_date])
+
+    if has_touch_conv:
+        branches.append(f"""
+            SELECT
+                CAST(VTM.proddate AS DATE) AS ProdDate,
+                LTRIM(RTRIM(CAST(ISNULL(VTM.shift, '') AS NVARCHAR(64)))) AS Shift,
+                LTRIM(RTRIM(CAST(VTM.macno AS NVARCHAR(128)))) AS MacNo,
+                N'' AS Operator,
+                CASE WHEN VTD.runto >= VTD.runfrom THEN DATEDIFF(SECOND, VTD.runfrom, VTD.runto) ELSE DATEDIFF(SECOND, VTD.runfrom, DATEADD(DAY, 1, VTD.runto)) END AS RunningSecs,
+                CASE WHEN (CASE WHEN VTD.runto >= VTD.runfrom THEN DATEDIFF(SECOND, VTD.runfrom, VTD.runto) ELSE DATEDIFF(SECOND, VTD.runfrom, DATEADD(DAY, 1, VTD.runto)) END) - (DATEDIFF(SECOND, 0, ISNULL(VTD.idlTime, '1900-01-01 00:00:00'))) > 0
+                     THEN (CASE WHEN VTD.runto >= VTD.runfrom THEN DATEDIFF(SECOND, VTD.runfrom, VTD.runto) ELSE DATEDIFF(SECOND, VTD.runfrom, DATEADD(DAY, 1, VTD.runto)) END) - (DATEDIFF(SECOND, 0, ISNULL(VTD.idlTime, '1900-01-01 00:00:00')))
+                     ELSE 0 END AS ProdSecs
+            FROM ConvProd_TouchDet VTD
+            INNER JOIN ConvProd_TouchMas VTM ON VTD.TchEntryNo = VTM.TchEntryNo
+            WHERE VTM.macno IS NOT NULL 
+              AND ISNULL(VTM.deleted, 0) = 0 
+              AND ISNULL(VTD.deleted, 0) = 0 
+              AND ISNULL(VTD.ProdTaken, 0) = 0
+              AND CAST(VTM.proddate AS DATE) BETWEEN ? AND ?
+        """)
+        params.extend([start_date, end_date])
+
+    if has_touch_rod:
+        branches.append(f"""
+            SELECT
+                CAST(RTM.proddate AS DATE) AS ProdDate,
+                LTRIM(RTRIM(CAST(ISNULL(RTM.shift, '') AS NVARCHAR(64)))) AS Shift,
+                LTRIM(RTRIM(CAST(RTM.macno AS NVARCHAR(128)))) AS MacNo,
+                N'' AS Operator,
+                CASE WHEN RTD.runto >= RTD.runfrom THEN DATEDIFF(SECOND, RTD.runfrom, RTD.runto) ELSE DATEDIFF(SECOND, RTD.runfrom, DATEADD(DAY, 1, RTD.runto)) END AS RunningSecs,
+                CASE WHEN (CASE WHEN RTD.runto >= RTD.runfrom THEN DATEDIFF(SECOND, RTD.runfrom, RTD.runto) ELSE DATEDIFF(SECOND, RTD.runfrom, DATEADD(DAY, 1, RTD.runto)) END) - (DATEDIFF(SECOND, 0, ISNULL(RTD.idlTime, '1900-01-01 00:00:00'))) > 0
+                     THEN (CASE WHEN RTD.runto >= RTD.runfrom THEN DATEDIFF(SECOND, RTD.runfrom, RTD.runto) ELSE DATEDIFF(SECOND, RTD.runfrom, DATEADD(DAY, 1, RTD.runto)) END) - (DATEDIFF(SECOND, 0, ISNULL(RTD.idlTime, '1900-01-01 00:00:00')))
+                     ELSE 0 END AS ProdSecs
+            FROM ConvRodProd_TouchDet RTD
+            INNER JOIN ConvRodProd_TouchMas RTM ON RTD.TchEntryNo = RTM.TchEntryNo
+            WHERE RTM.macno IS NOT NULL 
+              AND ISNULL(RTM.deleted, 0) = 0 
+              AND ISNULL(RTD.deleted, 0) = 0 
+              AND ISNULL(RTD.ProdTaken, 0) = 0
+              AND CAST(RTM.proddate AS DATE) BETWEEN ? AND ?
+        """)
         params.extend([start_date, end_date])
 
     capped = _pv_capped_running("R")
@@ -1449,7 +1538,8 @@ def _pv_fetch_production_value_rows(cursor, start_date, end_date, machine_filter
                 ProdDate,
                 Shift,
                 MacNo,
-                SUM(RunningSecs) AS RunningSecs
+                SUM(RunningSecs) AS RunningSecs,
+                SUM(ProdSecs) AS ProdSecs
             FROM RUNNINGDATA
             GROUP BY ProdDate, Shift, MacNo
         ),
@@ -1461,7 +1551,7 @@ def _pv_fetch_production_value_rows(cursor, start_date, end_date, machine_filter
             CAST(SUM(S.ShiftSecs) / 3600.0 AS FLOAT) AS PlannedHours,
             CAST(SUM({capped}) / 3600.0 AS FLOAT) AS RunningHours,
             CAST(MAX({rate_expr}) AS FLOAT) AS RatePerHr,
-            CAST((SUM(S.ShiftSecs) / 60.0) * (MAX({rate_expr}) / 60.0) AS FLOAT) AS ProductionValue,
+            CAST((SUM(R.ProdSecs) / 3600.0) * (MAX({rate_expr})) AS FLOAT) AS ProductionValue,
             CAST((SUM({capped}) / 60.0) * (MAX({rate_expr}) / 60.0) AS FLOAT) AS ActualValue,
             CAST(
                 CASE
@@ -1492,7 +1582,8 @@ def _pv_fetch_production_value_rows(cursor, start_date, end_date, machine_filter
                 ProdDate,
                 Shift,
                 MacNo,
-                SUM(RunningSecs) AS RunningSecs
+                SUM(RunningSecs) AS RunningSecs,
+                SUM(ProdSecs) AS ProdSecs
             FROM RUNNINGDATA
             GROUP BY ProdDate, Shift, MacNo
         ),
@@ -1506,7 +1597,7 @@ def _pv_fetch_production_value_rows(cursor, start_date, end_date, machine_filter
             CAST({rate_expr} AS FLOAT) AS RatePerHr,
             CAST(ISNULL(S.ShiftSecs, 0) / 3600.0 AS FLOAT) AS PlannedHours,
             CAST({capped_rd} / 3600.0 AS FLOAT) AS RunningHours,
-            CAST((ISNULL(S.ShiftSecs, 0) / 60.0) * (({rate_expr}) / 60.0) AS FLOAT) AS ProductionValue,
+            CAST((ISNULL(RD.ProdSecs, 0) / 3600.0) * (({rate_expr})) AS FLOAT) AS ProductionValue,
             CAST(({capped_rd} / 60.0) * (({rate_expr}) / 60.0) AS FLOAT) AS ActualValue,
             CAST(
                 CASE
@@ -3296,7 +3387,7 @@ plant_performance_production_by_shift = dashboard2_production_by_shift
 @api_view(["GET"])
 def plant_performance_idle_hours(request):
     """
-    Plant Performance — Idle Hours Report based on exact IdleData CTE query.
+    Plant Performance — Idle Hours Report based on MIS - Idle Report logic (_IDLE_UNION_SQL).
     Calculates TotalEntries, TotalIdleSeconds, Hours, Minutes, and formatted TotalIdleTime ('X Hrs Y Mins').
     """
     try:
@@ -3307,83 +3398,63 @@ def plant_performance_idle_hours(request):
 
     start_date, end_date = parse_date_range(request)
 
-    sql = """
-;WITH IdleData AS
-(
-    --------------------------------------------------------------------
-    -- ProductionEntry
-    --------------------------------------------------------------------
-    SELECT
-        DATEDIFF(SECOND,'19000101',ISNULL(idlTime,'19000101')) AS IdleSeconds
-    FROM ProductionEntry
-    WHERE deleted = 0
-      AND proddate >= ?
-      AND proddate < DATEADD(DAY, 1, ?)
-
-    UNION ALL
-
-    --------------------------------------------------------------------
-    -- ConvProductionEntry
-    --------------------------------------------------------------------
-    SELECT
-        DATEDIFF(SECOND,'19000101',ISNULL(IdleTime,'19000101'))
-    FROM ConvProductionEntry
-    WHERE deleted = 0
-      AND entrydate >= ?
-      AND entrydate < DATEADD(DAY, 1, ?)
-
-    UNION ALL
-
-    --------------------------------------------------------------------
-    -- ConvProductionEntryRod
-    --------------------------------------------------------------------
-    SELECT
-        DATEDIFF(SECOND,'19000101',ISNULL(IdleTime,'19000101'))
-    FROM ConvProductionEntryRod
-    WHERE deleted = 0
-      AND entrydate >= ?
-      AND entrydate < DATEADD(DAY, 1, ?)
-
-    UNION ALL
-
-    --------------------------------------------------------------------
-    -- Machine_IdleEntryDet (Date from Machine_IdleEntryMas)
-    --------------------------------------------------------------------
-    SELECT
-        DATEDIFF(SECOND,'19000101',ISNULL(D.tottime,'19000101'))
-    FROM Machine_IdleEntryDet D
-    INNER JOIN Machine_IdleEntryMas M
-        ON D.prodid = M.prodid
-    WHERE D.deleted = 0
-      AND M.deleted = 0
-      AND M.proddate >= ?
-      AND M.proddate < DATEADD(DAY, 1, ?)
-)
-SELECT
-    ISNULL(COUNT(*), 0) AS TotalEntries,
-    ISNULL(SUM(IdleSeconds), 0) AS TotalIdleSeconds,
-    ISNULL(SUM(IdleSeconds) / 3600, 0) AS Hours,
-    ISNULL((SUM(IdleSeconds) % 3600) / 60, 0) AS Minutes
-FROM IdleData;
-    """
-
-    params = [start_date, end_date, start_date, end_date, start_date, end_date, start_date, end_date]
-
-    total_entries = 0
-    total_idle_seconds = 0
-    hours = 0
-    minutes = 0
+    from .views_idle_time_report import _IDLE_UNION_SQL, _union_date_params
+    from .views_dashboard1 import table_exists
 
     cursor = None
     try:
         cursor = conn.cursor()
+        has_idle_reasons = table_exists(cursor, "IdleReasons")
+        join_idle_reasons = """
+            LEFT JOIN IdleReasons IR
+                ON LTRIM(RTRIM(CAST(A.Reason AS NVARCHAR(512))))
+                 = LTRIM(RTRIM(CAST(IR.IdleReasons AS NVARCHAR(512))))
+                AND ISNULL(IR.deleted, 0) = 0
+        """ if has_idle_reasons else ""
+        ir_accept_1 = "IR.IsAccept = 1" if has_idle_reasons else "1 = 0"
+        ir_accept_0 = "IR.IsAccept = 0" if has_idle_reasons else "1 = 0"
+
+        sql = f"""
+        SELECT
+            COUNT(*) AS TotalEntries,
+            ISNULL(SUM(A.IdleSeconds), 0) AS TotalIdleSeconds,
+            ISNULL(SUM(A.IdleSeconds) / 3600, 0) AS Hours,
+            ISNULL((SUM(A.IdleSeconds) % 3600) / 60, 0) AS Minutes,
+            ISNULL(SUM(
+                CASE
+                    WHEN A.IsEffCalc = 1 THEN A.IdleSeconds
+                    WHEN A.IsEffCalc = 0 THEN 0
+                    WHEN {ir_accept_1} THEN A.IdleSeconds
+                    WHEN {ir_accept_0} THEN 0
+                    ELSE A.IdleSeconds
+                END
+            ), 0) AS AcceptedIdleSeconds,
+            ISNULL(SUM(
+                CASE
+                    WHEN A.IsEffCalc = 1 THEN 0
+                    WHEN A.IsEffCalc = 0 THEN A.IdleSeconds
+                    WHEN {ir_accept_1} THEN 0
+                    WHEN {ir_accept_0} THEN A.IdleSeconds
+                    ELSE 0
+                END
+            ), 0) AS NonAcceptedIdleSeconds
+        FROM (
+            {_IDLE_UNION_SQL}
+        ) A
+        {join_idle_reasons}
+        """
+
+        params = _union_date_params(start_date, end_date)
         cursor.execute(sql, params)
         row = cursor.fetchone()
-        if row:
-            total_entries = int(row[0] or 0)
-            total_idle_seconds = int(row[1] or 0)
-            hours = int(row[2] or 0) if row[2] is not None else (total_idle_seconds // 3600)
-            minutes = int(row[3] or 0) if row[3] is not None else ((total_idle_seconds % 3600) // 60)
+
+        total_entries = int(row[0] or 0) if row else 0
+        total_idle_seconds = int(row[1] or 0) if row else 0
+        hours = int(row[2] or 0) if row and row[2] is not None else (total_idle_seconds // 3600)
+        minutes = int(row[3] or 0) if row and row[3] is not None else ((total_idle_seconds % 3600) // 60)
+        accepted_seconds = int(row[4] or 0) if row else 0
+        non_accepted_seconds = int(row[5] or 0) if row else 0
+
         cursor.close()
         conn.close()
     except Exception as e:
@@ -3396,6 +3467,8 @@ FROM IdleData;
 
     total_idle_time_str = f"{hours} Hrs {minutes} Mins"
     decimal_hours = round(total_idle_seconds / 3600.0, 2)
+    accepted_hours = round(accepted_seconds / 3600.0, 2)
+    non_accepted_hours = round(non_accepted_seconds / 3600.0, 2)
 
     return Response({
         "company": tenant.get("company_name", ""),
@@ -3410,8 +3483,8 @@ FROM IdleData;
             "total_idle_time": total_idle_time_str,
             "formatted_idle_time": total_idle_time_str,
             "total_idle_hours": decimal_hours,
-            "accepted_hours": decimal_hours,
-            "non_accepted_hours": 0.0,
+            "accepted_hours": accepted_hours,
+            "non_accepted_hours": non_accepted_hours,
             "other_hours": 0.0,
         },
         "total_idle_time": total_idle_time_str,
@@ -4862,6 +4935,9 @@ def plant_performance_store_stock_value(request):
         total_val_lakhs = round(total_val / 100000.0, 2)
 
         # 6. Chart Query (Month-Wise Cumulative Balance from #TmpMov + #TmpRate)
+        start_month_start = date(start_date.year, start_date.month, 1)
+        end_month_start = date(end_date.year, end_date.month, 1)
+
         chart_sql = f"""
         ;WITH MonthlyMovements AS (
             SELECT
@@ -4882,6 +4958,7 @@ def plant_performance_store_stock_value(request):
                 MonthLabel AS [Month],
                 MovYear,
                 MovMonth,
+                DATEFROMPARTS(MovYear, MovMonth, 1) AS MonthStartDate,
                 SUM(MonthlyNetValue) OVER (ORDER BY MovYear, MovMonth ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS CumValue
             FROM MonthlyMovements
         )
@@ -4889,9 +4966,10 @@ def plant_performance_store_stock_value(request):
             [Month],
             CASE WHEN CumValue < 0 THEN 0 ELSE CumValue END AS StockValue
         FROM RunningTotals
+        WHERE MonthStartDate >= ? AND MonthStartDate <= ?
         ORDER BY MovYear, MovMonth
         """
-        chart_params = list(extra_params) + list(item_param_value)
+        chart_params = list(extra_params) + list(item_param_value) + [start_month_start, end_month_start]
         cursor.execute(chart_sql, chart_params)
         chart_labels = []
         chart_values = []
@@ -5104,6 +5182,9 @@ def plant_performance_bundle(request):
     for key, view_fn in compare_views:
         key, body, err = _bundle_fetch_one(key, view_fn, django_request)
         if err:
+            err_str = str(err).lower()
+            if any(p in err_str for p in ("logged in from another", "session expired", "please login again", "please log in again")):
+                return Response({"error": str(err), "code": "session_terminated"}, status=401)
             errors_out[key] = err
             data_out[key] = None
         else:

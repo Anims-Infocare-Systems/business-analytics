@@ -97,11 +97,11 @@
 
 @keyframes dl-page-in {
     from {
-        transform: translateY(16px) scale(0.985);
+        opacity: 0.2;
     }
 
     to {
-        transform: translateY(0) scale(1);
+        opacity: 1;
     }
 }
 
@@ -1548,7 +1548,7 @@
 
 .dl-keepalive-pane {
     width: 100%;
-    animation: dl-page-in .22s cubic-bezier(.34, 1.25, .64, 1) forwards;
+    animation: dl-page-in .12s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .dl-keepalive-pane--active {
@@ -1557,6 +1557,8 @@
 
 .dl-keepalive-pane--hidden {
     display: none !important;
+    content-visibility: hidden !important;
+    contain: strict !important;
     pointer-events: none !important;
 }
 
@@ -1570,6 +1572,8 @@
 
 .dl-keepalive-pane--hidden.dl-page-wrap--plant {
     display: none !important;
+    content-visibility: hidden !important;
+    contain: strict !important;
 }
 
 /* ── Placeholder ──────────────────────────────────────────── */
@@ -2639,24 +2643,26 @@
 }
 
 /* ══════════════════════════════════════════════════════════
-   TOUR GUIDE ACTIVE MODE — DISABLE BACKGROUND INTERACTION
+   TOUR GUIDE ACTIVE MODE — HIGH-PERFORMANCE ZERO-REFLOW
    ══════════════════════════════════════════════════════════ */
 .dl-root--tour-active .dl-sidebar,
 .dl-root--tour-active .dl-main,
 .dl-root--tour-active .dl-header,
 .dl-root--tour-active .dl-topbar,
-.dl-root--tour-active .dl-content,
 .dl-root--tour-active .dl-overlay {
     pointer-events: none !important;
     user-select: none !important;
     cursor: default !important;
 }
 
-.dl-root--tour-active .dl-sidebar *,
-.dl-root--tour-active .dl-main *,
-.dl-root--tour-active .dl-header *,
-.dl-root--tour-active .dl-topbar *,
-.dl-root--tour-active .dl-content * {
+.dl-root--tour-active .dl-content {
     pointer-events: none !important;
+    user-select: none !important;
     cursor: default !important;
+    overflow: hidden !important;
+}
+
+/* Ensure panes render instantaneously during tour without CSS animations perturbing geometry */
+.dl-root--tour-active .dl-keepalive-pane {
+    animation: none !important;
 }

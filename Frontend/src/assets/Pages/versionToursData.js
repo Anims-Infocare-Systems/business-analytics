@@ -28,7 +28,11 @@ export const VERSION_REGISTRY = [
             "Quality Analysis Multi-Dimensional Report Filters & Disposition Pills",
             "Operator-Wise Rejection Analytics with Dual Grid & Chart Mode",
             "Machine-Wise Rejection Matrix with Equipment Work-Center Filters",
-            "Interactive End-to-End 6-Stage Quality Lineage Pipeline"
+            "Interactive End-to-End 6-Stage Quality Lineage Pipeline",
+            "Production Analysis Global Filters with Mac Name, Shift & Group Matrix",
+            "Production Value vs Machine Hour Rate (MHR) Cost Analysis & Profit Margin Deck",
+            "Utility Users Setting Hub with Spending Limits & Date Automation",
+            "Universal Spotlight Navigator & Interactive Feature Compass"
         ],
         tourSteps: [
             {
@@ -39,7 +43,7 @@ export const VERSION_REGISTRY = [
                 navSubItem: "Sales Analysis",
                 title: "Customer & Part-Wise Pending PO Summary",
                 category: "Order Backlog",
-                badge: "Step 1 of 13 • Expandable View",
+                badge: "Step 1 of 17 • Expandable View",
                 iconName: "FileSpreadsheet",
                 placement: "bottom",
                 isExpandable: true,
@@ -63,7 +67,7 @@ export const VERSION_REGISTRY = [
                 navSubItem: "Sales Analysis",
                 title: "Customer & Part-Wise Schedule Analysis",
                 category: "Delivery Schedules",
-                badge: "Step 2 of 13 • Expandable View",
+                badge: "Step 2 of 17 • Expandable View",
                 iconName: "Calendar",
                 placement: "bottom",
                 isExpandable: true,
@@ -87,7 +91,7 @@ export const VERSION_REGISTRY = [
                 navSubItem: "Sales Analysis",
                 title: "Despatch Planning Status",
                 category: "Warehouse & Shipping",
-                badge: "Step 3 of 13 • Live Auto-Sync",
+                badge: "Step 3 of 17 • Live Auto-Sync",
                 iconName: "Zap",
                 placement: "top",
                 isExpandable: false,
@@ -111,7 +115,7 @@ export const VERSION_REGISTRY = [
                 navSubItem: "Sales Analysis",
                 title: "Customer & Part-Wise Sales Analysis",
                 category: "Revenue Analysis",
-                badge: "Step 4 of 13 • Multi-Type Filter",
+                badge: "Step 4 of 17 • Multi-Type Filter",
                 iconName: "TrendingUp",
                 placement: "top",
                 isExpandable: false,
@@ -135,7 +139,7 @@ export const VERSION_REGISTRY = [
                 navSubItem: "Sales Analysis",
                 title: "Part-wise History & Rate Intelligence",
                 category: "Pricing Intelligence",
-                badge: "Step 5 of 13 • Pricing Analytics",
+                badge: "Step 5 of 17 • Pricing Analytics",
                 iconName: "Shield",
                 placement: "top",
                 isExpandable: false,
@@ -159,7 +163,7 @@ export const VERSION_REGISTRY = [
                 navSubItem: "Purchase Analysis",
                 title: "Average Purchase Value",
                 category: "Material Costing",
-                badge: "Step 6 of 13 • Raw vs Store Materials",
+                badge: "Step 6 of 17 • Raw vs Store Materials",
                 iconName: "TrendingUp",
                 placement: "bottom",
                 align: "start",
@@ -184,7 +188,7 @@ export const VERSION_REGISTRY = [
                 navSubItem: "Purchase Analysis",
                 title: "Advanced Purchase Analytics",
                 category: "Procurement Analytics",
-                badge: "Step 7 of 13 • Deep Analytics & Heatmaps",
+                badge: "Step 7 of 17 • Deep Analytics & Heatmaps",
                 iconName: "Sparkles",
                 placement: "bottom",
                 align: "start",
@@ -203,15 +207,15 @@ export const VERSION_REGISTRY = [
             },
             {
                 id: "pa-tour-po-fulfillment",
-                targetSelector: "[data-spotlight='pa-po-fulfillment-btn']",
-                fallbackSelector: "[data-spotlight='pa-fs-header-row'], [data-spotlight='pa-fs-main-tabs'], #pa-fulfillment-schedule-section",
+                targetSelector: "[data-spotlight='pa-po-fulfillment-btn'], .pa2-fs-main-tab-btn:not(.pa2-fs-main-tab-btn--futuristic)",
+                fallbackSelector: "[data-spotlight='pa-fs-header-row'], .pa2-fs-header-row, [data-spotlight='pa-fs-main-tabs'], .pa2-fs-main-tabs, #pa-fulfillment-schedule-section, .pa2-fs-section",
                 navItem: "Reports",
                 navSubItem: "Purchase Analysis",
                 tabAction: "standard",
                 tabDesc: "Switched to committed supplier PO fulfillment lots and delivery progress.",
                 title: "PO Fulfillment Schedule",
                 category: "Supplier Fulfillment",
-                badge: "Step 8 of 13 • Committed Delivery Lots",
+                badge: "Step 8 of 17 • Committed Delivery Lots",
                 iconName: "Calendar",
                 placement: "bottom",
                 align: "start",
@@ -230,15 +234,15 @@ export const VERSION_REGISTRY = [
             },
             {
                 id: "pa-tour-futuristic-schedule",
-                targetSelector: "[data-spotlight='pa-futuristic-schedule-btn']",
-                fallbackSelector: "[data-spotlight='pa-fs-header-row'], [data-spotlight='pa-fs-main-tabs'], #pa-fulfillment-schedule-section",
+                targetSelector: "[data-spotlight='pa-futuristic-schedule-btn'], .pa2-fs-main-tab-btn--futuristic",
+                fallbackSelector: "[data-spotlight='pa-fs-header-row'], .pa2-fs-header-row, [data-spotlight='pa-fs-main-tabs'], .pa2-fs-main-tabs, #pa-fulfillment-schedule-section, .pa2-fs-section",
                 navItem: "Reports",
                 navSubItem: "Purchase Analysis",
                 tabAction: "futuristic",
                 tabDesc: "Switched to predictive reorder timeline and safety buffer runout forecast.",
                 title: "Futuristic Expected Schedule",
                 category: "Predictive Procurement",
-                badge: "Step 9 of 13 • AI Predictive ROL",
+                badge: "Step 9 of 17 • AI Predictive ROL",
                 iconName: "Sparkles",
                 placement: "bottom",
                 align: "start",
@@ -263,7 +267,7 @@ export const VERSION_REGISTRY = [
                 navSubItem: "Quality Analysis",
                 title: "Quality Report Filters",
                 category: "Telemetry & Filtering",
-                badge: "Step 10 of 13 • Global Quality Filters",
+                badge: "Step 10 of 17 • Global Quality Filters",
                 iconName: "SlidersHorizontal",
                 placement: "bottom",
                 align: "start",
@@ -288,7 +292,7 @@ export const VERSION_REGISTRY = [
                 navSubItem: "Quality Analysis",
                 title: "Operator wise Rejection",
                 category: "Workmanship Analysis",
-                badge: "Step 11 of 13 • Operator Accountability",
+                badge: "Step 11 of 17 • Operator Accountability",
                 iconName: "UserCheck",
                 placement: "bottom",
                 align: "start",
@@ -313,7 +317,7 @@ export const VERSION_REGISTRY = [
                 navSubItem: "Quality Analysis",
                 title: "Machine wise Rejection",
                 category: "Equipment Quality",
-                badge: "Step 12 of 13 • Machine & Tooling Health",
+                badge: "Step 12 of 17 • Machine & Tooling Health",
                 iconName: "Cpu",
                 placement: "bottom",
                 align: "start",
@@ -338,7 +342,7 @@ export const VERSION_REGISTRY = [
                 navSubItem: "Quality Analysis",
                 title: "Interactive Quality Timeline",
                 category: "Traceability Pipeline",
-                badge: "Step 13 of 13 • End-to-End Lineage",
+                badge: "Step 13 of 17 • End-to-End Lineage",
                 iconName: "Layers",
                 placement: "bottom",
                 align: "start",
@@ -352,6 +356,106 @@ export const VERSION_REGISTRY = [
                     {
                         title: "Hierarchical Invoice Selector",
                         desc: "Switch active customer invoices and part numbers directly from the search-enabled dropdown."
+                    }
+                ]
+            },
+            {
+                id: "pda-tour-report-filters",
+                targetSelector: "[data-spotlight='pda-report-filters'], .pa2-filters",
+                fallbackSelector: ".pa2-filters",
+                navItem: "Reports",
+                navSubItem: "Production Analysis",
+                title: "Production Report Filters",
+                category: "Shopfloor Parameters",
+                badge: "Step 14 of 17 • Global Production Deck",
+                iconName: "SlidersHorizontal",
+                placement: "bottom",
+                align: "start",
+                isExpandable: false,
+                description: "Unified manufacturing filtering deck providing fine-grained scoping across date range presets, part numbers, machine rosters, shift schedules, and operator groups.",
+                subItems: [
+                    {
+                        title: "Multi-Parameter Machinery & Shift Matrix",
+                        desc: "Filter production volume across CNC work-centers, shifts, machine types (CNC/CON), and operators simultaneously."
+                    },
+                    {
+                        title: "Staged Filtering with Pending Indicator",
+                        desc: "Visual pulsing indicator highlights unapplied filter changes, preventing unnecessary database round-trips."
+                    }
+                ]
+            },
+            {
+                id: "pda-tour-pvmhr",
+                targetSelector: "[data-spotlight='pda-production-value-vs-mhr'], .pa2-pvmhr-card",
+                fallbackSelector: ".pa2-pvmhr-card",
+                navItem: "Reports",
+                navSubItem: "Production Analysis",
+                title: "Production Value vs MHR Cost Analysis",
+                category: "Financial Operations",
+                badge: "Step 15 of 17 • Output Value vs Operating Cost",
+                iconName: "TrendingUp",
+                placement: "bottom",
+                align: "start",
+                isExpandable: false,
+                description: "Combined manufacturing economics deck benchmarking gross production rupee value against operational Machine Hour Rate (MHR) running costs.",
+                subItems: [
+                    {
+                        title: "4-Way Financial View Modes",
+                        desc: "Instantly toggle between Comparison, Production Value alone, MHR Cost alone, and Net Value Margin (Profitability)."
+                    },
+                    {
+                        title: "MHR Rate Simulator & Machine Chips",
+                        desc: "Inspect individual machine recovery rates, running hours, and launch the engineering cost calculator to adjust machine hour parameters."
+                    }
+                ]
+            },
+            {
+                id: "us-tour-hub",
+                targetSelector: "[data-spotlight='us-hub'], .us-header",
+                fallbackSelector: ".us-header, .us-root",
+                navItem: "Utility",
+                navSubItem: "Users Setting",
+                title: "Users Setting Hub",
+                category: "Superadmin Administration",
+                badge: "Step 16 of 17 • Governance & Spending Caps",
+                iconName: "SlidersHorizontal",
+                placement: "bottom",
+                align: "start",
+                isExpandable: false,
+                description: "Centralized administration console configuring individual user PO approval thresholds, bulk policy assignments, and automated module date settings.",
+                subItems: [
+                    {
+                        title: "Spending Thresholds & Policy Toggles",
+                        desc: "Set user-specific PO purchase caps and toggle the automatic 'Hide POs ≤ ₹1,000' switch to streamline approval workflows."
+                    },
+                    {
+                        title: "Date Range Automation Options",
+                        desc: "Configure default rolling date ranges for each reporting module to standardize analytics across the organization."
+                    }
+                ]
+            },
+            {
+                id: "spotlight-tour-navigator",
+                targetSelector: "[data-spotlight='spotlight-navigator-hero'], .sst-hero-banner",
+                fallbackSelector: ".sst-header, .sst-root",
+                navItem: "Spotlight",
+                navSubItem: null,
+                title: "Spotlight Navigator & Radar",
+                category: "Precision Navigation",
+                badge: "Step 17 of 17 • Feature Compass & Ctrl + K",
+                iconName: "Compass",
+                placement: "bottom",
+                align: "start",
+                isExpandable: false,
+                description: "Universal visual directory indexing 100+ platform features, audit tables, and cockpits. Select any card to jump directly to that element with a luminous guided spotlight beacon.",
+                subItems: [
+                    {
+                        title: "One-Click Contextual Jumping",
+                        desc: "Instantly switches views and auto-scrolls to the exact target control with real-time DOM spotlight highlighting."
+                    },
+                    {
+                        title: "Global Command Palette (Ctrl + K)",
+                        desc: "Press Ctrl + K from any page to open the floating command search bar for rapid keyboard navigation."
                     }
                 ]
             }
@@ -551,6 +655,66 @@ export const VERSION_REGISTRY = [
                 ],
                 actionLabel: "Explore Quality Timeline",
                 actionTarget: "Quality Analysis"
+            },
+            {
+                id: "tip-250-14",
+                title: "Production Report Filters & Shift Scoping",
+                category: "Plant Parameters",
+                type: "BEST PRACTICE",
+                icon: "SlidersHorizontal",
+                summary: "Scope manufacturing outputs, cycle rates, and operator quotas across shifts and equipment clusters.",
+                steps: [
+                    "Navigate to Reports → Production Analysis to locate the top parameters deck.",
+                    "Select specific Machine Names, Shift windows, and Operator lines to isolate production telemetry.",
+                    "Click 'Apply Filter' when the pulsating orange indicator appears to refresh charts with staged criteria."
+                ],
+                actionLabel: "Open Production Analysis",
+                actionTarget: "Production Analysis"
+            },
+            {
+                id: "tip-250-15",
+                title: "Production Value vs MHR Cost Analysis & Simulator",
+                category: "Financial Costing",
+                type: "PRO TIP",
+                icon: "TrendingUp",
+                summary: "Benchmark gross manufacturing rupee value against Machine Hour Rate running costs and simulate operating rates.",
+                steps: [
+                    "Scroll to the 'Production Value Report Vs Machine Hour Rate (MHR) Cost Analysis' card in Production Analysis.",
+                    "Switch view modes between 'Comparison', 'Prod. Value', 'MHR Cost', and 'Net Margin' to assess plant profitability.",
+                    "Click 'MHR Rates & Inputs' or any machine chip to open the interactive engineering simulator and adjust hourly particulars."
+                ],
+                actionLabel: "Explore MHR Cost Analysis",
+                actionTarget: "Production Analysis"
+            },
+            {
+                id: "tip-250-16",
+                title: "User PO Approval Thresholds & Governance",
+                category: "Administration",
+                type: "BEST PRACTICE",
+                icon: "Shield",
+                summary: "Configure customized PO purchase caps per user and enforce system-wide noise reduction approval policies.",
+                steps: [
+                    "Open Utility → Users Setting from the sidebar navigation menu.",
+                    "Audit user rows in the PO Spending Limits matrix and assign designated financial thresholds (₹).",
+                    "Enable 'Hide POs ≤ ₹1,000' to streamline executive approval queues and prevent inbox fatigue."
+                ],
+                actionLabel: "Open Users Setting Hub",
+                actionTarget: "Users Setting"
+            },
+            {
+                id: "tip-250-17",
+                title: "Spotlight Feature Radar & Universal Search",
+                category: "Navigation",
+                type: "PRO TIP",
+                icon: "Compass",
+                summary: "Search, discover, and instantly beam to 100+ platform features, audit tables, and operational views.",
+                steps: [
+                    "Open Spotlight Navigator from the navigation bar or press Ctrl + K anywhere on the platform.",
+                    "Filter features by Category (Reports, Utility, Approvals) or type keywords in the live search bar.",
+                    "Click 'Spotlight on Page' on any feature card to auto-navigate and illuminate the target with a luminous beacon."
+                ],
+                actionLabel: "Launch Spotlight Navigator",
+                actionTarget: "Spotlight"
             }
         ]
     },

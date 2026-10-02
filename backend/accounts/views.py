@@ -7,6 +7,7 @@ from datetime import datetime, date
 from calendar import monthrange
 from .models import Tenant
 from .utils.db import ErpConnectionError, check_tenant_erp_connection, get_connection
+from .utils.cache import cache_analytics_response
 
 # ─────────────────────────────────────────────────────────────
 #  HELPERS
@@ -22,12 +23,12 @@ def decrypt_password(encrypted_password):
 def get_tenant_connection(request):
     """Pull tenant DB details from session and return an open connection (auto-restoring session if needed)."""
     from .session_utils import get_or_restore_session_tenant
+    from .utils.db import get_request_scoped_connection
     tenant = get_or_restore_session_tenant(request, allow_expired=False)
 
-    conn = get_connection(
-        tenant["erp_server"], tenant["erp_database"], tenant["erp_user"],
-        tenant["erp_password"], tenant["erp_port"],
-    )
+    # One physical ERP connection per request/thread, reused by every view and
+    # helper that asks for it during this request (closed by middleware).
+    conn = get_request_scoped_connection(request, tenant)
     return conn, tenant
 
 def current_financial_year():
@@ -109,36 +110,11 @@ def month_key_from_db(raw):
     try: return int(raw) if raw is not None else None
     except (TypeError, ValueError): return None
 
-def table_exists(cursor, table_name):
-    cursor.execute("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = ?", (table_name,))
-    return cursor.fetchone() is not None
-
-def find_first_column(cursor, table_name, candidates):
-    for col in candidates:
-        cursor.execute("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = ? AND COLUMN_NAME = ?", (table_name, col))
-        if cursor.fetchone(): return col
-    return None
-
-def find_first_table(cursor, candidates):
-    for t in candidates:
-        if table_exists(cursor, t): return t
-    return None
-
-def resolve_erp_table(cursor, candidate_names):
-    for logical in candidate_names:
-        cursor.execute("SELECT TOP 1 TABLE_SCHEMA, TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE UPPER(LTRIM(RTRIM(TABLE_NAME))) = UPPER(LTRIM(RTRIM(?))) ORDER BY TABLE_SCHEMA, TABLE_NAME", (logical,))
-        row = cursor.fetchone()
-        if row:
-            schema, name = row[0], row[1]
-            return schema, name, f"[{schema}].[{name}]"
-    return None, None, None
-
-def find_column_ci(cursor, table_schema, table_name, candidates):
-    for col in candidates:
-        cursor.execute("SELECT TOP 1 COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND UPPER(LTRIM(RTRIM(COLUMN_NAME))) = UPPER(LTRIM(RTRIM(?)))", (table_schema, table_name, col))
-        row = cursor.fetchone()
-        if row: return row[0]
-    return None
+# Schema probes are answered from a per-tenant catalog loaded once (see utils/schema.py)
+# instead of one INFORMATION_SCHEMA round-trip per probe over the tunnel.
+from .utils.schema import (  # noqa: E402
+    table_exists, find_first_column, find_first_table, resolve_erp_table, find_column_ci,
+)
 
 # ─────────────────────────────────────────────────────────────
 #  HEALTH
@@ -948,6 +924,7 @@ def get_company(request, code):
 #  CHARTS - SABARISH (Monthwise Charts)
 # ─────────────────────────────────────────────────────────────
 @api_view(['GET'])
+@cache_analytics_response(timeout=300, key_prefix="rep_po_vs_sales")
 def po_vs_sales(request):
     try:
         conn, tenant = get_tenant_connection(request)
@@ -1129,6 +1106,7 @@ def po_vs_sales(request):
     })
 
 @api_view(['GET'])
+@cache_analytics_response(timeout=300, key_prefix="rep_custcomp")
 def customer_complaints(request):
     try: conn, tenant = get_tenant_connection(request)
     except ValueError as e: return Response({"error": str(e)}, status=401)
@@ -1137,7 +1115,7 @@ def customer_complaints(request):
     buckets, labels = generate_month_buckets(start_date, end_date)
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT YEAR(CmpDate) AS yr, MONTH(CmpDate) AS month_num, COUNT(*) AS cnt FROM CustCompMas WHERE CmpDate IS NOT NULL AND CAST(CmpDate AS DATE) BETWEEN ? AND ? AND ISNULL(Deleted, 0) = 0 GROUP BY YEAR(CmpDate), MONTH(CmpDate)", (start_date, end_date))
+        cursor.execute("SELECT YEAR(CmpDate) AS yr, MONTH(CmpDate) AS month_num, COUNT(*) AS cnt FROM CustCompMas WHERE CmpDate IS NOT NULL AND CmpDate >= ? AND CmpDate < DATEADD(DAY, 1, ?) AND ISNULL(Deleted, 0) = 0 GROUP BY YEAR(CmpDate), MONTH(CmpDate)", (start_date, end_date))
         rows = cursor.fetchall(); cursor.close(); conn.close()
     except Exception as e: return Response({"error": f"Database error: {str(e)}"}, status=500)
     counts = {b: 0 for b in buckets}
@@ -1147,6 +1125,7 @@ def customer_complaints(request):
     return Response({"company": tenant.get("company_name", ""), "fy": fy_label, "from": str(start_date), "to": str(end_date), "labels": labels, "data": [counts[b] for b in buckets]})
 
 @api_view(['GET'])
+@cache_analytics_response(timeout=300, key_prefix="rep_rej_mth")
 def rejection_monthwise(request):
     try: conn, tenant = get_tenant_connection(request)
     except ValueError as e: return Response({"error": str(e)}, status=401)
@@ -1157,9 +1136,9 @@ def rejection_monthwise(request):
         cursor = conn.cursor()
         sql = """
         SELECT YrNum, MonthNum, SUM(RejQty) as TotalRej FROM (
-            SELECT YEAR(finspdate) as YrNum, MONTH(finspdate) as MonthNum, CAST(ISNULL(rejqty, 0) AS FLOAT) as RejQty FROM FinalInspectionEntry WHERE deleted = 0 AND CAST(finspdate AS DATE) BETWEEN ? AND ? AND rejqty > 0
-            UNION ALL SELECT YEAR(inter_inspdate) as YrNum, MONTH(inter_inspdate) as MonthNum, CAST(ISNULL(rejqty, 0) AS FLOAT) as RejQty FROM InterInspectionEntry WHERE deleted = 0 AND CAST(inter_inspdate AS DATE) BETWEEN ? AND ? AND rejqty > 0
-            UNION ALL SELECT YEAR(m.inspdate) as YrNum, MONTH(m.inspdate) as MonthNum, CAST(ISNULL(d.matrej, 0) + ISNULL(d.macrej, 0) AS FLOAT) as RejQty FROM InJob_Det d INNER JOIN InJob_Mas m ON d.inspno = m.inspno WHERE m.deleted = 0 AND d.deleted = 0 AND CAST(m.inspdate AS DATE) BETWEEN ? AND ? AND (ISNULL(d.matrej, 0) > 0 OR ISNULL(d.macrej, 0) > 0)
+            SELECT YEAR(finspdate) as YrNum, MONTH(finspdate) as MonthNum, CAST(ISNULL(rejqty, 0) AS FLOAT) as RejQty FROM FinalInspectionEntry WHERE deleted = 0 AND finspdate >= ? AND finspdate < DATEADD(DAY, 1, ?) AND rejqty > 0
+            UNION ALL SELECT YEAR(inter_inspdate) as YrNum, MONTH(inter_inspdate) as MonthNum, CAST(ISNULL(rejqty, 0) AS FLOAT) as RejQty FROM InterInspectionEntry WHERE deleted = 0 AND inter_inspdate >= ? AND inter_inspdate < DATEADD(DAY, 1, ?) AND rejqty > 0
+            UNION ALL SELECT YEAR(m.inspdate) as YrNum, MONTH(m.inspdate) as MonthNum, CAST(ISNULL(d.matrej, 0) + ISNULL(d.macrej, 0) AS FLOAT) as RejQty FROM InJob_Det d INNER JOIN InJob_Mas m ON d.inspno = m.inspno WHERE m.deleted = 0 AND d.deleted = 0 AND m.inspdate >= ? AND m.inspdate < DATEADD(DAY, 1, ?) AND (ISNULL(d.matrej, 0) > 0 OR ISNULL(d.macrej, 0) > 0)
         ) as CombinedData GROUP BY YrNum, MonthNum ORDER BY YrNum, MonthNum"""
         params = [start_date, end_date, start_date, end_date, start_date, end_date]
         cursor.execute(sql, params); rows = cursor.fetchall(); cursor.close(); conn.close()
@@ -1171,6 +1150,7 @@ def rejection_monthwise(request):
     return Response({"company": tenant.get("company_name", ""), "fy": fy_label, "from": str(start_date), "to": str(end_date), "labels": labels, "data": [counts[b] for b in buckets]})
 
 @api_view(['GET'])
+@cache_analytics_response(timeout=300, key_prefix="rep_rwk_mth")
 def rework_monthwise(request):
     try: conn, tenant = get_tenant_connection(request)
     except ValueError as e: return Response({"error": str(e)}, status=401)
@@ -1181,9 +1161,9 @@ def rework_monthwise(request):
         cursor = conn.cursor()
         sql = """
         SELECT YrNum, MonthNum, SUM(ReworkQty) as TotalRework FROM (
-            SELECT YEAR(finspdate) as YrNum, MONTH(finspdate) as MonthNum, CAST(ISNULL(matrejqty, 0) AS FLOAT) as ReworkQty FROM FinalInspectionEntry WHERE deleted = 0 AND CAST(finspdate AS DATE) BETWEEN ? AND ? AND matrejqty > 0
-            UNION ALL SELECT YEAR(inter_inspdate) as YrNum, MONTH(inter_inspdate) as MonthNum, CAST(ISNULL(rwqty, 0) AS FLOAT) as ReworkQty FROM InterInspectionEntry WHERE deleted = 0 AND CAST(inter_inspdate AS DATE) BETWEEN ? AND ? AND rwqty > 0
-            UNION ALL SELECT YEAR(m.inspdate) as YrNum, MONTH(m.inspdate) as MonthNum, CAST(ISNULL(d.rwqty, 0) AS FLOAT) as ReworkQty FROM InJob_Det d INNER JOIN InJob_Mas m ON d.inspno = m.inspno WHERE m.deleted = 0 AND d.deleted = 0 AND CAST(m.inspdate AS DATE) BETWEEN ? AND ? AND d.rwqty > 0
+            SELECT YEAR(finspdate) as YrNum, MONTH(finspdate) as MonthNum, CAST(ISNULL(matrejqty, 0) AS FLOAT) as ReworkQty FROM FinalInspectionEntry WHERE deleted = 0 AND finspdate >= ? AND finspdate < DATEADD(DAY, 1, ?) AND matrejqty > 0
+            UNION ALL SELECT YEAR(inter_inspdate) as YrNum, MONTH(inter_inspdate) as MonthNum, CAST(ISNULL(rwqty, 0) AS FLOAT) as ReworkQty FROM InterInspectionEntry WHERE deleted = 0 AND inter_inspdate >= ? AND inter_inspdate < DATEADD(DAY, 1, ?) AND rwqty > 0
+            UNION ALL SELECT YEAR(m.inspdate) as YrNum, MONTH(m.inspdate) as MonthNum, CAST(ISNULL(d.rwqty, 0) AS FLOAT) as ReworkQty FROM InJob_Det d INNER JOIN InJob_Mas m ON d.inspno = m.inspno WHERE m.deleted = 0 AND d.deleted = 0 AND m.inspdate >= ? AND m.inspdate < DATEADD(DAY, 1, ?) AND d.rwqty > 0
         ) as CombinedData GROUP BY YrNum, MonthNum ORDER BY YrNum, MonthNum"""
         params = [start_date, end_date, start_date, end_date, start_date, end_date]
         cursor.execute(sql, params); rows = cursor.fetchall(); cursor.close(); conn.close()
@@ -1195,6 +1175,7 @@ def rework_monthwise(request):
     return Response({"company": tenant.get("company_name", ""), "fy": fy_label, "from": str(start_date), "to": str(end_date), "labels": labels, "data": [counts[b] for b in buckets]})
 
 @api_view(['GET'])
+@cache_analytics_response(timeout=300, key_prefix="rep_mac_ppm")
 def mac_rejection_ppm(request):
     try:
         conn, tenant = get_tenant_connection(request)
@@ -1242,7 +1223,7 @@ def mac_rejection_ppm(request):
                 INNER JOIN InJob_Det d ON m.inspno = d.inspno
                 WHERE ISNULL(m.deleted, 0) = 0 AND ISNULL(d.deleted, 0) = 0
                   AND ISNULL(m.dtype, '') != 'Without Process'
-                  AND CAST(m.inspdate AS DATE) BETWEEN ? AND ?
+                  AND m.inspdate >= ? AND m.inspdate < DATEADD(DAY, 1, ?)
             """)
             params.extend([start_date, end_date])
 
@@ -1272,7 +1253,7 @@ def mac_rejection_ppm(request):
                     {inter_mac_rej} AS MacRejQty
                 FROM InterInspectionEntry i
                 WHERE ISNULL(i.deleted, 0) = 0
-                  AND CAST(i.inter_inspdate AS DATE) BETWEEN ? AND ?
+                  AND i.inter_inspdate >= ? AND i.inter_inspdate < DATEADD(DAY, 1, ?)
             """)
             params.extend([start_date, end_date])
 
@@ -1298,7 +1279,7 @@ def mac_rejection_ppm(request):
                     {final_mac_rej} AS MacRejQty
                 FROM FinalInspectionEntry f
                 WHERE ISNULL(f.deleted, 0) = 0
-                  AND CAST(f.finspdate AS DATE) BETWEEN ? AND ?
+                  AND f.finspdate >= ? AND f.finspdate < DATEADD(DAY, 1, ?)
             """)
             params.extend([start_date, end_date])
 
@@ -1352,6 +1333,7 @@ def mac_rejection_ppm(request):
 #  PURCHASE - MONTHWISE TYPE REPORT & SUPPLIER RATING
 # ─────────────────────────────────────────────────────────────
 @api_view(['GET'])
+@cache_analytics_response(timeout=300, key_prefix="rep_pur_mth")
 def purchase_report_monthwise(request):
     try: conn, tenant = get_tenant_connection(request)
     except ValueError as e: return Response({"error": str(e)}, status=401)
@@ -1363,7 +1345,7 @@ def purchase_report_monthwise(request):
         sql = """
         SELECT YEAR(podate) AS yr, MONTH(podate) AS month_num, LTRIM(RTRIM(ISNULL(dtype, ''))) AS dtype, SUM(ISNULL(totamt, 0)) AS total_amount
         FROM POMas
-        WHERE deleted = 0 AND CAST(podate AS DATE) BETWEEN ? AND ? AND ISNULL(dtype, '') <> 'Job Order'
+        WHERE deleted = 0 AND podate >= ? AND podate < DATEADD(DAY, 1, ?) AND ISNULL(dtype, '') <> 'Job Order'
         GROUP BY YEAR(podate), MONTH(podate), LTRIM(RTRIM(ISNULL(dtype, '')))
         ORDER BY yr, month_num
         """
@@ -1391,6 +1373,7 @@ def purchase_report_monthwise(request):
 
 # ✅ Supplier / Vendor Rating API for Charts screen (Monthwise & Vendor-Filtered)
 @api_view(['GET'])
+@cache_analytics_response(timeout=300, key_prefix="rep_supp_rtg")
 def supplier_rating_monthwise(request):
     """
     Plant Performance / Charts — Vendor/Supplier Rating Report (Monthwise & Filtered).
@@ -1413,130 +1396,143 @@ def supplier_rating_monthwise(request):
     try:
         cursor = conn.cursor()
         if entity_type == "supplier":
+            # The supplier CTE is a per-period snapshot (ratings graded on the period
+            # totals), so it cannot be expressed as a single GROUP BY month.
+            # Instead of N round-trips over the tunnel, send ONE batch with one
+            # statement per month and walk the result sets with nextset().
             from .views_plantperformance import get_supplier_rating_base_cte
-            cte = get_supplier_rating_base_cte()
+            cte = get_supplier_rating_base_cte().strip()
+            if cte.upper().startswith("WITH"):
+                cte = ";" + cte
+
+            suppliers = []
+            extra_where = ""
+            if name_filter:
+                suppliers = [s.strip() for s in name_filter.split(",") if s.strip()]
+                if suppliers:
+                    placeholders = ",".join(["?"] * len(suppliers))
+                    extra_where = f" AND ss.SupplierName IN ({placeholders})"
+
+            batch_sql_parts = []
+            batch_params: list = []
             for yr, mo in buckets:
                 m_start = date(yr, mo, 1)
                 _, last_day = monthrange(yr, mo)
                 m_end = date(yr, mo, last_day)
-
-                params: list = [m_start, m_end, m_start, m_end]
-                extra_where = ""
-                if name_filter:
-                    suppliers = [s.strip() for s in name_filter.split(",") if s.strip()]
-                    if suppliers:
-                        placeholders = ",".join(["?"] * len(suppliers))
-                        extra_where = f" AND ss.SupplierName IN ({placeholders})"
-                        params.extend(suppliers)
-
-                sql = f"""
+                batch_sql_parts.append(f"""
                 {cte}
                 SELECT ROUND(AVG(CAST(ss.TotalSupplierRating AS FLOAT)), 2) AS AvgFinalRating
                 FROM SupplierSummary ss
                 WHERE 1=1 {extra_where};
-                """
+                """)
+                batch_params.extend([m_start, m_end, m_start, m_end])
+                batch_params.extend(suppliers)
+
+            if batch_sql_parts:
                 try:
-                    cursor.execute(sql, params)
-                    row = cursor.fetchone()
-                    if row and row[0] is not None:
-                        rating_map[(yr, mo)] = round(float(row[0]), 2)
+                    cursor.execute("\n".join(batch_sql_parts), batch_params)
+                    for b in buckets:
+                        row = cursor.fetchone()
+                        if row and row[0] is not None:
+                            rating_map[b] = round(float(row[0]), 2)
+                        if not cursor.nextset():
+                            break
                 except Exception:
                     pass
         else:
-            for yr, mo in buckets:
-                m_start = date(yr, mo, 1)
-                _, last_day = monthrange(yr, mo)
-                m_end = date(yr, mo, last_day)
+            # Vendor rating: one query grouped by job month instead of 12 CTE executions.
+            sql = """
+            DECLARE @FromDate DATE = ?;
+            DECLARE @ToDate   DATE = ?;
 
-                sql = """
-                DECLARE @FromDate DATE = ?;
-                DECLARE @ToDate   DATE = ?;
-
-                ;WITH JobQuality AS (
-                    SELECT
-                        jm.jbno,
-                        jm.cid,
-                        jm.expdate,
-                        SUM(ji.Qty)                                                    AS ReceivedQty,
-                        SUM(ji.Qty - ISNULL(ji.RejQty,0) - ISNULL(ji.RwQty,0))       AS AcceptedQty,
-                        SUM(ISNULL(ji.RejQty,0))                                       AS RejectedQty
-                    FROM Job_mas jm
-                    INNER JOIN JobIncomeDetInsp ji ON ji.JbNo = jm.jbno
-                    INNER JOIN CustMast cm ON cm.Id = jm.cid
-                    WHERE jm.deleted = 0
-                      AND jm.cid LIKE 'V%'
-                      AND CAST(jm.jbdate AS DATE) BETWEEN @FromDate AND @ToDate
-                      AND (? = '' OR cm.CName = ?)
-                    GROUP BY jm.jbno, jm.cid, jm.expdate
-                ),
-                JobDelivery AS (
-                    SELECT
-                        jq.jbno,
-                        jq.cid,
-                        jq.expdate,
-                        jq.ReceivedQty,
-                        jq.AcceptedQty,
-                        jq.RejectedQty,
-                        jd_dc.LastDcDate,
-                        CASE
-                            WHEN jd_dc.LastDcDate IS NOT NULL AND jd_dc.LastDcDate <= jq.expdate THEN 'ONTIME'
-                            WHEN jq.expdate < CAST(GETDATE() AS DATE) THEN 'DELAY'
-                            ELSE 'PENDING'
-                        END AS DeliveryBucket
-                    FROM JobQuality jq
-                    OUTER APPLY (
-                        SELECT MAX(im.dcdate) AS LastDcDate
-                        FROM JobIncomeDetInsp ji
-                        INNER JOIN InJob_Mas im ON im.jino = ji.JiNo
-                        WHERE ji.JbNo = jq.jbno
-                    ) jd_dc
-                ),
-                VendorAgg AS (
-                    SELECT
-                        SUM(jd.ReceivedQty)                                                AS TotalReceived,
-                        SUM(jd.AcceptedQty)                                                AS TotalAccepted,
-                        SUM(jd.RejectedQty)                                                AS TotalRejected,
-                        COUNT(*)                                                            AS JobOrdersProduced,
-                        SUM(CASE WHEN jd.DeliveryBucket = 'ONTIME'  THEN 1 ELSE 0 END)    AS OnTimeJobs,
-                        SUM(CASE WHEN jd.DeliveryBucket = 'DELAY'   THEN 1 ELSE 0 END)    AS DelayJobs,
-                        SUM(CASE WHEN jd.DeliveryBucket = 'PENDING' THEN 1 ELSE 0 END)    AS PendingJobs
-                    FROM JobDelivery jd
-                ),
-                VendorScored AS (
-                    SELECT
-                        va.*,
-                        CASE WHEN va.TotalReceived = 0 THEN NULL
-                             ELSE (va.TotalAccepted * 100.0) / va.TotalReceived
-                        END AS AcceptancePct,
-                        CASE WHEN (va.JobOrdersProduced - va.PendingJobs) = 0 THEN NULL
-                             ELSE (va.OnTimeJobs * 100.0) / (va.JobOrdersProduced - va.PendingJobs)
-                        END AS OnTimeDeliveryPct
-                    FROM VendorAgg va
-                ),
-                VendorGraded AS (
-                    SELECT
-                        ( ISNULL(qr.RatingFor, 0) + ISNULL(dr.RatingFor, 0) ) / 2.0 AS TotalRating
-                    FROM VendorScored vs
-                    LEFT JOIN QualityRating qr
-                           ON qr.dtype = 'Vendor'
-                          AND vs.AcceptancePct IS NOT NULL
-                          AND vs.AcceptancePct BETWEEN qr.RatingFrom AND qr.RatingTo
-                    LEFT JOIN DeliveryRating dr
-                           ON dr.dtype = 'Vendor'
-                          AND vs.OnTimeDeliveryPct IS NOT NULL
-                          AND vs.OnTimeDeliveryPct BETWEEN dr.RatingFrom AND dr.RatingTo
-                )
-                SELECT ROUND(AVG(vg.TotalRating), 2) AS [TOTAL RATING]
-                FROM VendorGraded vg
-                WHERE vg.TotalRating IS NOT NULL;
-                """
-                try:
-                    cursor.execute(sql, [m_start, m_end, name_filter, name_filter])
-                    row = cursor.fetchone()
-                    if row and row[0] is not None:
-                        rating_map[(yr, mo)] = round(float(row[0]), 2)
-                except Exception:
-                    pass
+            ;WITH JobQuality AS (
+                SELECT
+                    jm.jbno,
+                    jm.cid,
+                    jm.expdate,
+                    YEAR(jm.jbdate)  AS yr,
+                    MONTH(jm.jbdate) AS mo,
+                    SUM(ji.Qty)                                                    AS ReceivedQty,
+                    SUM(ji.Qty - ISNULL(ji.RejQty,0) - ISNULL(ji.RwQty,0))       AS AcceptedQty,
+                    SUM(ISNULL(ji.RejQty,0))                                       AS RejectedQty
+                FROM Job_mas jm
+                INNER JOIN JobIncomeDetInsp ji ON ji.JbNo = jm.jbno
+                INNER JOIN CustMast cm ON cm.Id = jm.cid
+                WHERE jm.deleted = 0
+                  AND jm.cid LIKE 'V%'
+                  AND jm.jbdate >= @FromDate AND jm.jbdate < DATEADD(DAY, 1, @ToDate)
+                  AND (? = '' OR cm.CName = ?)
+                GROUP BY jm.jbno, jm.cid, jm.expdate, YEAR(jm.jbdate), MONTH(jm.jbdate)
+            ),
+            JobDelivery AS (
+                SELECT
+                    jq.jbno, jq.cid, jq.expdate, jq.yr, jq.mo,
+                    jq.ReceivedQty, jq.AcceptedQty, jq.RejectedQty,
+                    jd_dc.LastDcDate,
+                    CASE
+                        WHEN jd_dc.LastDcDate IS NOT NULL AND jd_dc.LastDcDate <= jq.expdate THEN 'ONTIME'
+                        WHEN jq.expdate < CAST(GETDATE() AS DATE) THEN 'DELAY'
+                        ELSE 'PENDING'
+                    END AS DeliveryBucket
+                FROM JobQuality jq
+                OUTER APPLY (
+                    SELECT MAX(im.dcdate) AS LastDcDate
+                    FROM JobIncomeDetInsp ji
+                    INNER JOIN InJob_Mas im ON im.jino = ji.JiNo
+                    WHERE ji.JbNo = jq.jbno
+                ) jd_dc
+            ),
+            VendorAgg AS (
+                SELECT
+                    jd.yr, jd.mo,
+                    SUM(jd.ReceivedQty)                                                AS TotalReceived,
+                    SUM(jd.AcceptedQty)                                                AS TotalAccepted,
+                    SUM(jd.RejectedQty)                                                AS TotalRejected,
+                    COUNT(*)                                                            AS JobOrdersProduced,
+                    SUM(CASE WHEN jd.DeliveryBucket = 'ONTIME'  THEN 1 ELSE 0 END)    AS OnTimeJobs,
+                    SUM(CASE WHEN jd.DeliveryBucket = 'DELAY'   THEN 1 ELSE 0 END)    AS DelayJobs,
+                    SUM(CASE WHEN jd.DeliveryBucket = 'PENDING' THEN 1 ELSE 0 END)    AS PendingJobs
+                FROM JobDelivery jd
+                GROUP BY jd.yr, jd.mo
+            ),
+            VendorScored AS (
+                SELECT
+                    va.*,
+                    CASE WHEN va.TotalReceived = 0 THEN NULL
+                         ELSE (va.TotalAccepted * 100.0) / va.TotalReceived
+                    END AS AcceptancePct,
+                    CASE WHEN (va.JobOrdersProduced - va.PendingJobs) = 0 THEN NULL
+                         ELSE (va.OnTimeJobs * 100.0) / (va.JobOrdersProduced - va.PendingJobs)
+                    END AS OnTimeDeliveryPct
+                FROM VendorAgg va
+            ),
+            VendorGraded AS (
+                SELECT
+                    vs.yr, vs.mo,
+                    ( ISNULL(qr.RatingFor, 0) + ISNULL(dr.RatingFor, 0) ) / 2.0 AS TotalRating
+                FROM VendorScored vs
+                LEFT JOIN QualityRating qr
+                       ON qr.dtype = 'Vendor'
+                      AND vs.AcceptancePct IS NOT NULL
+                      AND vs.AcceptancePct BETWEEN qr.RatingFrom AND qr.RatingTo
+                LEFT JOIN DeliveryRating dr
+                       ON dr.dtype = 'Vendor'
+                      AND vs.OnTimeDeliveryPct IS NOT NULL
+                      AND vs.OnTimeDeliveryPct BETWEEN dr.RatingFrom AND dr.RatingTo
+            )
+            SELECT vg.yr, vg.mo, ROUND(AVG(vg.TotalRating), 2) AS [TOTAL RATING]
+            FROM VendorGraded vg
+            WHERE vg.TotalRating IS NOT NULL
+            GROUP BY vg.yr, vg.mo;
+            """
+            try:
+                cursor.execute(sql, [start_date, end_date, name_filter, name_filter])
+                for yr, mo, rating in cursor.fetchall():
+                    key = (int(yr), int(mo))
+                    if key in rating_map and rating is not None:
+                        rating_map[key] = round(float(rating), 2)
+            except Exception:
+                pass
 
         chart_data = [rating_map[b] for b in buckets]
 
@@ -1593,6 +1589,7 @@ def supplier_rating_monthwise(request):
 #  VENDOR - REJECTION MONTHWISE
 # ─────────────────────────────────────────────────────────────
 @api_view(['GET'])
+@cache_analytics_response(timeout=300, key_prefix="rep_vend_rej")
 def vendor_rejection_monthwise(request):
     try:
         conn, tenant = get_tenant_connection(request)
@@ -1609,56 +1606,74 @@ def vendor_rejection_monthwise(request):
         cursor = conn.cursor()
 
         # 1. Job Order Subcontract Vendor Rejections (matching Reports — Quality Analysis Rejection & Rework Summary table logic)
+        # Pre-aggregate by (month, cid, partno) first, then resolve the vendor
+        # name ONCE per distinct group via OUTER APPLY, then re-aggregate by
+        # name. The previous form evaluated ten correlated TOP 1 sub-queries
+        # per detail row, twice (SELECT list and GROUP BY).
         injob_sql = """
-        SELECT
-            YEAR(m.inspdate) AS YrNum,
-            MONTH(m.inspdate) AS MonthNum,
-            COALESCE(
-                NULLIF(LTRIM(RTRIM(
-                    COALESCE(
-                        (SELECT TOP 1 CM.CName FROM CustMast CM WHERE LTRIM(RTRIM(CONVERT(NVARCHAR(128), CM.Id))) = LTRIM(RTRIM(CONVERT(NVARCHAR(128), m.cid))) AND ISNULL(CM.deleted, 0) = 0),
-                        (SELECT TOP 1 CAM.CorpName FROM CustAliasMast CAM WHERE LTRIM(RTRIM(CONVERT(NVARCHAR(128), CAM.Id))) = LTRIM(RTRIM(CONVERT(NVARCHAR(128), m.cid))) AND ISNULL(CAM.deleted, 0) = 0),
-                        (SELECT TOP 1 CM_WM.CName FROM WithMatMas WM_P INNER JOIN CustMast CM_WM ON WM_P.Cid = CM_WM.Id WHERE WM_P.PartNo = d.partno AND ISNULL(WM_P.Deleted, 0) = 0 AND ISNULL(CM_WM.deleted, 0) = 0),
-                        (SELECT TOP 1 CAM_WM.CorpName FROM WithMatMas WM_P INNER JOIN CustAliasMast CAM_WM ON WM_P.Cid = CAM_WM.Id WHERE WM_P.PartNo = d.partno AND ISNULL(WM_P.Deleted, 0) = 0 AND ISNULL(CAM_WM.deleted, 0) = 0),
-                        (SELECT TOP 1 CM_CJ.CName FROM CustJobRawMat CJ_P INNER JOIN CustMast CM_CJ ON CJ_P.cid = CM_CJ.Id WHERE CJ_P.partno = d.partno AND ISNULL(CJ_P.deleted, 0) = 0 AND ISNULL(CM_CJ.deleted, 0) = 0),
-                        (SELECT TOP 1 CAM_CJ.CorpName FROM CustJobRawMat CJ_P INNER JOIN CustAliasMast CAM_CJ ON CJ_P.cid = CAM_CJ.Id WHERE CJ_P.partno = d.partno AND ISNULL(CJ_P.deleted, 0) = 0 AND ISNULL(CAM_CJ.deleted, 0) = 0),
-                        (SELECT TOP 1 CM_PM.CName FROM ProductMast PM_P INNER JOIN CustMast CM_PM ON PM_P.Cid = CM_PM.Id WHERE PM_P.PartNo = d.partno AND ISNULL(PM_P.Deleted, 0) = 0 AND ISNULL(CM_PM.deleted, 0) = 0),
-                        (SELECT TOP 1 CAM_PM.CorpName FROM ProductMast PM_P INNER JOIN CustAliasMast CAM_PM ON PM_P.Cid = CAM_PM.Id WHERE PM_P.PartNo = d.partno AND ISNULL(PM_P.Deleted, 0) = 0 AND ISNULL(CAM_PM.deleted, 0) = 0),
-                        (SELECT TOP 1 CM_PRM.CName FROM ProdMast PRM_P INNER JOIN CustMast CM_PRM ON PRM_P.CId = CM_PRM.Id WHERE PRM_P.Partno = d.partno AND ISNULL(PRM_P.Deleted, 0) = 0 AND ISNULL(CM_PRM.deleted, 0) = 0),
-                        (SELECT TOP 1 CAM_PRM.CorpName FROM ProdMast PRM_P INNER JOIN CustAliasMast CAM_PRM ON PRM_P.CId = CAM_PRM.Id WHERE PRM_P.Partno = d.partno AND ISNULL(PRM_P.Deleted, 0) = 0 AND ISNULL(CAM_PRM.deleted, 0) = 0)
-                    )
-                )), N''),
-                N'Unknown'
-            ) AS VendorName,
-            SUM(CAST(ISNULL(d.matrej, 0) AS FLOAT) + CAST(ISNULL(d.macrej, 0) AS FLOAT)) AS TotalRej
-        FROM InJob_Mas m
-        INNER JOIN InJob_Det d ON m.inspno = d.inspno
-        WHERE ISNULL(m.deleted, 0) = 0
-          AND ISNULL(d.deleted, 0) = 0
-          AND ISNULL(m.dtype, '') != 'Without Process'
-          AND CAST(m.inspdate AS DATE) BETWEEN ? AND ?
-          AND (ISNULL(d.matrej, 0) > 0 OR ISNULL(d.macrej, 0) > 0)
-        GROUP BY
-            YEAR(m.inspdate),
-            MONTH(m.inspdate),
-            COALESCE(
-                NULLIF(LTRIM(RTRIM(
-                    COALESCE(
-                        (SELECT TOP 1 CM.CName FROM CustMast CM WHERE LTRIM(RTRIM(CONVERT(NVARCHAR(128), CM.Id))) = LTRIM(RTRIM(CONVERT(NVARCHAR(128), m.cid))) AND ISNULL(CM.deleted, 0) = 0),
-                        (SELECT TOP 1 CAM.CorpName FROM CustAliasMast CAM WHERE LTRIM(RTRIM(CONVERT(NVARCHAR(128), CAM.Id))) = LTRIM(RTRIM(CONVERT(NVARCHAR(128), m.cid))) AND ISNULL(CAM.deleted, 0) = 0),
-                        (SELECT TOP 1 CM_WM.CName FROM WithMatMas WM_P INNER JOIN CustMast CM_WM ON WM_P.Cid = CM_WM.Id WHERE WM_P.PartNo = d.partno AND ISNULL(WM_P.Deleted, 0) = 0 AND ISNULL(CM_WM.deleted, 0) = 0),
-                        (SELECT TOP 1 CAM_WM.CorpName FROM WithMatMas WM_P INNER JOIN CustAliasMast CAM_WM ON WM_P.Cid = CAM_WM.Id WHERE WM_P.PartNo = d.partno AND ISNULL(WM_P.Deleted, 0) = 0 AND ISNULL(CAM_WM.deleted, 0) = 0),
-                        (SELECT TOP 1 CM_CJ.CName FROM CustJobRawMat CJ_P INNER JOIN CustMast CM_CJ ON CJ_P.cid = CM_CJ.Id WHERE CJ_P.partno = d.partno AND ISNULL(CJ_P.deleted, 0) = 0 AND ISNULL(CM_CJ.deleted, 0) = 0),
-                        (SELECT TOP 1 CAM_CJ.CorpName FROM CustJobRawMat CJ_P INNER JOIN CustAliasMast CAM_CJ ON CJ_P.cid = CAM_CJ.Id WHERE CJ_P.partno = d.partno AND ISNULL(CJ_P.deleted, 0) = 0 AND ISNULL(CAM_CJ.deleted, 0) = 0),
-                        (SELECT TOP 1 CM_PM.CName FROM ProductMast PM_P INNER JOIN CustMast CM_PM ON PM_P.Cid = CM_PM.Id WHERE PM_P.PartNo = d.partno AND ISNULL(PM_P.Deleted, 0) = 0 AND ISNULL(CM_PM.deleted, 0) = 0),
-                        (SELECT TOP 1 CAM_PM.CorpName FROM ProductMast PM_P INNER JOIN CustAliasMast CAM_PM ON PM_P.Cid = CAM_PM.Id WHERE PM_P.PartNo = d.partno AND ISNULL(PM_P.Deleted, 0) = 0 AND ISNULL(CAM_PM.deleted, 0) = 0),
-                        (SELECT TOP 1 CM_PRM.CName FROM ProdMast PRM_P INNER JOIN CustMast CM_PRM ON PRM_P.CId = CM_PRM.Id WHERE PRM_P.Partno = d.partno AND ISNULL(PRM_P.Deleted, 0) = 0 AND ISNULL(CM_PRM.deleted, 0) = 0),
-                        (SELECT TOP 1 CAM_PRM.CorpName FROM ProdMast PRM_P INNER JOIN CustAliasMast CAM_PRM ON PRM_P.CId = CAM_PRM.Id WHERE PRM_P.Partno = d.partno AND ISNULL(PRM_P.Deleted, 0) = 0 AND ISNULL(CAM_PRM.deleted, 0) = 0)
-                    )
-                )), N''),
-                N'Unknown'
-            )
-        HAVING SUM(CAST(ISNULL(d.matrej, 0) AS FLOAT) + CAST(ISNULL(d.macrej, 0) AS FLOAT)) > 0
+        ;WITH Base AS (
+            SELECT
+                YEAR(m.inspdate)  AS YrNum,
+                MONTH(m.inspdate) AS MonthNum,
+                LTRIM(RTRIM(CONVERT(NVARCHAR(128), m.cid))) AS cid_key,
+                d.partno,
+                SUM(CAST(ISNULL(d.matrej, 0) AS FLOAT) + CAST(ISNULL(d.macrej, 0) AS FLOAT)) AS Rej
+            FROM InJob_Mas m
+            INNER JOIN InJob_Det d ON m.inspno = d.inspno
+            WHERE ISNULL(m.deleted, 0) = 0
+              AND ISNULL(d.deleted, 0) = 0
+              AND ISNULL(m.dtype, '') != 'Without Process'
+              AND m.inspdate >= ? AND m.inspdate < DATEADD(DAY, 1, ?)
+              AND (ISNULL(d.matrej, 0) > 0 OR ISNULL(d.macrej, 0) > 0)
+            GROUP BY YEAR(m.inspdate), MONTH(m.inspdate),
+                     LTRIM(RTRIM(CONVERT(NVARCHAR(128), m.cid))), d.partno
+        ),
+        Named AS (
+            SELECT
+                b.YrNum, b.MonthNum, b.Rej,
+                COALESCE(NULLIF(LTRIM(RTRIM(V.Name)), N''), N'Unknown') AS VendorName
+            FROM Base b
+            OUTER APPLY (
+                SELECT TOP 1 x.Name
+                FROM (
+                    SELECT 1 AS pri, CM.CName AS Name FROM CustMast CM
+                     WHERE LTRIM(RTRIM(CONVERT(NVARCHAR(128), CM.Id))) = b.cid_key AND ISNULL(CM.deleted, 0) = 0
+                    UNION ALL
+                    SELECT 2, CAM.CorpName FROM CustAliasMast CAM
+                     WHERE LTRIM(RTRIM(CONVERT(NVARCHAR(128), CAM.Id))) = b.cid_key AND ISNULL(CAM.deleted, 0) = 0
+                    UNION ALL
+                    SELECT 3, CM_WM.CName FROM WithMatMas WM_P INNER JOIN CustMast CM_WM ON WM_P.Cid = CM_WM.Id
+                     WHERE WM_P.PartNo = b.partno AND ISNULL(WM_P.Deleted, 0) = 0 AND ISNULL(CM_WM.deleted, 0) = 0
+                    UNION ALL
+                    SELECT 4, CAM_WM.CorpName FROM WithMatMas WM_P INNER JOIN CustAliasMast CAM_WM ON WM_P.Cid = CAM_WM.Id
+                     WHERE WM_P.PartNo = b.partno AND ISNULL(WM_P.Deleted, 0) = 0 AND ISNULL(CAM_WM.deleted, 0) = 0
+                    UNION ALL
+                    SELECT 5, CM_CJ.CName FROM CustJobRawMat CJ_P INNER JOIN CustMast CM_CJ ON CJ_P.cid = CM_CJ.Id
+                     WHERE CJ_P.partno = b.partno AND ISNULL(CJ_P.deleted, 0) = 0 AND ISNULL(CM_CJ.deleted, 0) = 0
+                    UNION ALL
+                    SELECT 6, CAM_CJ.CorpName FROM CustJobRawMat CJ_P INNER JOIN CustAliasMast CAM_CJ ON CJ_P.cid = CAM_CJ.Id
+                     WHERE CJ_P.partno = b.partno AND ISNULL(CJ_P.deleted, 0) = 0 AND ISNULL(CAM_CJ.deleted, 0) = 0
+                    UNION ALL
+                    SELECT 7, CM_PM.CName FROM ProductMast PM_P INNER JOIN CustMast CM_PM ON PM_P.Cid = CM_PM.Id
+                     WHERE PM_P.PartNo = b.partno AND ISNULL(PM_P.Deleted, 0) = 0 AND ISNULL(CM_PM.deleted, 0) = 0
+                    UNION ALL
+                    SELECT 8, CAM_PM.CorpName FROM ProductMast PM_P INNER JOIN CustAliasMast CAM_PM ON PM_P.Cid = CAM_PM.Id
+                     WHERE PM_P.PartNo = b.partno AND ISNULL(PM_P.Deleted, 0) = 0 AND ISNULL(CAM_PM.deleted, 0) = 0
+                    UNION ALL
+                    SELECT 9, CM_PRM.CName FROM ProdMast PRM_P INNER JOIN CustMast CM_PRM ON PRM_P.CId = CM_PRM.Id
+                     WHERE PRM_P.Partno = b.partno AND ISNULL(PRM_P.Deleted, 0) = 0 AND ISNULL(CM_PRM.deleted, 0) = 0
+                    UNION ALL
+                    SELECT 10, CAM_PRM.CorpName FROM ProdMast PRM_P INNER JOIN CustAliasMast CAM_PRM ON PRM_P.CId = CAM_PRM.Id
+                     WHERE PRM_P.Partno = b.partno AND ISNULL(PRM_P.Deleted, 0) = 0 AND ISNULL(CAM_PRM.deleted, 0) = 0
+                ) x
+                WHERE NULLIF(LTRIM(RTRIM(x.Name)), N'') IS NOT NULL
+                ORDER BY x.pri
+            ) V
+        )
+        SELECT YrNum, MonthNum, VendorName, SUM(Rej) AS TotalRej
+        FROM Named
+        GROUP BY YrNum, MonthNum, VendorName
+        HAVING SUM(Rej) > 0
         """
 
         try:
@@ -1680,7 +1695,7 @@ def vendor_rejection_monthwise(request):
                 WHERE ISNULL(m.deleted, 0) = 0
                   AND ISNULL(d.deleted, 0) = 0
                   AND ISNULL(m.dtype, '') != 'Without Process'
-                  AND CAST(m.inspdate AS DATE) BETWEEN ? AND ?
+                  AND m.inspdate >= ? AND m.inspdate < DATEADD(DAY, 1, ?)
                   AND (ISNULL(d.matrej, 0) > 0 OR ISNULL(d.macrej, 0) > 0)
                 GROUP BY YEAR(m.inspdate), MONTH(m.inspdate), COALESCE(NULLIF(LTRIM(RTRIM(ISNULL(C.CName, N''))), N''), N'Unknown')
                 HAVING SUM(CAST(ISNULL(d.matrej, 0) AS FLOAT) + CAST(ISNULL(d.macrej, 0) AS FLOAT)) > 0
@@ -1705,7 +1720,7 @@ def vendor_rejection_monthwise(request):
             INNER JOIN inspdet D ON IM.irno = D.irno AND ISNULL(D.deleted, 0) = 0
             LEFT JOIN CustMast CM ON LTRIM(RTRIM(CONVERT(NVARCHAR(128), GM.cid))) = LTRIM(RTRIM(CONVERT(NVARCHAR(128), CM.Id))) AND ISNULL(CM.deleted, 0) = 0
             WHERE ISNULL(GM.deleted, 0) = 0
-              AND CAST(IM.irdate AS DATE) BETWEEN ? AND ?
+              AND IM.irdate >= ? AND IM.irdate < DATEADD(DAY, 1, ?)
               AND (ISNULL(D.matrej, 0) > 0 OR ISNULL(D.macrej, 0) > 0)
             GROUP BY YEAR(IM.irdate), MONTH(IM.irdate), COALESCE(NULLIF(LTRIM(RTRIM(ISNULL(CM.CName, N''))), N''), N'Unknown')
             HAVING SUM(CAST(ISNULL(D.matrej, 0) AS FLOAT) + CAST(ISNULL(D.macrej, 0) AS FLOAT)) > 0
@@ -1787,6 +1802,7 @@ def vendor_rejection_monthwise(request):
 #  OPERATIONS - OVERALL EFFICIENCY
 # ─────────────────────────────────────────────────────────────
 @api_view(['GET'])
+@cache_analytics_response(timeout=300, key_prefix="rep_eff_mth")
 def overall_efficiency_monthwise(request):
     try: conn, tenant = get_tenant_connection(request)
     except ValueError as e: return Response({"error": str(e)}, status=401)
@@ -1795,7 +1811,7 @@ def overall_efficiency_monthwise(request):
     buckets, labels = generate_month_buckets(start_date, end_date)
     try:
         cursor = conn.cursor()
-        sql = """SELECT YEAR(dt) AS YrNum, MONTH(dt) AS MonthNum, AVG(CAST(OAEFF AS FLOAT)) AS Avg_OAEFF FROM (SELECT proddate AS dt, OAEFF FROM ProductionEntry WHERE CAST(proddate AS DATE) BETWEEN ? AND ? AND deleted = 0 AND OAEFF IS NOT NULL UNION ALL SELECT entrydate AS dt, OAEFF FROM ConvProductionEntry WHERE CAST(entrydate AS DATE) BETWEEN ? AND ? AND deleted = 0 AND OAEFF IS NOT NULL UNION ALL SELECT entrydate AS dt, OAEFF FROM ConvProductionEntryRod WHERE CAST(entrydate AS DATE) BETWEEN ? AND ? AND deleted = 0 AND OAEFF IS NOT NULL) AS X GROUP BY YEAR(dt), MONTH(dt) ORDER BY YEAR(dt), MONTH(dt)"""
+        sql = """SELECT YEAR(dt) AS YrNum, MONTH(dt) AS MonthNum, AVG(CAST(OAEFF AS FLOAT)) AS Avg_OAEFF FROM (SELECT proddate AS dt, OAEFF FROM ProductionEntry WHERE proddate >= ? AND proddate < DATEADD(DAY, 1, ?) AND deleted = 0 AND OAEFF IS NOT NULL UNION ALL SELECT entrydate AS dt, OAEFF FROM ConvProductionEntry WHERE entrydate >= ? AND entrydate < DATEADD(DAY, 1, ?) AND deleted = 0 AND OAEFF IS NOT NULL UNION ALL SELECT entrydate AS dt, OAEFF FROM ConvProductionEntryRod WHERE entrydate >= ? AND entrydate < DATEADD(DAY, 1, ?) AND deleted = 0 AND OAEFF IS NOT NULL) AS X GROUP BY YEAR(dt), MONTH(dt) ORDER BY YEAR(dt), MONTH(dt)"""
         params = [start_date, end_date, start_date, end_date, start_date, end_date]
         cursor.execute(sql, params); rows = cursor.fetchall(); cursor.close(); conn.close()
     except Exception as e: return Response({"error": f"Database error: {str(e)}"}, status=500)
@@ -1942,6 +1958,7 @@ SELECT DISTINCT macno FROM (
 
 
 @api_view(['GET'])
+@cache_analytics_response(timeout=600, key_prefix="ops_list")
 def get_operators(request):
     try: conn, tenant = get_tenant_connection(request)
     except ValueError as e: return Response({"error": str(e)}, status=401)
@@ -1971,6 +1988,7 @@ def get_operators(request):
     except Exception as e: return Response({"error": f"Database error: {str(e)}"}, status=500)
 
 @api_view(['GET'])
+@cache_analytics_response(timeout=300, key_prefix="op_eff")
 def operator_efficiency(request):
     try: conn, tenant = get_tenant_connection(request)
     except ValueError as e: return Response({"error": str(e)}, status=401)
@@ -2015,7 +2033,7 @@ def operator_efficiency(request):
             branches.append(
                 f"SELECT YEAR([{s['d']}]) AS YrNum, MONTH([{s['d']}]) AS MonthNo, ISNULL(CAST([{s['eff']}] AS FLOAT), 0) AS Eff, "
                 f"ISNULL(CAST([{s['qty']}] AS FLOAT), 0) AS Qty FROM {s['q']} WHERE {s['del']} "
-                f"AND CAST([{s['d']}] AS DATE) BETWEEN ? AND ? "
+                f"AND [{s['d']}] >= ? AND [{s['d']}] < DATEADD(DAY, 1, ?) "
                 f"AND UPPER(LTRIM(RTRIM(CAST([{s['opr']}] AS NVARCHAR(512))))) = UPPER(LTRIM(RTRIM(?)))"
             )
             params.extend([start_date, end_date, oprname])
@@ -2027,7 +2045,7 @@ def operator_efficiency(request):
             )
             cursor.execute(sql, params)
         else:
-            sql = """WITH AllEfficiency AS (SELECT oprname, YEAR(entrydate) AS YrNum, MONTH(entrydate) AS MonthNo, ISNULL(eff,0) AS Eff, ISNULL(qty,0) AS Qty FROM ConvProductionEntryRod WHERE deleted = 0 AND CAST(entrydate AS DATE) BETWEEN ? AND ? AND UPPER(LTRIM(RTRIM(oprname))) = UPPER(LTRIM(RTRIM(?))) UNION ALL SELECT oprname, YEAR(proddate) AS YrNum, MONTH(proddate) AS MonthNo, ISNULL(OPREFF,0) AS Eff, ISNULL(okqty,0) AS Qty FROM ProductionEntry WHERE deleted = 0 AND CAST(proddate AS DATE) BETWEEN ? AND ? AND UPPER(LTRIM(RTRIM(oprname))) = UPPER(LTRIM(RTRIM(?))) UNION ALL SELECT oprname, YEAR(entrydate) AS YrNum, MONTH(entrydate) AS MonthNo, ISNULL(eff,0) AS Eff, ISNULL(qty,0) AS Qty FROM ConvProductionEntry WHERE deleted = 0 AND CAST(entrydate AS DATE) BETWEEN ? AND ? AND UPPER(LTRIM(RTRIM(oprname))) = UPPER(LTRIM(RTRIM(?)))) SELECT YrNum, MonthNo, CASE WHEN SUM(Qty) = 0 THEN 0 ELSE AVG(Eff) END AS OperatorEfficiency FROM AllEfficiency GROUP BY YrNum, MonthNo ORDER BY YrNum, MonthNo"""
+            sql = """WITH AllEfficiency AS (SELECT oprname, YEAR(entrydate) AS YrNum, MONTH(entrydate) AS MonthNo, ISNULL(eff,0) AS Eff, ISNULL(qty,0) AS Qty FROM ConvProductionEntryRod WHERE deleted = 0 AND entrydate >= ? AND entrydate < DATEADD(DAY, 1, ?) AND UPPER(LTRIM(RTRIM(oprname))) = UPPER(LTRIM(RTRIM(?))) UNION ALL SELECT oprname, YEAR(proddate) AS YrNum, MONTH(proddate) AS MonthNo, ISNULL(OPREFF,0) AS Eff, ISNULL(okqty,0) AS Qty FROM ProductionEntry WHERE deleted = 0 AND proddate >= ? AND proddate < DATEADD(DAY, 1, ?) AND UPPER(LTRIM(RTRIM(oprname))) = UPPER(LTRIM(RTRIM(?))) UNION ALL SELECT oprname, YEAR(entrydate) AS YrNum, MONTH(entrydate) AS MonthNo, ISNULL(eff,0) AS Eff, ISNULL(qty,0) AS Qty FROM ConvProductionEntry WHERE deleted = 0 AND entrydate >= ? AND entrydate < DATEADD(DAY, 1, ?) AND UPPER(LTRIM(RTRIM(oprname))) = UPPER(LTRIM(RTRIM(?)))) SELECT YrNum, MonthNo, CASE WHEN SUM(Qty) = 0 THEN 0 ELSE AVG(Eff) END AS OperatorEfficiency FROM AllEfficiency GROUP BY YrNum, MonthNo ORDER BY YrNum, MonthNo"""
             cursor.execute(sql, [start_date, end_date, oprname, start_date, end_date, oprname, start_date, end_date, oprname])
         rows = cursor.fetchall(); cursor.close(); conn.close()
     except Exception as e: return Response({"error": f"Database error: {str(e)}"}, status=500)
@@ -2038,6 +2056,7 @@ def operator_efficiency(request):
     return Response({"company": tenant.get("company_name", ""), "fy": fy_label, "from": str(start_date), "to": str(end_date), "operator": oprname, "labels": labels, "data": [eff_map[b] for b in buckets]})
 
 @api_view(['GET'])
+@cache_analytics_response(timeout=300, key_prefix="ovr_op_eff")
 def overall_operator_efficiency(request):
     try: conn, tenant = get_tenant_connection(request)
     except ValueError as e: return Response({"error": str(e)}, status=401)
@@ -2054,7 +2073,7 @@ def overall_operator_efficiency(request):
             branches.append(
                 f"SELECT YEAR([{s['d']}]) AS YrNum, MONTH([{s['d']}]) AS MonthNo, ISNULL(CAST([{s['eff']}] AS FLOAT), 0) AS Eff, "
                 f"ISNULL(CAST([{s['qty']}] AS FLOAT), 0) AS Qty FROM {s['q']} WHERE {s['del']} "
-                f"AND CAST([{s['d']}] AS DATE) BETWEEN ? AND ?"
+                f"AND [{s['d']}] >= ? AND [{s['d']}] < DATEADD(DAY, 1, ?)"
             )
             params.extend([start_date, end_date])
         if branches:
@@ -2065,7 +2084,7 @@ def overall_operator_efficiency(request):
             )
             cursor.execute(sql, params)
         else:
-            sql = """WITH AllEfficiency AS (SELECT YEAR(entrydate) AS YrNum, MONTH(entrydate) AS MonthNo, ISNULL(eff,0) AS Eff, ISNULL(qty,0) AS Qty FROM ConvProductionEntryRod WHERE deleted = 0 AND CAST(entrydate AS DATE) BETWEEN ? AND ? UNION ALL SELECT YEAR(proddate) AS YrNum, MONTH(proddate) AS MonthNo, ISNULL(OPREFF,0) AS Eff, ISNULL(okqty,0) AS Qty FROM ProductionEntry WHERE deleted = 0 AND CAST(proddate AS DATE) BETWEEN ? AND ? UNION ALL SELECT YEAR(entrydate) AS YrNum, MONTH(entrydate) AS MonthNo, ISNULL(eff,0) AS Eff, ISNULL(qty,0) AS Qty FROM ConvProductionEntry WHERE deleted = 0 AND CAST(entrydate AS DATE) BETWEEN ? AND ?) SELECT YrNum, MonthNo, CASE WHEN SUM(Qty) = 0 THEN 0 ELSE AVG(Eff) END AS OverallEfficiency FROM AllEfficiency GROUP BY YrNum, MonthNo ORDER BY YrNum, MonthNo"""
+            sql = """WITH AllEfficiency AS (SELECT YEAR(entrydate) AS YrNum, MONTH(entrydate) AS MonthNo, ISNULL(eff,0) AS Eff, ISNULL(qty,0) AS Qty FROM ConvProductionEntryRod WHERE deleted = 0 AND entrydate >= ? AND entrydate < DATEADD(DAY, 1, ?) UNION ALL SELECT YEAR(proddate) AS YrNum, MONTH(proddate) AS MonthNo, ISNULL(OPREFF,0) AS Eff, ISNULL(okqty,0) AS Qty FROM ProductionEntry WHERE deleted = 0 AND proddate >= ? AND proddate < DATEADD(DAY, 1, ?) UNION ALL SELECT YEAR(entrydate) AS YrNum, MONTH(entrydate) AS MonthNo, ISNULL(eff,0) AS Eff, ISNULL(qty,0) AS Qty FROM ConvProductionEntry WHERE deleted = 0 AND entrydate >= ? AND entrydate < DATEADD(DAY, 1, ?)) SELECT YrNum, MonthNo, CASE WHEN SUM(Qty) = 0 THEN 0 ELSE AVG(Eff) END AS OverallEfficiency FROM AllEfficiency GROUP BY YrNum, MonthNo ORDER BY YrNum, MonthNo"""
             cursor.execute(sql, [start_date, end_date, start_date, end_date, start_date, end_date])
         rows = cursor.fetchall(); cursor.close(); conn.close()
     except Exception as e: return Response({"error": f"Database error: {str(e)}"}, status=500)
@@ -2076,6 +2095,7 @@ def overall_operator_efficiency(request):
     return Response({"company": tenant.get("company_name", ""), "fy": fy_label, "from": str(start_date), "to": str(end_date), "labels": labels, "data": [eff_map[b] for b in buckets]})
 
 @api_view(['GET'])
+@cache_analytics_response(timeout=300, key_prefix="mac_idle")
 def machine_wise_idle_time(request):
     try:
         conn, tenant = get_tenant_connection(request)
@@ -2153,6 +2173,7 @@ def machine_wise_idle_time(request):
 
 # ✅ NEW: Get Machines List
 @api_view(['GET'])
+@cache_analytics_response(timeout=600, key_prefix="macs_list")
 def get_machines(request):
     try:
         conn, tenant = get_tenant_connection(request)
@@ -2187,6 +2208,7 @@ def get_machines(request):
 
 # ✅ NEW: Machine Efficiency Monthwise API
 @api_view(['GET'])
+@cache_analytics_response(timeout=300, key_prefix="mac_eff_mth")
 def machine_efficiency_monthwise(request):
     try:
         conn, tenant = get_tenant_connection(request)
@@ -2207,7 +2229,7 @@ def machine_efficiency_monthwise(request):
             cur_mac_cond = "" if is_all_mac else f"AND LTRIM(RTRIM(CAST([{s['mac']}] AS NVARCHAR(512)))) IN ({', '.join(['?'] * len(mac_list))}) "
             branches.append(
                 f"SELECT YEAR([{s['d']}]) AS [Year], MONTH([{s['d']}]) AS [Month], CAST([{s['oaeff']}] AS FLOAT) AS Ov "
-                f"FROM {s['q']} WHERE {s['del']} AND CAST([{s['d']}] AS DATE) BETWEEN ? AND ? "
+                f"FROM {s['q']} WHERE {s['del']} AND [{s['d']}] >= ? AND [{s['d']}] < DATEADD(DAY, 1, ?) "
                 f"AND [{s['oaeff']}] IS NOT NULL {cur_mac_cond}"
             )
             params.extend([start_date, end_date])
@@ -2232,7 +2254,7 @@ def machine_efficiency_monthwise(request):
                         UNION ALL
                         SELECT proddate AS EntryDate, macno, OAEFF FROM ProductionEntry WHERE deleted = 0 AND OAEFF IS NOT NULL
                     ) A
-                    WHERE CAST(A.EntryDate AS DATE) BETWEEN ? AND ?
+                    WHERE A.EntryDate >= ? AND A.EntryDate < DATEADD(DAY, 1, ?)
                     GROUP BY YEAR(A.EntryDate), MONTH(A.EntryDate)
                     ORDER BY YEAR(A.EntryDate), MONTH(A.EntryDate)
                 """
@@ -2249,7 +2271,7 @@ def machine_efficiency_monthwise(request):
                         UNION ALL
                         SELECT proddate AS EntryDate, macno, OAEFF FROM ProductionEntry WHERE deleted = 0 AND OAEFF IS NOT NULL AND LTRIM(RTRIM(macno)) IN ({placeholders})
                     ) A
-                    WHERE CAST(A.EntryDate AS DATE) BETWEEN ? AND ?
+                    WHERE A.EntryDate >= ? AND A.EntryDate < DATEADD(DAY, 1, ?)
                     GROUP BY YEAR(A.EntryDate), MONTH(A.EntryDate)
                     ORDER BY YEAR(A.EntryDate), MONTH(A.EntryDate)
                 """
@@ -2280,6 +2302,7 @@ def machine_efficiency_monthwise(request):
 #  OPERATIONS - PRODUCTION VALUE MONTHWISE
 # ─────────────────────────────────────────────────────────────
 @api_view(['GET'])
+@cache_analytics_response(timeout=300, key_prefix="rep_prod_val")
 def production_value_monthwise(request):
     try: conn, tenant = get_tenant_connection(request)
     except ValueError as e: return Response({"error": str(e)}, status=401)
@@ -2288,7 +2311,7 @@ def production_value_monthwise(request):
     buckets, labels = generate_month_buckets(start_date, end_date)
     try:
         cursor = conn.cursor()
-        sql = """WITH CombinedData AS (SELECT P.proddate AS EntryDate, ((CASE WHEN P.runto >= P.runfrom THEN DATEDIFF(SECOND, P.runfrom, P.runto) ELSE DATEDIFF(SECOND, P.runfrom, DATEADD(DAY, 1, P.runto)) END - ISNULL(P.accidletimesecs, 0)) / 60.0) * (ISNULL(M.RatePerHr, 0) / 60.0) AS ProductionValue FROM ProductionEntry P LEFT JOIN MacMaster M ON P.macno = M.macno WHERE P.deleted = 0 AND CAST(P.proddate AS DATE) BETWEEN ? AND ? UNION ALL SELECT C.entrydate AS EntryDate, ((CASE WHEN C.endtime >= C.starttime THEN DATEDIFF(SECOND, C.starttime, C.endtime) ELSE DATEDIFF(SECOND, C.starttime, DATEADD(DAY, 1, C.endtime)) END - ISNULL(DATEDIFF(SECOND, 0, C.IdleTime), 0)) / 60.0) * (ISNULL(M.RatePerHr, 0) / 60.0) AS ProductionValue FROM ConvProductionEntry C LEFT JOIN MacMaster M ON C.macno = M.macno WHERE C.deleted = 0 AND CAST(C.entrydate AS DATE) BETWEEN ? AND ? UNION ALL SELECT R.entrydate AS EntryDate, ((CASE WHEN R.endtime >= R.starttime THEN DATEDIFF(SECOND, R.starttime, R.endtime) ELSE DATEDIFF(SECOND, R.starttime, DATEADD(DAY, 1, R.endtime)) END - ISNULL(DATEDIFF(SECOND, 0, R.IdleTime), 0)) / 60.0) * (ISNULL(M.RatePerHr, 0) / 60.0) AS ProductionValue FROM ConvProductionEntryRod R LEFT JOIN MacMaster M ON R.macno = M.macno WHERE R.deleted = 0 AND CAST(R.entrydate AS DATE) BETWEEN ? AND ?), MachineStats AS (SELECT SUM(ISNULL(RatePerHr, 0)) AS TotalRatePerHr FROM MacMaster WHERE deleted = 0) SELECT YEAR(C.EntryDate) AS YrNum, MONTH(C.EntryDate) AS MonthNum, SUM(C.ProductionValue) AS TotalProductionValue, (24.0 * DAY(EOMONTH(C.EntryDate)) * MS.TotalRatePerHr) AS TargetProductionValue FROM CombinedData C CROSS JOIN MachineStats MS GROUP BY YEAR(C.EntryDate), MONTH(C.EntryDate), DAY(EOMONTH(C.EntryDate)), MS.TotalRatePerHr ORDER BY YEAR(C.EntryDate), MONTH(C.EntryDate)"""
+        sql = """WITH CombinedData AS (SELECT P.proddate AS EntryDate, ((CASE WHEN P.runto >= P.runfrom THEN DATEDIFF(SECOND, P.runfrom, P.runto) ELSE DATEDIFF(SECOND, P.runfrom, DATEADD(DAY, 1, P.runto)) END - ISNULL(P.accidletimesecs, 0)) / 60.0) * (ISNULL(M.RatePerHr, 0) / 60.0) AS ProductionValue FROM ProductionEntry P LEFT JOIN MacMaster M ON P.macno = M.macno WHERE P.deleted = 0 AND P.proddate >= ? AND P.proddate < DATEADD(DAY, 1, ?) UNION ALL SELECT C.entrydate AS EntryDate, ((CASE WHEN C.endtime >= C.starttime THEN DATEDIFF(SECOND, C.starttime, C.endtime) ELSE DATEDIFF(SECOND, C.starttime, DATEADD(DAY, 1, C.endtime)) END - ISNULL(DATEDIFF(SECOND, 0, C.IdleTime), 0)) / 60.0) * (ISNULL(M.RatePerHr, 0) / 60.0) AS ProductionValue FROM ConvProductionEntry C LEFT JOIN MacMaster M ON C.macno = M.macno WHERE C.deleted = 0 AND C.entrydate >= ? AND C.entrydate < DATEADD(DAY, 1, ?) UNION ALL SELECT R.entrydate AS EntryDate, ((CASE WHEN R.endtime >= R.starttime THEN DATEDIFF(SECOND, R.starttime, R.endtime) ELSE DATEDIFF(SECOND, R.starttime, DATEADD(DAY, 1, R.endtime)) END - ISNULL(DATEDIFF(SECOND, 0, R.IdleTime), 0)) / 60.0) * (ISNULL(M.RatePerHr, 0) / 60.0) AS ProductionValue FROM ConvProductionEntryRod R LEFT JOIN MacMaster M ON R.macno = M.macno WHERE R.deleted = 0 AND R.entrydate >= ? AND R.entrydate < DATEADD(DAY, 1, ?)), MachineStats AS (SELECT SUM(ISNULL(RatePerHr, 0)) AS TotalRatePerHr FROM MacMaster WHERE deleted = 0) SELECT YEAR(C.EntryDate) AS YrNum, MONTH(C.EntryDate) AS MonthNum, SUM(C.ProductionValue) AS TotalProductionValue, (24.0 * DAY(EOMONTH(C.EntryDate)) * MS.TotalRatePerHr) AS TargetProductionValue FROM CombinedData C CROSS JOIN MachineStats MS GROUP BY YEAR(C.EntryDate), MONTH(C.EntryDate), DAY(EOMONTH(C.EntryDate)), MS.TotalRatePerHr ORDER BY YEAR(C.EntryDate), MONTH(C.EntryDate)"""
         params = [start_date, end_date, start_date, end_date, start_date, end_date]
         cursor.execute(sql, params)
         rows = cursor.fetchall()
@@ -2343,7 +2366,7 @@ def inspection_grand_rejection_rework_totals(cursor, tenant, start_date, end_dat
                 mas_del = find_first_column(cursor, mas_tbl, deleted_candidates)
                 det_del = find_first_column(cursor, det_tbl, deleted_candidates)
                 mas_cc = find_first_column(cursor, mas_tbl, company_candidates)
-                where_parts = [f"CAST(M.[{mas_date}] AS DATE) BETWEEN ? AND ?"]; params = [start_date, end_date]
+                where_parts = [f"M.[{mas_date}] >= ? AND M.[{mas_date}] < DATEADD(DAY, 1, ?)"]; params = [start_date, end_date]
                 if mas_del: where_parts.append(f"M.[{mas_del}] = 0")
                 if det_del: where_parts.append(f"(D.[{det_del}] IS NULL OR D.[{det_del}] = 0)")
                 if mas_cc and company_code: where_parts.append(f"M.[{mas_cc}] = ?"); params.append(company_code)
@@ -2355,6 +2378,7 @@ def inspection_grand_rejection_rework_totals(cursor, tenant, start_date, end_dat
     return grand_rej, grand_rwk
 
 @api_view(['GET'])
+@cache_analytics_response(timeout=300, key_prefix="d2_kpis")
 def dashboard2_kpis(request):
     try: conn, tenant = get_tenant_connection(request)
     except ValueError as e: return Response({"error": str(e)}, status=401)
@@ -2406,6 +2430,7 @@ def dashboard2_kpis(request):
     return Response({"company": tenant.get("company_name", ""), "company_code": tenant.get("company_code", ""), "from": str(start_date), "to": str(end_date), "kpis": {"production_output": round(production_output, 2), "rejection_qty": round(rejection_qty, 2), "rework_grand_total": round(rework_grand_total, 2), "oa_efficiency": round(oa_efficiency, 2)}})
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="d2_shift")
 def dashboard2_production_by_shift(request):
     try: conn, tenant = get_tenant_connection(request)
     except ValueError as e: return Response({"error": str(e)}, status=401)
@@ -2445,6 +2470,7 @@ def dashboard2_production_by_shift(request):
     return Response({"company": tenant.get("company_name", ""), "company_code": tenant.get("company_code", ""), "from": str(start_date), "to": str(end_date), "shifts": shifts_out})
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="d2_idle")
 def dashboard2_idle_hours(request):
     try: conn, tenant = get_tenant_connection(request)
     except ValueError as e: return Response({"error": str(e)}, status=401)
@@ -2462,6 +2488,7 @@ def dashboard2_idle_hours(request):
     return Response({"company": tenant.get("company_name", ""), "company_code": company_code or "", "from": str(start_date), "to": str(end_date), "summary": {"accepted_hours": round(acc_h, 2), "non_accepted_hours": round(na_h, 2), "total_idle_hours": round(tot_h, 2), "other_hours": round(other_h, 2)}, "accepted": [], "non_accepted": []})
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="d2_dt_reason")
 def dashboard2_downtime_by_reason(request):
     try: conn, tenant = get_tenant_connection(request)
     except ValueError as e: return Response({"error": str(e)}, status=401)
@@ -2481,6 +2508,7 @@ def dashboard2_downtime_by_reason(request):
     return Response({"company": tenant.get("company_name", ""), "company_code": tenant.get("company_code", ""), "from": str(start_date), "to": str(end_date), "reasons": reasons_out})
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="d2_complaints")
 def dashboard2_customer_complaints(request):
     try: conn, tenant = get_tenant_connection(request)
     except ValueError as e: return Response({"error": str(e)}, status=401)
@@ -2531,7 +2559,7 @@ def dashboard2_customer_complaints(request):
                 apply_block = f"""OUTER APPLY (SELECT TOP 1 {sel_a} AS ActionTaken, {sel_s} AS CompStatus FROM [{tbl_d}] dx WHERE dx.[{cmpno_d}] = M.[{cmpno_m}]{del_dx} ORDER BY (SELECT NULL)) AS Det"""
             else: apply_block = """OUTER APPLY (SELECT CAST(NULL AS NVARCHAR(MAX)) AS ActionTaken, CAST(NULL AS NVARCHAR(200)) AS CompStatus) AS Det"""
         else: apply_block = """OUTER APPLY (SELECT CAST(NULL AS NVARCHAR(MAX)) AS ActionTaken, CAST(NULL AS NVARCHAR(200)) AS CompStatus) AS Det"""
-        mas_where = f"CAST(M.[{date_m}] AS DATE) BETWEEN ? AND ?"; params: list[Any] = [start_date, end_date]
+        mas_where = f"M.[{date_m}] >= ? AND M.[{date_m}] < DATEADD(DAY, 1, ?)"; params: list[Any] = [start_date, end_date]
         if del_m: mas_where += f" AND ISNULL(M.[{del_m}], 0) = 0"
         if company_m and company_code: mas_where += f" AND M.[{company_m}] = ?"; params.append(company_code)
         cust_param = request.GET.get("customer") or request.GET.get("customer_name") or request.GET.get("customers") or ""
@@ -2551,6 +2579,7 @@ def dashboard2_customer_complaints(request):
     return Response({"company": tenant.get("company_name", ""), "company_code": tenant.get("company_code", ""), "from": str(start_date), "to": str(end_date), "complaints": complaints})
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="d2_po_pipe")
 def dashboard2_po_pipeline(request):
     try: conn, tenant = get_tenant_connection(request)
     except ValueError as e: return Response({"error": str(e)}, status=401)
@@ -2607,7 +2636,7 @@ def dashboard2_po_pipeline(request):
             gm_del_sql = f"ISNULL(GM.[{gm_del}], 0) = 0" if gm_del else "1=1"
             gjoin_del = f"ISNULL(G.[{g_del}], 0) = 0" if g_del else "1=1"
             grnval_sql = f"""(SELECT SUM(ISNULL(CAST(GM.[{gm_namt}] AS FLOAT), 0)) FROM {q_gm} GM INNER JOIN {q_grn} G ON GM.[{gm_grn}] = G.[{g_grnno}] INNER JOIN M_FILTER MF ON G.[{g_pono}] = MF.pono_col WHERE {gjoin_del} AND {gm_del_sql})"""
-        cte_sql = f"""WITH M_FILTER AS (SELECT M.[{po_pono}] AS pono_col, {appr_sel} FROM {q_po} M WHERE CAST(M.[{po_date}] AS DATE) BETWEEN ? AND ? AND {del_po_sql}{dtype_filter}{company_sql})"""
+        cte_sql = f"""WITH M_FILTER AS (SELECT M.[{po_pono}] AS pono_col, {appr_sel} FROM {q_po} M WHERE M.[{po_date}] >= ? AND M.[{po_date}] < DATEADD(DAY, 1, ?) AND {del_po_sql}{dtype_filter}{company_sql})"""
         summary_sql = cte_sql + f"""SELECT (SELECT COUNT(DISTINCT pono_col) FROM M_FILTER) AS Total_POs, (SELECT COUNT(DISTINCT CASE WHEN appr_col = 1 THEN pono_col END) FROM M_FILTER) AS Approved, (SELECT COUNT(DISTINCT CASE WHEN ISNULL(appr_col, 0) = 0 THEN pono_col END) FROM M_FILTER) AS Pending_Approval, (SELECT COUNT(DISTINCT CASE WHEN G.pono_join IS NOT NULL THEN H.pono_col END) FROM M_FILTER H LEFT JOIN (SELECT DISTINCT gx.[{g_pono}] AS pono_join FROM {q_grn} gx WHERE {grn_dist_where}) G ON H.pono_col = G.pono_join) AS GRN_Done, (SELECT COUNT(DISTINCT CASE WHEN G.pono_join IS NULL THEN H.pono_col END) FROM M_FILTER H LEFT JOIN (SELECT DISTINCT gx.[{g_pono}] AS pono_join FROM {q_grn} gx WHERE {grn_dist_where}) G ON H.pono_col = G.pono_join) AS GRN_Pending, (SELECT SUM(ISNULL(CAST(D.[{det_amt}] AS FLOAT), 0)) FROM {q_det} D INNER JOIN M_FILTER MF ON D.[{det_pono}] = MF.pono_col WHERE {del_det_sql}) AS Total_PO_Value, {grnval_sql} AS Total_GRN_Value"""
         cursor.execute(summary_sql, cte_params); sum_row = cursor.fetchone()
         summary_out = {"total_pos": int(sum_row[0] or 0) if sum_row else 0, "approved": int(sum_row[1] or 0) if sum_row else 0, "pending_approval": int(sum_row[2] or 0) if sum_row else 0, "grn_done": int(sum_row[3] or 0) if sum_row else 0, "grn_pending": int(sum_row[4] or 0) if sum_row else 0, "total_po_value": float(sum_row[5] or 0) if sum_row else 0.0, "total_grn_value": float(sum_row[6] or 0) if sum_row else 0.0}
@@ -2624,7 +2653,7 @@ def dashboard2_po_pipeline(request):
         if q_gm and gm_grn and gm_date:
             gm_del_j = f" AND ISNULL(GM.[{gm_del}], 0) = 0" if gm_del else ""
             gm_join = f"LEFT JOIN {q_gm} GM ON G.grnno_g = GM.[{gm_grn}]{gm_del_j}"; grn_dt_sel = f"GM.[{gm_date}]"
-        mas_where_detail = f"""CAST(M.[{po_date}] AS DATE) BETWEEN ? AND ? AND {del_po_sql}{dtype_filter}{company_sql}"""
+        mas_where_detail = f"""M.[{po_date}] >= ? AND M.[{po_date}] < DATEADD(DAY, 1, ?) AND {del_po_sql}{dtype_filter}{company_sql}"""
         detail_params = [start_date, end_date]
         if po_cc and company_code: detail_params.append(company_code)
         detail_sql = f"""SELECT TOP 3000 M.[{po_pono}] AS PO_Number, {f"M.[{po_dtype}]" if po_dtype else "CAST(NULL AS NVARCHAR(64))"} AS PO_Type, {vendor_sql} AS Vendor_Name, CAST({mat_concat} AS NVARCHAR(520)) AS Material, CAST({po_qty_sql} AS NVARCHAR(120)) AS PO_Qty, ISNULL(CAST(D.[{det_amt}] AS FLOAT), 0) AS Value, M.[{po_date}] AS PO_Date, {grn_no_sel} AS GRN_No, {grn_dt_sel} AS GRN_Date FROM {q_po} M INNER JOIN {q_det} D ON M.[{po_pono}] = D.[{det_pono}] AND {del_det_sql} {cm_join} {g_agg} {gm_join} WHERE {mas_where_detail} ORDER BY M.[{po_date}], M.[{po_pono}]"""
@@ -2648,6 +2677,7 @@ def dashboard2_po_pipeline(request):
         return Response({"error": f"Database error: {str(e)}", "from": str(start_date), "to": str(end_date), "summary": None, "rows": []}, status=500)
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="d2_insp_pend")
 def dashboard2_inspection_pending_snapshot(request):
     try: conn, tenant = get_tenant_connection(request)
     except ValueError as e: return Response({"error": str(e)}, status=401)
@@ -2695,6 +2725,7 @@ def dashboard2_inspection_pending_snapshot(request):
         return Response({"error": f"Database error: {str(e)}", "intermediate_pending_qty": None, "final_pending_qty": None, "joborder_pending_qty": None}, status=500)
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="d2_grn_pend")
 def dashboard2_grn_pending_pipeline(request):
     try: conn, tenant = get_tenant_connection(request)
     except ValueError as e: return Response({"error": str(e)}, status=401)
@@ -2731,7 +2762,7 @@ def dashboard2_grn_pending_pipeline(request):
         w_uom_lower = f"LOWER(ISNULL(D.[{d_uom}], N''))" if d_uom else "N''"
         weight_qty_sum = f"""CASE WHEN TRY_CAST(D.[{d_pono}] AS FLOAT) IS NOT NULL THEN TRY_CAST(D.[{d_pono}] AS FLOAT) ELSE 0.0 END""" if d_pono else "CAST(0 AS FLOAT)"
         sum_qty_inner = f"""CASE WHEN {w_uom_lower} IN (N'kgs', N'kg', N'mtrs', N'mtr', N'meter', N'meters') THEN {weight_qty_sum} ELSE {else_qty_sum} END""" if d_uom and d_qty else else_qty_sum
-        summary_sql = f"""SELECT COUNT(*) AS Total_Record_Count, ISNULL(SUM({sum_qty_inner}), 0) AS Total_Qty FROM {q_m} M INNER JOIN {q_d} D ON M.[{m_grn}] = D.[{d_grn}]{join_del} WHERE CAST(M.[{m_date}] AS DATE) BETWEEN ? AND ? AND {mas_del_sql} AND {insp_where}"""
+        summary_sql = f"""SELECT COUNT(*) AS Total_Record_Count, ISNULL(SUM({sum_qty_inner}), 0) AS Total_Qty FROM {q_m} M INNER JOIN {q_d} D ON M.[{m_grn}] = D.[{d_grn}]{join_del} WHERE M.[{m_date}] >= ? AND M.[{m_date}] < DATEADD(DAY, 1, ?) AND {mas_del_sql} AND {insp_where}"""
         params = [start_date, end_date]
         cursor.execute(summary_sql, params); sum_row = cursor.fetchone()
         total_record_count = int(sum_row[0] or 0) if sum_row else 0
@@ -2739,7 +2770,7 @@ def dashboard2_grn_pending_pipeline(request):
         w_uom = f"LOWER(ISNULL(D.[{d_uom}], N''))" if d_uom else "N''"
         weight_numeric_display = f"""CASE WHEN TRY_CAST(D.[{d_pono}] AS FLOAT) IS NOT NULL THEN TRY_CAST(D.[{d_pono}] AS FLOAT) ELSE 0.0 END""" if d_pono else (f"CASE WHEN ISNULL(D.[{d_qtykgs}], 0) > 0 THEN CAST(D.[{d_qtykgs}] AS FLOAT) ELSE ISNULL(CAST(D.[{d_qty}] AS FLOAT), 0) END" if d_qtykgs else f"ISNULL(CAST(D.[{d_qty}] AS FLOAT), 0)")
         qty_sql = f"""CASE WHEN {w_uom} IN (N'kgs', N'kg', N'mtrs', N'mtr', N'meter', N'meters') THEN CAST(ROUND(CAST({weight_numeric_display} AS FLOAT), 2) AS NVARCHAR(50)) + N' ' + ISNULL(CAST(D.[{d_uom}] AS NVARCHAR(32)), N'') ELSE CAST(ROUND(ISNULL(CAST(D.[{d_qty}] AS FLOAT), 0), 2) AS NVARCHAR(50)) + N' ' + ISNULL(CAST(D.[{d_uom}] AS NVARCHAR(32)), N'') END""" if d_uom and d_qty else (f"CAST(ROUND(ISNULL(CAST(D.[{d_qty}] AS FLOAT), 0), 2) AS NVARCHAR(50))" + (f" + N' ' + ISNULL(CAST(D.[{d_uom}] AS NVARCHAR(32)), N'')" if d_uom else "") if d_qty else "N''")
-        sql = f"""SELECT TOP 500 M.[{m_grn}] AS GRN_No, M.[{m_date}] AS GRN_Date, {dtype_sel} AS Type_, CAST({mat_sql} AS NVARCHAR(800)) AS Material_, CAST({qty_sql} AS NVARCHAR(120)) AS Qty_ FROM {q_m} M INNER JOIN {q_d} D ON M.[{m_grn}] = D.[{d_grn}]{join_del} WHERE CAST(M.[{m_date}] AS DATE) BETWEEN ? AND ? AND {mas_del_sql} AND {insp_where} ORDER BY M.[{m_date}] DESC, M.[{m_grn}]"""
+        sql = f"""SELECT TOP 500 M.[{m_grn}] AS GRN_No, M.[{m_date}] AS GRN_Date, {dtype_sel} AS Type_, CAST({mat_sql} AS NVARCHAR(800)) AS Material_, CAST({qty_sql} AS NVARCHAR(120)) AS Qty_ FROM {q_m} M INNER JOIN {q_d} D ON M.[{m_grn}] = D.[{d_grn}]{join_del} WHERE M.[{m_date}] >= ? AND M.[{m_date}] < DATEADD(DAY, 1, ?) AND {mas_del_sql} AND {insp_where} ORDER BY M.[{m_date}] DESC, M.[{m_grn}]"""
         cursor.execute(sql, params); rows_out = []
         for row in cursor.fetchall() or []:
             gdt = row[1]
@@ -2760,6 +2791,7 @@ def dashboard2_grn_pending_pipeline(request):
         return Response({"error": f"Database error: {str(e)}", "from": str(start_date), "to": str(end_date), "summary": None, "rows": []}, status=500)
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="d2_iqc_rej")
 def dashboard2_iqc_rejections(request):
     try: conn, tenant = get_tenant_connection(request)
     except ValueError as e: return Response({"error": str(e)}, status=401)
@@ -2807,7 +2839,7 @@ def dashboard2_iqc_rejections(request):
                 cm_del_x = f" AND ISNULL(CM.[{cm_del}], 0) = 0" if cm_del else ""
                 cm_join = f"LEFT JOIN {q_cm} CM ON GM.[{gm_cid}] = CM.[{cm_id}]{cm_del_x}"; vendor_sql = f"CAST(CM.[{cm_name}] AS NVARCHAR(512))"
         base_from = f"""FROM {q_gm} GM INNER JOIN {q_im} IM ON GM.[{gm_grn}] = IM.[{im_grn}] AND {im_del_sql} INNER JOIN {q_id} D ON IM.[{im_irno}] = D.[{d_irno}]{join_d_del} {cm_join}"""
-        date_where = f"""CAST(GM.[{gm_date}] AS DATE) BETWEEN ? AND ? AND CAST(IM.[{im_irdate}] AS DATE) BETWEEN ? AND ? AND {gm_del_sql} AND {rej_filter}"""
+        date_where = f"""GM.[{gm_date}] >= ? AND GM.[{gm_date}] < DATEADD(DAY, 1, ?) AND IM.[{im_irdate}] >= ? AND IM.[{im_irdate}] < DATEADD(DAY, 1, ?) AND {gm_del_sql} AND {rej_filter}"""
         params = [start_date, end_date, start_date, end_date]
         summary_sql = f"""SELECT COUNT(*) AS Total_Record_Count, ISNULL(SUM({rej_sum}), 0) AS Total_Rejection_Qty {base_from} WHERE {date_where}"""
         cursor.execute(summary_sql, params); sum_row = cursor.fetchone()
@@ -2833,6 +2865,7 @@ def dashboard2_iqc_rejections(request):
         return Response({"error": f"Database error: {str(e)}", "from": str(start_date), "to": str(end_date), "summary": None, "rows": []}, status=500)
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="d2_otd")
 def dashboard2_otd(request):
     try: conn, tenant = get_tenant_connection(request)
     except ValueError as e: return Response({"error": str(e)}, status=401)
@@ -2873,7 +2906,7 @@ def dashboard2_otd(request):
         if po_company and company_code: parts.append(f"[{alias}].[{po_company}] = ?")
         return " AND " + " AND ".join(parts) if parts else ""
     def filt_dc_mas(alias):
-        parts = [f"CAST([{alias}].[{dc_dt}] AS DATE) BETWEEN ? AND ?"]
+        parts = [f"[{alias}].[{dc_dt}] >= ? AND [{alias}].[{dc_dt}] < DATEADD(DAY, 1, ?)"]
         if dc_m_deleted: parts.append(f"[{alias}].[{dc_m_deleted}] = 0")
         if dc_m_company and company_code: parts.append(f"[{alias}].[{dc_m_company}] = ?")
         return " AND ".join(parts)
@@ -2921,6 +2954,7 @@ def dashboard2_otd(request):
     return Response({"company": tenant.get("company_name", ""), "company_code": tenant.get("company_code", ""), "from": str(start_date), "to": str(end_date), "kpis": {"on_time_delivery_pct": otd_pct, "rating_weighted_pct": rating_weighted_pct, "schedule_adherence_pct": schedule_adherence_pct, "delayed_lines": delayed_lines, "on_time_qty": round(on_time_qty, 2), "total_del_qty": round(total_qty, 2)}, "trend": trend})
 
 @api_view(['GET'])
+@cache_analytics_response(timeout=300, key_prefix="rep_otd")
 def otd_report(request):
     try:
         conn, tenant = get_tenant_connection(request)
@@ -2986,15 +3020,19 @@ def otd_report(request):
           AND ISNULL(p.deleted, 0) = 0
     ),
     AllDeliveries AS (
+        -- Scoped to the POs that have schedules in range (was a full scan of
+        -- both DC detail tables).
         SELECT d.Apono, d.partno, d.poslno, CAST(m.dcdate AS DATE) AS dcdate, d.okqty
         FROM DcInSubDetAssmPoDet d
         INNER JOIN DC_Mas m ON d.dcno = m.dcno
         WHERE d.deleted = 0
+          AND d.Apono IN (SELECT DISTINCT Apono FROM AllSchedules)
         UNION ALL
         SELECT d.Apono, d.partno, d.poslno, CAST(m.dcdate AS DATE) AS dcdate, d.okqty
         FROM DcInSubDet d
         INNER JOIN DC_Mas m ON d.dcno = m.dcno
         WHERE d.deleted = 0
+          AND d.Apono IN (SELECT DISTINCT Apono FROM AllSchedules)
     ),
     DeliverySummary AS (
         SELECT sch.Apono, sch.partno, sch.poslno, sch.shdQty, sch.targetdate, sch.PoYear, sch.PoMonth,
@@ -3051,7 +3089,18 @@ def otd_report(request):
     cursor = None
     try:
         cursor = conn.cursor()
-        cursor.execute(cte + kpi_tail, (start_date, end_date))
+        # Materialise the (expensive) OTD calculation once into a temp table,
+        # then read both the KPI and the monthly result sets from it in a
+        # single round-trip (was two full executions of the CTE chain).
+        batch_sql = (
+            "SET NOCOUNT ON;\n"
+            + cte
+            + "\nSELECT * INTO #OTDCalc FROM OTDCalc;\n"
+            + kpi_tail.replace("FROM OTDCalc", "FROM #OTDCalc") + ";\n"
+            + monthly_tail.replace("FROM OTDCalc", "FROM #OTDCalc") + ";\n"
+            + "DROP TABLE #OTDCalc;"
+        )
+        cursor.execute(batch_sql, (start_date, end_date))
         kpi_row = cursor.fetchone()
         if kpi_row:
             overall_otd = round(float(kpi_row[0] or 0), 2)
@@ -3059,8 +3108,8 @@ def otd_report(request):
             on_time_qty = round(float(kpi_row[2] or 0), 2)
             delayed_lines = int(kpi_row[3] or 0)
 
-        cursor.execute(cte + monthly_tail, (start_date, end_date))
-        for row in cursor.fetchall() or []:
+        monthly_rows = cursor.fetchall() if cursor.nextset() else []
+        for row in monthly_rows or []:
             yr, mth = int(row[0] or 0), int(row[1] or 0)
             avg_otd = round(float(row[2] or 0), 2)
             k = (yr, mth)
@@ -3110,6 +3159,7 @@ def otd_report(request):
     })
 
 @api_view(['GET'])
+@cache_analytics_response(timeout=300, key_prefix="d2_finsp_kpi")
 def dashboard2_final_inspection_kpi(request):
     try: conn, tenant = get_tenant_connection(request)
     except ValueError as e: return Response({"error": str(e)}, status=401)
@@ -3124,7 +3174,7 @@ def dashboard2_final_inspection_kpi(request):
         if not table_exists(cursor, "FinalInspectionEntry"): cursor.close(); conn.close(); return Response({"error": "Table FinalInspectionEntry not found in this database."}, status=404)
         company_col = find_first_column(cursor, "FinalInspectionEntry", company_candidates)
         company_code = tenant.get("company_code")
-        sql = """SELECT COALESCE(SUM(CAST(okqty AS FLOAT)), 0) AS total_ok_qty, COALESCE(SUM(CAST(rejqty AS FLOAT)), 0) AS total_rej_qty, COALESCE(SUM(CAST(matrejqty AS FLOAT)), 0) AS total_mat_rej_qty, COALESCE(SUM(CAST(totqty AS FLOAT)), 0) AS total_qty, COUNT(finspno) AS inspection_count FROM FinalInspectionEntry WHERE deleted = 0 AND CAST(finspdate AS DATE) BETWEEN ? AND ?"""
+        sql = """SELECT COALESCE(SUM(CAST(okqty AS FLOAT)), 0) AS total_ok_qty, COALESCE(SUM(CAST(rejqty AS FLOAT)), 0) AS total_rej_qty, COALESCE(SUM(CAST(matrejqty AS FLOAT)), 0) AS total_mat_rej_qty, COALESCE(SUM(CAST(totqty AS FLOAT)), 0) AS total_qty, COUNT(finspno) AS inspection_count FROM FinalInspectionEntry WHERE deleted = 0 AND finspdate >= ? AND finspdate < DATEADD(DAY, 1, ?)"""
         params = [start_date, end_date]
         if company_col and company_code: sql += f" AND [{company_col}] = ?"; params.append(company_code)
         cursor.execute(sql, params); row = cursor.fetchone(); cursor.close(); conn.close()
@@ -3139,6 +3189,7 @@ def dashboard2_final_inspection_kpi(request):
     return Response({"company": tenant.get("company_name", ""), "company_code": tenant.get("company_code", ""), "from": str(start_date), "to": str(end_date), "total_ok_qty": round(total_ok_qty, 2), "total_rej_qty": round(total_rej_qty, 2), "total_mat_rej_qty": round(total_mat_rej_qty, 2), "total_qty": round(total_qty, 2), "first_pass_yield": first_pass_yield, "inspection_count": inspection_count})
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="d2_injob")
 def dashboard2_injob_inspection(request):
     try: conn, tenant = get_tenant_connection(request)
     except ValueError as e: return Response({"error": str(e)}, status=401)
@@ -3175,7 +3226,7 @@ def dashboard2_injob_inspection(request):
         sql_total_rework = f"COALESCE(SUM(COALESCE(CAST(D.[{rwqty_c}] AS FLOAT), 0)), 0)" if rwqty_c else "CAST(0 AS FLOAT)"
         qty_basis_col = find_first_column(cursor, det_tbl, qty_basis_candidates)
         sql_total_qty_basis = f"COALESCE(SUM(COALESCE(CAST(D.[{qty_basis_col}] AS FLOAT), 0)), 0)" if qty_basis_col else "CAST(0 AS FLOAT)"
-        where_parts = [f"CAST(M.[{mas_date}] AS DATE) BETWEEN ? AND ?"]; params = [start_date, end_date]
+        where_parts = [f"M.[{mas_date}] >= ? AND M.[{mas_date}] < DATEADD(DAY, 1, ?)"]; params = [start_date, end_date]
         if mas_del: where_parts.append(f"M.[{mas_del}] = 0")
         if det_del: where_parts.append(f"(D.[{det_del}] IS NULL OR D.[{det_del}] = 0)")
         if mas_cc and company_code: where_parts.append(f"M.[{mas_cc}] = ?"); params.append(company_code)
@@ -3190,6 +3241,7 @@ def dashboard2_injob_inspection(request):
     return Response({"company": tenant.get("company_name", ""), "company_code": tenant.get("company_code", ""), "from": str(start_date), "to": str(end_date), "total_rejection": round(total_rejection, 2), "total_rework": round(total_rework, 2), "total_qty_basis": round(total_qty_basis, 2), "inspection_master_count": inspection_master_count, "rejection_pct": rej_pct, "rework_pct": rwk_pct})
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="d2_inter")
 def dashboard2_inter_inspection(request):
     try: conn, tenant = get_tenant_connection(request)
     except ValueError as e: return Response({"error": str(e)}, status=401)
@@ -3222,7 +3274,7 @@ def dashboard2_inter_inspection(request):
         sql_total_qty_basis = f"COALESCE(SUM(COALESCE(CAST([{qty_basis_col}] AS FLOAT), 0)), 0)" if qty_basis_col else "CAST(0 AS FLOAT)"
         del_col = find_first_column(cursor, tbl, deleted_candidates); cc_col = find_first_column(cursor, tbl, company_candidates)
         company_code = tenant.get("company_code")
-        where_parts = [f"CAST([{date_col}] AS DATE) BETWEEN ? AND ?"]; params = [start_date, end_date]
+        where_parts = [f"[{date_col}] >= ? AND [{date_col}] < DATEADD(DAY, 1, ?)"]; params = [start_date, end_date]
         if del_col: where_parts.append(f"[{del_col}] = 0")
         if cc_col and company_code: where_parts.append(f"[{cc_col}] = ?"); params.append(company_code)
         where_sql = " AND ".join(where_parts)
@@ -3236,6 +3288,7 @@ def dashboard2_inter_inspection(request):
     return Response({"company": tenant.get("company_name", ""), "company_code": tenant.get("company_code", ""), "from": str(start_date), "to": str(end_date), "total_rejection": round(total_rejection, 2), "total_rework": round(total_rework, 2), "total_qty_basis": round(total_qty_basis, 2), "row_count": row_count, "rejection_pct": rej_pct, "rework_pct": rwk_pct})
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="d2_finsp_rwk")
 def dashboard2_final_inspection_org_rej_rwk(request):
     try: conn, tenant = get_tenant_connection(request)
     except ValueError as e: return Response({"error": str(e)}, status=401)
@@ -3280,7 +3333,7 @@ def dashboard2_final_inspection_org_rej_rwk(request):
         if use_r and del_r: rej_where = f"ISNULL([{del_r}], 0) = 0"
         rwk_where = "1=1"
         if use_w and del_w: rwk_where = f"ISNULL([{del_w}], 0) = 0"
-        mas_parts = [f"CAST(M.[{date_m}] AS DATE) BETWEEN ? AND ?"]; params = [start_date, end_date]
+        mas_parts = [f"M.[{date_m}] >= ? AND M.[{date_m}] < DATEADD(DAY, 1, ?)"]; params = [start_date, end_date]
         if del_m: mas_parts.append(f"ISNULL(M.[{del_m}], 0) = 0")
         if cc_m and company_code: mas_parts.append(f"M.[{cc_m}] = ?"); params.append(company_code)
         mas_where_sql = " AND ".join(mas_parts)
@@ -3298,6 +3351,7 @@ def dashboard2_final_inspection_org_rej_rwk(request):
     return Response(resp)
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="d2_top_defects")
 def dashboard2_top_defect_categories(request):
     try: conn, tenant = get_tenant_connection(request)
     except ValueError as e: return Response({"error": str(e)}, status=401)
@@ -3324,7 +3378,7 @@ def dashboard2_top_defect_categories(request):
             qty_r = find_column_ci(cursor, sch_r, nm_r, qty_cands)
             del_r = find_column_ci(cursor, sch_r, nm_r, deleted_candidates)
             if join_m and date_m and join_r and partno_r and qty_r:
-                where_parts = [f"CAST(F.[{date_m}] AS DATE) BETWEEN ? AND ?"]; params = [start_date, end_date]
+                where_parts = [f"F.[{date_m}] >= ? AND F.[{date_m}] < DATEADD(DAY, 1, ?)"]; params = [start_date, end_date]
                 if del_m: where_parts.append(f"ISNULL(F.[{del_m}], 0) = 0")
                 if del_r: where_parts.append(f"ISNULL(R.[{del_r}], 0) = 0")
                 if cc_m and company_code: where_parts.append(f"F.[{cc_m}] = ?"); params.append(company_code)
@@ -3342,7 +3396,7 @@ def dashboard2_top_defect_categories(request):
             del_i = find_column_ci(cursor, sch_i, nm_i, deleted_candidates)
             cc_i = find_column_ci(cursor, sch_i, nm_i, company_candidates)
             if date_i and partno_i and rejqty_i:
-                where_parts = [f"CAST([{date_i}] AS DATE) BETWEEN ? AND ?"]; params = [start_date, end_date]
+                where_parts = [f"[{date_i}] >= ? AND [{date_i}] < DATEADD(DAY, 1, ?)"]; params = [start_date, end_date]
                 if del_i: where_parts.append(f"ISNULL([{del_i}], 0) = 0")
                 if cc_i and company_code: where_parts.append(f"[{cc_i}] = ?"); params.append(company_code)
                 where_parts.append(f"ISNULL([{rejqty_i}], 0) > 0")

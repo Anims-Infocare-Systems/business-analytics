@@ -465,7 +465,7 @@ export default function LoginPage() {
         setLoginBusy(true);
 
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 20000);
+        const timeoutId = setTimeout(() => controller.abort(), 45000);
 
         try {
             const res = await fetch(`${API}/login/`, {

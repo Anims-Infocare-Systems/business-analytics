@@ -52,18 +52,15 @@
     }
 }
 
-@keyframes tg-pulse-glow {
+/* ── 60 FPS GPU-Composited Spotlight Ring Animation (Zero CPU layout reflows) ── */
+@keyframes tg-ring-pulse {
     0%, 100% {
-        box-shadow:
-            0 0 0 9999px rgba(10, 15, 30, 0.78),
-            0 0 0 4px rgba(45, 109, 232, 0.6),
-            0 0 25px rgba(45, 109, 232, 0.5);
+        opacity: 0.55;
+        transform: scale(0.998);
     }
     50% {
-        box-shadow:
-            0 0 0 9999px rgba(10, 15, 30, 0.78),
-            0 0 0 7px rgba(99, 102, 241, 0.8),
-            0 0 35px rgba(99, 102, 241, 0.7);
+        opacity: 1;
+        transform: scale(1.008);
     }
 }
 
@@ -79,10 +76,11 @@
     z-index: 11000;
     pointer-events: auto;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-    animation: tg-fade-in 0.28s ease-out both;
+    animation: tg-fade-in 0.22s ease-out both;
     box-sizing: border-box;
     cursor: default;
     user-select: none;
+    overscroll-behavior: contain;
 }
 
 .tg-portal *,
@@ -91,16 +89,44 @@
     box-sizing: border-box;
 }
 
-/* ── Spotlight Cutout ── */
+/* ── Spotlight Cutout (Hardware-accelerated, locked 60/120 FPS) ── */
 .tg-spotlight {
     position: fixed;
     border-radius: 14px;
     pointer-events: auto;
-    transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
-    animation: tg-pulse-glow 3s infinite ease-in-out;
+    /* Static hardware-cached backdrop shadow: Zero per-frame full-screen rasterization! */
+    box-shadow:
+        0 0 0 9999px rgba(10, 15, 30, 0.78),
+        0 0 20px rgba(37, 99, 235, 0.45);
     z-index: 11001;
     box-sizing: border-box;
     cursor: default;
+    will-change: top, left, width, height, opacity;
+    opacity: 1;
+    transition:
+        top 0.16s cubic-bezier(0.16, 1, 0.3, 1),
+        left 0.16s cubic-bezier(0.16, 1, 0.3, 1),
+        width 0.16s cubic-bezier(0.16, 1, 0.3, 1),
+        height 0.16s cubic-bezier(0.16, 1, 0.3, 1),
+        opacity 0.12s ease-out;
+}
+
+/* Cross-page quick fade to eliminate diagonal screen-crossing jumps */
+.tg-spotlight--cross-fading {
+    opacity: 0 !important;
+    transition: opacity 0.08s ease-out !important;
+}
+
+/* Subtle, ultra-smooth pulse ring rendered purely on GPU compositor thread */
+.tg-spotlight::after {
+    content: "";
+    position: absolute;
+    inset: -3px;
+    border-radius: 17px;
+    border: 2px solid rgba(56, 189, 248, 0.85);
+    box-shadow: 0 0 16px rgba(56, 189, 248, 0.6);
+    pointer-events: none;
+    animation: tg-ring-pulse 2.2s infinite ease-in-out;
 }
 
 /* Centered fallback backdrop when target not in DOM */
@@ -118,7 +144,7 @@
 /* ── Tooltip Popover Card ── */
 .tg-popover {
     position: fixed;
-    width: 380px;
+    width: 440px;
     max-width: calc(100vw - 32px);
     max-height: calc(100vh - 36px);
     display: flex;
@@ -129,24 +155,34 @@
     box-shadow:
         0 20px 50px rgba(10, 15, 30, 0.35),
         0 4px 16px rgba(45, 109, 232, 0.15);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     pointer-events: auto;
     z-index: 11005;
-    animation: tg-popover-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation: tg-popover-in 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
     color: #0f172a;
     overflow: hidden;
     box-sizing: border-box;
-    transition: top 0.3s cubic-bezier(0.16, 1, 0.3, 1), left 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    will-change: top, left, opacity;
+    opacity: 1;
+    transition:
+        top 0.16s cubic-bezier(0.16, 1, 0.3, 1),
+        left 0.16s cubic-bezier(0.16, 1, 0.3, 1),
+        opacity 0.12s ease-out;
+}
+
+.tg-popover--cross-fading {
+    opacity: 0.2 !important;
+    transition: opacity 0.08s ease-out !important;
 }
 
 .tg-popover--centered {
     top: 50% !important;
     left: 50% !important;
     transform: translate(-50%, -50%) !important;
-    width: 400px;
+    width: 440px;
     max-width: calc(100vw - 28px) !important;
-    animation: tg-modal-center-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) both !important;
+    animation: tg-modal-center-in 0.2s cubic-bezier(0.16, 1, 0.3, 1) both !important;
 }
 
 /* Mobile Docked Tooltip Variants */
@@ -511,28 +547,34 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 12px 20px 16px;
+    padding: 12px 18px 16px;
     background: #f8fafc;
     border-top: 1px solid #f1f5f9;
+    gap: 12px;
+    box-sizing: border-box;
 }
 
 .tg-dots {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 4px;
+    flex-wrap: wrap;
+    max-width: 220px;
+    flex-shrink: 1;
 }
 
 .tg-dot {
-    width: 7px;
-    height: 7px;
+    width: 6px;
+    height: 6px;
     border-radius: 50%;
     background: #cbd5e1;
     transition: all 0.25s ease;
+    flex-shrink: 0;
 }
 
 .tg-dot--active {
-    width: 18px;
-    border-radius: 10px;
+    width: 14px;
+    border-radius: 6px;
     background: linear-gradient(90deg, #2563eb, #4f46e5);
 }
 
@@ -540,18 +582,21 @@
     display: flex;
     align-items: center;
     gap: 8px;
+    flex-shrink: 0; /* CRITICAL: Never let buttons shrink or push off-screen */
 }
 
 .tg-btn-back {
-    padding: 7px 14px;
+    padding: 7px 13px;
     border-radius: 10px;
     background: #ffffff;
     border: 1px solid #cbd5e1;
     color: #475569;
-    font-size: 12.5px;
+    font-size: 12px;
     font-weight: 600;
     cursor: pointer;
     transition: all 0.2s ease;
+    flex-shrink: 0;
+    white-space: nowrap;
 }
 
 .tg-btn-back:hover:not(:disabled) {
@@ -567,17 +612,19 @@
 .tg-btn-next {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    padding: 7px 16px;
+    gap: 5px;
+    padding: 7px 15px;
     border-radius: 10px;
     background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%);
     border: none;
     color: #ffffff;
-    font-size: 12.5px;
+    font-size: 12px;
     font-weight: 600;
     cursor: pointer;
     box-shadow: 0 4px 12px rgba(37, 99, 235, 0.28);
     transition: all 0.2s ease;
+    flex-shrink: 0;
+    white-space: nowrap;
 }
 
 .tg-btn-next:hover {
@@ -690,4 +737,41 @@
     .tg-subitem-title { font-size: 11.5px; }
     .tg-subitem-desc { font-size: 10.5px; }
     .tg-btn-back, .tg-btn-next { padding: 6px 12px; font-size: 11.5px; }
+}
+
+@media (max-height: 600px) {
+    .tg-popover {
+        max-height: calc(100vh - 20px) !important;
+    }
+    .tg-popover__header {
+        padding: 10px 16px 6px;
+    }
+    .tg-popover__body {
+        max-height: 180px;
+        overflow-y: auto;
+    }
+    .tg-subitems-grid {
+        max-height: 100px;
+        overflow-y: auto;
+    }
+    .tg-popover__footer {
+        padding: 8px 16px 10px;
+    }
+    .tg-celebration-card {
+        padding: 16px 20px !important;
+    }
+    .tg-celebration-icon-wrap {
+        width: 48px;
+        height: 48px;
+        margin-bottom: 10px;
+        font-size: 24px;
+    }
+    .tg-celebration-title {
+        font-size: 18px;
+        margin-bottom: 4px;
+    }
+    .tg-celebration-desc {
+        font-size: 12px;
+        margin-bottom: 14px;
+    }
 }

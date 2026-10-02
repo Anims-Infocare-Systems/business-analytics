@@ -70,12 +70,16 @@ export default function NotificationDropdown({ companyCode, userName }) {
         }
     }, []);
 
-    // Initial load, background polling every 10s & real-time cross-tab / window sync
+    // Initial load, background polling every 60s & real-time cross-tab / window sync
     useEffect(() => {
         fetchNotifications();
 
-        // 1. Fast periodic background sync every 10 seconds for all connected users
-        const interval = setInterval(fetchNotifications, 10000);
+        // 1. Periodic background sync every 60 seconds (was 10s: with ~6 single-threaded
+        //    Passenger workers, N users × 6 req/min of polling queued behind analytics
+        //    requests). BroadcastChannel below still gives instant same-browser updates.
+        const interval = setInterval(() => {
+            if (document.visibilityState === "visible") fetchNotifications();
+        }, 60000);
 
         // 2. Instant cross-tab BroadcastChannel listener (0 ms when broadcast is sent in another tab)
         let bc = null;

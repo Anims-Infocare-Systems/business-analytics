@@ -26,34 +26,11 @@ from .views import (
     find_first_column as _raw_find_first_column,
 )
 
-# ── High-Performance In-Memory Schema Caches ──
-_QA_TABLE_EXISTS_CACHE = {}
-_QA_FIRST_COL_CACHE = {}
-_QA_COL_CI_CACHE = {}
+# Schema probes are served from the tenant-scoped catalog (utils/schema.py).
+table_exists = _raw_table_exists
+find_first_column = _raw_find_first_column
 
-def table_exists(cursor, table_name):
-    key = str(table_name).strip().lower()
-    if key in _QA_TABLE_EXISTS_CACHE:
-        return _QA_TABLE_EXISTS_CACHE[key]
-    val = _raw_table_exists(cursor, table_name)
-    _QA_TABLE_EXISTS_CACHE[key] = val
-    return val
-
-def find_first_column(cursor, table_name, candidates):
-    key = (str(table_name).strip().lower(), tuple(str(c).strip().lower() for c in candidates))
-    if key in _QA_FIRST_COL_CACHE:
-        return _QA_FIRST_COL_CACHE[key]
-    val = _raw_find_first_column(cursor, table_name, candidates)
-    _QA_FIRST_COL_CACHE[key] = val
-    return val
-
-def find_column_ci(cursor, schema, table, candidates):
-    key = (str(schema).strip().lower(), str(table).strip().lower(), tuple(str(c).strip().lower() for c in candidates))
-    if key in _QA_COL_CI_CACHE:
-        return _QA_COL_CI_CACHE[key]
-    val = _raw_find_column_ci(cursor, schema, table, candidates)
-    _QA_COL_CI_CACHE[key] = val
-    return val
+find_column_ci = _raw_find_column_ci
 
 def table_has_column(cursor, table_name, column_name):
     return find_first_column(cursor, table_name, [column_name]) is not None
@@ -407,9 +384,9 @@ def _build_customer_filter_part(customers, partno_expr):
 
 def _build_quality_value_sql(like_term=None, customers=None):
     """Build the Quality Value CTE + final SELECT with an optional PartNo/Description LIKE filter and customer filter."""
-    injob_parts = ["AND CAST(IM.inspdate AS DATE) BETWEEN ? AND ?"]
-    final_parts = ["AND CAST(FM.finspdate AS DATE) BETWEEN ? AND ?"]
-    inter_parts = ["AND CAST(IIM.inter_inspdate AS DATE) BETWEEN ? AND ?"]
+    injob_parts = ["AND IM.inspdate >= ? AND IM.inspdate < DATEADD(DAY, 1, ?)"]
+    final_parts = ["AND FM.finspdate >= ? AND FM.finspdate < DATEADD(DAY, 1, ?)"]
+    inter_parts = ["AND IIM.inter_inspdate >= ? AND IIM.inter_inspdate < DATEADD(DAY, 1, ?)"]
 
     if like_term:
         injob_parts.append("AND (D.PartNo LIKE ? OR D.description LIKE ?)")
@@ -457,6 +434,85 @@ FROM CTE_QualityValue
 
 # Legacy constant kept for backward compat (no part filter)
 QUALITY_VALUE_TOTAL_SQL = _build_quality_value_sql(like_term=None, customers=None)
+def _build_part_customer_cte(cursor):
+    """
+    Constructs a unified CTE that resolves Description and Customer/PartyName
+    for any PartNo in a single grouped query, avoiding tens of thousands of
+    correlated scalar subqueries row-by-row.
+    """
+    unions = []
+    has_cust = table_exists(cursor, "CustMast")
+    has_alias = table_exists(cursor, "CustAliasMast")
+
+    cust_expr = "COALESCE(NULLIF(LTRIM(RTRIM(CM.CName)), ''), NULLIF(LTRIM(RTRIM(CAM.CorpName)), ''))" if (has_cust and has_alias) else ("NULLIF(LTRIM(RTRIM(CM.CName)), '')" if has_cust else ("NULLIF(LTRIM(RTRIM(CAM.CorpName)), '')" if has_alias else "NULL"))
+
+    if table_exists(cursor, "WithMatMas"):
+        join_cm = "LEFT JOIN CustMast CM ON WM_P.Cid = CM.Id AND ISNULL(CM.deleted, 0) = 0" if has_cust else ""
+        join_cam = "LEFT JOIN CustAliasMast CAM ON WM_P.Cid = CAM.Id AND ISNULL(CAM.deleted, 0) = 0" if has_alias else ""
+        unions.append(f"""
+            SELECT LTRIM(RTRIM(WM_P.PartNo)) AS PartNo,
+                   NULLIF(LTRIM(RTRIM(WM_P.Description)), '') AS Description,
+                   {cust_expr} AS PartyName
+            FROM WithMatMas WM_P
+            {join_cm}
+            {join_cam}
+            WHERE ISNULL(WM_P.Deleted, 0) = 0 AND WM_P.PartNo IS NOT NULL
+        """)
+    if table_exists(cursor, "CustJobRawMat"):
+        join_cm = "LEFT JOIN CustMast CM ON CJ_P.cid = CM.Id AND ISNULL(CM.deleted, 0) = 0" if has_cust else ""
+        join_cam = "LEFT JOIN CustAliasMast CAM ON CJ_P.cid = CAM.Id AND ISNULL(CAM.deleted, 0) = 0" if has_alias else ""
+        unions.append(f"""
+            SELECT LTRIM(RTRIM(CJ_P.partno)) AS PartNo,
+                   NULLIF(LTRIM(RTRIM(CJ_P.description)), '') AS Description,
+                   {cust_expr} AS PartyName
+            FROM CustJobRawMat CJ_P
+            {join_cm}
+            {join_cam}
+            WHERE ISNULL(CJ_P.deleted, 0) = 0 AND CJ_P.partno IS NOT NULL
+        """)
+    if table_exists(cursor, "ProductMast"):
+        join_cm = "LEFT JOIN CustMast CM ON PM_P.Cid = CM.Id AND ISNULL(CM.deleted, 0) = 0" if has_cust else ""
+        join_cam = "LEFT JOIN CustAliasMast CAM ON PM_P.Cid = CAM.Id AND ISNULL(CAM.deleted, 0) = 0" if has_alias else ""
+        unions.append(f"""
+            SELECT LTRIM(RTRIM(PM_P.PartNo)) AS PartNo,
+                   NULLIF(LTRIM(RTRIM(PM_P.Description)), '') AS Description,
+                   {cust_expr} AS PartyName
+            FROM ProductMast PM_P
+            {join_cm}
+            {join_cam}
+            WHERE ISNULL(PM_P.Deleted, 0) = 0 AND PM_P.PartNo IS NOT NULL
+        """)
+    if table_exists(cursor, "ProdMast"):
+        join_cm = "LEFT JOIN CustMast CM ON PRM_P.CId = CM.Id AND ISNULL(CM.deleted, 0) = 0" if has_cust else ""
+        join_cam = "LEFT JOIN CustAliasMast CAM ON PRM_P.CId = CAM.Id AND ISNULL(CAM.deleted, 0) = 0" if has_alias else ""
+        unions.append(f"""
+            SELECT LTRIM(RTRIM(PRM_P.Partno)) AS PartNo,
+                   NULLIF(LTRIM(RTRIM(PRM_P.ItemName)), '') AS Description,
+                   {cust_expr} AS PartyName
+            FROM ProdMast PRM_P
+            {join_cm}
+            {join_cam}
+            WHERE ISNULL(PRM_P.Deleted, 0) = 0 AND PRM_P.Partno IS NOT NULL
+        """)
+
+    if not unions:
+        return "WITH CTE_PartCustomer AS (SELECT CAST('' AS NVARCHAR(100)) AS PartNo, CAST('' AS NVARCHAR(255)) AS Description, CAST('' AS NVARCHAR(255)) AS PartyName WHERE 1=0)"
+
+    union_sql = "\nUNION ALL\n".join(unions)
+    return f"""
+    WITH CTE_PartCustomer AS (
+        SELECT
+            PartNo,
+            MAX(Description) AS Description,
+            MAX(PartyName) AS PartyName
+        FROM (
+            {union_sql}
+        ) raw_pc
+        WHERE PartNo <> '' AND (Description IS NOT NULL OR PartyName IS NOT NULL)
+        GROUP BY PartNo
+    )
+    """
+
 
 
 
@@ -624,7 +680,7 @@ def quality_analysis_summary(request):
                 qty_expr = f"CAST(ISNULL(d.[{qty_col or 'recqty'}], 0) AS INT)"
                 ok_expr = f"CAST(ISNULL(d.[{okqty_col}], 0) AS INT)" if okqty_col else "0"
 
-                where_injob = [f"CAST(m.[{inspdate_col}] AS DATE) BETWEEN ? AND ?"]
+                where_injob = [f"m.[{inspdate_col}] >= ? AND m.[{inspdate_col}] < DATEADD(DAY, 1, ?)"]
                 params_injob: list = [start_date, end_date]
                 if deleted_mas:
                     where_injob.append(f"ISNULL(m.[{deleted_mas}], 0) = 0")
@@ -715,7 +771,7 @@ def quality_analysis_summary(request):
                         ELSE ISNULL(i.[{rej_col}], 0)
                     END AS INT)""" if rej_col else "0"
 
-                where_inter = [f"CAST(i.[{inspdate_col}] AS DATE) BETWEEN ? AND ?"]
+                where_inter = [f"i.[{inspdate_col}] >= ? AND i.[{inspdate_col}] < DATEADD(DAY, 1, ?)"]
                 params_inter: list = [start_date, end_date]
                 if deleted_col:
                     where_inter.append(f"ISNULL(i.[{deleted_col}], 0) = 0")
@@ -798,7 +854,7 @@ def quality_analysis_summary(request):
                               AND ISNULL(fr.deleted, 0) = 0
                         ), 0) AS INT)"""
 
-                where_final = [f"CAST(f.[{finspdate_col}] AS DATE) BETWEEN ? AND ?"]
+                where_final = [f"f.[{finspdate_col}] >= ? AND f.[{finspdate_col}] < DATEADD(DAY, 1, ?)"]
                 params_final: list = [start_date, end_date]
                 if deleted_col:
                     where_final.append(f"ISNULL(f.[{deleted_col}], 0) = 0")
@@ -1270,8 +1326,8 @@ def quality_analysis_charts(request):
 
         # 1. InJob (single query across start_date to end_date)
         if injob_meta:
-            where_clauses = ["CAST(m.[{}] AS DATE) BETWEEN ? AND ?".format(injob_meta["inspdate"])]
-            params: list = [start_date, end_date]
+            where_clauses = ["m.[{0}] >= ? AND m.[{0}] < DATEADD(DAY, 1, ?)".format(injob_meta["inspdate"])]
+            params: List[Any] = [start_date, end_date]
             if injob_meta["del_mas"]:
                 where_clauses.append("ISNULL(m.[{}], 0) = 0".format(injob_meta["del_mas"]))
             if injob_meta["del_det"]:
@@ -1314,8 +1370,8 @@ def quality_analysis_charts(request):
 
         # 2. Final (single query across start_date to end_date)
         if final_meta:
-            where_clauses = ["CAST(f.[{}] AS DATE) BETWEEN ? AND ?".format(final_meta["finspdate"])]
-            params: list = [start_date, end_date]
+            where_clauses = ["f.[{0}] >= ? AND f.[{0}] < DATEADD(DAY, 1, ?)".format(final_meta["finspdate"])]
+            params = [start_date, end_date]
             if final_meta["del"]:
                 where_clauses.append("ISNULL(f.[{}], 0) = 0".format(final_meta["del"]))
             if final_meta["comp"] and company_code:
@@ -1375,8 +1431,8 @@ def quality_analysis_charts(request):
 
         # 3. Inter (single query across start_date to end_date)
         if inter_meta:
-            where_clauses = ["CAST(i.[{}] AS DATE) BETWEEN ? AND ?".format(inter_meta["inspdate"])]
-            params: list = [start_date, end_date]
+            where_clauses = ["i.[{0}] >= ? AND i.[{0}] < DATEADD(DAY, 1, ?)".format(inter_meta["inspdate"])]
+            params = [start_date, end_date]
             if inter_meta["del"]:
                 where_clauses.append("ISNULL(i.[{}], 0) = 0".format(inter_meta["del"]))
             if inter_meta["comp"] and company_code:
@@ -1454,7 +1510,7 @@ def quality_analysis_charts(request):
                 INNER JOIN InJob_Det d ON m.inspno = d.inspno
                 WHERE ISNULL(m.deleted, 0) = 0 AND ISNULL(d.deleted, 0) = 0
                   AND ISNULL(m.dtype, '') != 'Without Process'
-                  AND CAST(m.inspdate AS DATE) BETWEEN ? AND ?
+                  AND m.inspdate >= ? AND m.inspdate < DATEADD(DAY, 1, ?)
                   {cust_ij_sql}
 
                 UNION ALL
@@ -1476,7 +1532,7 @@ def quality_analysis_charts(request):
                     END AS INT) AS MacRejQty
                 FROM InterInspectionEntry i
                 WHERE ISNULL(i.deleted, 0) = 0
-                  AND CAST(i.inter_inspdate AS DATE) BETWEEN ? AND ?
+                  AND i.inter_inspdate >= ? AND i.inter_inspdate < DATEADD(DAY, 1, ?)
                   {cust_it_sql}
 
                 UNION ALL
@@ -1494,7 +1550,7 @@ def quality_analysis_charts(request):
                     ), 0) AS INT) AS MacRejQty
                 FROM FinalInspectionEntry f
                 WHERE ISNULL(f.deleted, 0) = 0
-                  AND CAST(f.finspdate AS DATE) BETWEEN ? AND ?
+                  AND f.finspdate >= ? AND f.finspdate < DATEADD(DAY, 1, ?)
                   {cust_fi_sql}
             ) AS CombinedPPM
             GROUP BY MONTH(InspDate)
@@ -1586,7 +1642,7 @@ def quality_analysis_charts(request):
                     WHERE ISNULL(m.deleted,0) = 0
                       AND ISNULL(d.deleted,0) = 0
                       AND ISNULL(m.dtype, '') != 'Without Process'
-                      AND CAST(m.inspdate AS DATE) BETWEEN ? AND ?
+                      AND m.inspdate >= ? AND m.inspdate < DATEADD(DAY, 1, ?)
                       {cust_ij_sql}
 
                     UNION ALL
@@ -1613,7 +1669,7 @@ def quality_analysis_charts(request):
                         CAST(ISNULL(i.matrejqty,0) + ISNULL(i.rejqty,0) AS INT) AS RejectionQty
                     FROM InterInspectionEntry i
                     WHERE ISNULL(i.deleted,0) = 0
-                      AND CAST(i.inter_inspdate AS DATE) BETWEEN ? AND ?
+                      AND i.inter_inspdate >= ? AND i.inter_inspdate < DATEADD(DAY, 1, ?)
                       {cust_it_sql}
 
                     UNION ALL
@@ -1645,7 +1701,7 @@ def quality_analysis_charts(request):
                         ), 0) AS INT) AS RejectionQty
                     FROM FinalInspectionEntry f
                     WHERE ISNULL(f.deleted, 0) = 0
-                      AND CAST(f.finspdate AS DATE) BETWEEN ? AND ?
+                      AND f.finspdate >= ? AND f.finspdate < DATEADD(DAY, 1, ?)
                       {cust_fi_sql}
                 ) AS Combined
                 WHERE ISNULL(Combined.RejectionQty,0) > 0
@@ -1681,7 +1737,7 @@ def quality_analysis_charts(request):
                     WHERE ISNULL(m.deleted,0) = 0
                       AND ISNULL(d.deleted,0) = 0
                       AND ISNULL(m.dtype, '') != 'Without Process'
-                      AND CAST(m.inspdate AS DATE) BETWEEN ? AND ?
+                      AND m.inspdate >= ? AND m.inspdate < DATEADD(DAY, 1, ?)
                       {cust_ij_sql}
 
                     UNION ALL
@@ -1703,7 +1759,7 @@ def quality_analysis_charts(request):
                           SELECT 1 FROM JobInspRWDetail rw
                           WHERE rw.Ins_No = m.inspno AND rw.PartNo = d.partno
                       )
-                      AND CAST(m.inspdate AS DATE) BETWEEN ? AND ?
+                      AND m.inspdate >= ? AND m.inspdate < DATEADD(DAY, 1, ?)
                       {cust_ij_sql}
 
                     UNION ALL
@@ -1722,7 +1778,7 @@ def quality_analysis_charts(request):
                         ON rw.inter_inspno = i.inter_inspno AND rw.PartNo = i.partno
                     WHERE ISNULL(i.deleted,0) = 0
                       AND ISNULL(rw.deleted,0) = 0
-                      AND CAST(i.inter_inspdate AS DATE) BETWEEN ? AND ?
+                      AND i.inter_inspdate >= ? AND i.inter_inspdate < DATEADD(DAY, 1, ?)
                       {cust_it_sql}
 
                     UNION ALL
@@ -1740,7 +1796,7 @@ def quality_analysis_charts(request):
                           SELECT 1 FROM Insp_ReworkEntry rw
                           WHERE rw.inter_inspno = i.inter_inspno AND rw.PartNo = i.partno AND ISNULL(rw.deleted,0) = 0
                       )
-                      AND CAST(i.inter_inspdate AS DATE) BETWEEN ? AND ?
+                      AND i.inter_inspdate >= ? AND i.inter_inspdate < DATEADD(DAY, 1, ?)
                       {cust_it_sql}
 
                     UNION ALL
@@ -1759,7 +1815,7 @@ def quality_analysis_charts(request):
                         ON rw.finspno = f.finspno AND rw.partno = f.partno
                     WHERE ISNULL(f.deleted,0) = 0
                       AND ISNULL(rw.deleted,0) = 0
-                      AND CAST(f.finspdate AS DATE) BETWEEN ? AND ?
+                      AND f.finspdate >= ? AND f.finspdate < DATEADD(DAY, 1, ?)
                       {cust_fi_sql}
                 ) AS Combined
                 WHERE Combined.ReworkQty > 0
@@ -1831,8 +1887,8 @@ def quality_analysis_charts(request):
 
             # A. InJob
             if injob_meta:
-                where_clauses = ["CAST(m.[{}] AS DATE) BETWEEN ? AND ?".format(injob_meta["inspdate"])]
-                params: list = [start_date, end_date]
+                where_clauses = ["m.[{0}] >= ? AND m.[{0}] < DATEADD(DAY, 1, ?)".format(injob_meta["inspdate"])]
+                params = [start_date, end_date]
                 if injob_meta["del_mas"]:
                     where_clauses.append("ISNULL(m.[{}], 0) = 0".format(injob_meta["del_mas"]))
                 if injob_meta["del_det"]:
@@ -1874,8 +1930,8 @@ def quality_analysis_charts(request):
 
             # B. Final
             if final_meta:
-                where_clauses_f = ["CAST(f.[{}] AS DATE) BETWEEN ? AND ?".format(final_meta["finspdate"])]
-                params_f: list = [start_date, end_date]
+                where_clauses_f = ["f.[{0}] >= ? AND f.[{0}] < DATEADD(DAY, 1, ?)".format(final_meta["finspdate"])]
+                params_f: List[Any] = [start_date, end_date]
                 if final_meta["del"]:
                     where_clauses_f.append("ISNULL(f.[{}], 0) = 0".format(final_meta["del"]))
                 if final_meta["comp"] and company_code:
@@ -1936,8 +1992,8 @@ def quality_analysis_charts(request):
 
             # C. Inter
             if inter_meta:
-                where_clauses_i = ["CAST(i.[{}] AS DATE) BETWEEN ? AND ?".format(inter_meta["inspdate"])]
-                params_i: list = [start_date, end_date]
+                where_clauses_i = ["i.[{0}] >= ? AND i.[{0}] < DATEADD(DAY, 1, ?)".format(inter_meta["inspdate"])]
+                params_i: List[Any] = [start_date, end_date]
                 if inter_meta["del"]:
                     where_clauses_i.append("ISNULL(i.[{}], 0) = 0".format(inter_meta["del"]))
                 if inter_meta["comp"] and company_code:
@@ -2003,8 +2059,8 @@ def quality_analysis_charts(request):
 
         cursor.close()
         conn.close()
-    except Exception:
-        pass
+    except Exception as ex_charts:
+        logger.error("quality_analysis_charts failed: %s", ex_charts, exc_info=True)
 
     # Fallback to zeroed arrays if DB success is absent or all elements are 0
     if not db_success or sum(pass_data) + sum(rework_data) + sum(reject_data) == 0:
@@ -2215,6 +2271,7 @@ def quality_analysis_product_performance(request):
             final_search = "AND (f.partno LIKE ? OR f.description LIKE ?)" if like_term else ""
 
             qty_col_ij = find_first_column(cursor, "InJob_Det", ["recqty", "RecQty", "RECQTY", "rec_qty", "Rec_Qty", "jobqty", "JobQty", "qty", "Qty", "totqty", "TotQty", "okqty"]) or "recqty"
+            cte_part_cust = _build_part_customer_cte(cursor)
 
             sql = f"""
             SELECT
@@ -2238,7 +2295,7 @@ def quality_analysis_product_performance(request):
                 INNER JOIN InJob_Det d ON m.inspno = d.inspno
                 WHERE ISNULL(m.deleted, 0) = 0 AND ISNULL(d.deleted, 0) = 0
                   AND ISNULL(m.dtype, '') != 'Without Process'
-                  AND CAST(m.inspdate AS DATE) BETWEEN ? AND ?
+                  AND m.inspdate >= ? AND m.inspdate < DATEADD(DAY, 1, ?)
                   {injob_search}
                   {cust_ij_sql}
 
@@ -2276,7 +2333,7 @@ def quality_analysis_product_performance(request):
                     CAST(ISNULL(i.rwqty, 0) AS INT) AS ReworkQty
                 FROM InterInspectionEntry i
                 WHERE ISNULL(i.deleted, 0) = 0
-                  AND CAST(i.inter_inspdate AS DATE) BETWEEN ? AND ?
+                  AND i.inter_inspdate >= ? AND i.inter_inspdate < DATEADD(DAY, 1, ?)
                   {inter_search}
                   {cust_it_sql}
 
@@ -2306,7 +2363,7 @@ def quality_analysis_product_performance(request):
                     {rework_subquery} AS ReworkQty
                 FROM FinalInspectionEntry f
                 WHERE ISNULL(f.deleted, 0) = 0
-                  AND CAST(f.finspdate AS DATE) BETWEEN ? AND ?
+                  AND f.finspdate >= ? AND f.finspdate < DATEADD(DAY, 1, ?)
                   {final_search}
                   {cust_fi_sql}
             ) AS CombinedInspections
@@ -2488,7 +2545,7 @@ def quality_analysis_defect_causes(request):
                 WHERE ISNULL(m.deleted,0) = 0
                   AND ISNULL(d.deleted,0) = 0
                   AND ISNULL(m.dtype, '') != 'Without Process'
-                  AND CAST(m.inspdate AS DATE) BETWEEN ? AND ?
+                  AND m.inspdate >= ? AND m.inspdate < DATEADD(DAY, 1, ?)
                   {cust_ij_sql}
 
                 UNION ALL
@@ -2515,7 +2572,7 @@ def quality_analysis_defect_causes(request):
                     CAST(ISNULL(i.matrejqty,0) + ISNULL(i.rejqty,0) AS INT) AS RejectionQty
                 FROM InterInspectionEntry i
                 WHERE ISNULL(i.deleted,0) = 0
-                  AND CAST(i.inter_inspdate AS DATE) BETWEEN ? AND ?
+                  AND i.inter_inspdate >= ? AND i.inter_inspdate < DATEADD(DAY, 1, ?)
                   {cust_it_sql}
 
                 UNION ALL
@@ -2547,7 +2604,7 @@ def quality_analysis_defect_causes(request):
                     ), 0) AS INT) AS RejectionQty
                 FROM FinalInspectionEntry f
                 WHERE ISNULL(f.deleted, 0) = 0
-                  AND CAST(f.finspdate AS DATE) BETWEEN ? AND ?
+                  AND f.finspdate >= ? AND f.finspdate < DATEADD(DAY, 1, ?)
                   {cust_fi_sql}
             ) AS Combined
             WHERE ISNULL(Combined.RejectionQty,0) > 0
@@ -2583,7 +2640,7 @@ def quality_analysis_defect_causes(request):
                 WHERE ISNULL(m.deleted,0) = 0
                   AND ISNULL(d.deleted,0) = 0
                   AND ISNULL(m.dtype, '') != 'Without Process'
-                  AND CAST(m.inspdate AS DATE) BETWEEN ? AND ?
+                  AND m.inspdate >= ? AND m.inspdate < DATEADD(DAY, 1, ?)
                   {cust_ij_sql}
 
                 UNION ALL
@@ -2605,7 +2662,7 @@ def quality_analysis_defect_causes(request):
                       SELECT 1 FROM JobInspRWDetail rw
                       WHERE rw.Ins_No = m.inspno AND rw.PartNo = d.partno
                   )
-                  AND CAST(m.inspdate AS DATE) BETWEEN ? AND ?
+                  AND m.inspdate >= ? AND m.inspdate < DATEADD(DAY, 1, ?)
                   {cust_ij_sql}
 
                 UNION ALL
@@ -2624,7 +2681,7 @@ def quality_analysis_defect_causes(request):
                     ON rw.inter_inspno = i.inter_inspno AND rw.PartNo = i.partno
                 WHERE ISNULL(i.deleted,0) = 0
                   AND ISNULL(rw.deleted,0) = 0
-                  AND CAST(i.inter_inspdate AS DATE) BETWEEN ? AND ?
+                  AND i.inter_inspdate >= ? AND i.inter_inspdate < DATEADD(DAY, 1, ?)
                   {cust_it_sql}
 
                 UNION ALL
@@ -2642,7 +2699,7 @@ def quality_analysis_defect_causes(request):
                       SELECT 1 FROM Insp_ReworkEntry rw
                       WHERE rw.inter_inspno = i.inter_inspno AND rw.PartNo = i.partno AND ISNULL(rw.deleted,0) = 0
                   )
-                  AND CAST(i.inter_inspdate AS DATE) BETWEEN ? AND ?
+                  AND i.inter_inspdate >= ? AND i.inter_inspdate < DATEADD(DAY, 1, ?)
                   {cust_it_sql}
 
                 UNION ALL
@@ -2661,7 +2718,7 @@ def quality_analysis_defect_causes(request):
                     ON rw.finspno = f.finspno AND rw.partno = f.partno
                 WHERE ISNULL(f.deleted,0) = 0
                   AND ISNULL(rw.deleted,0) = 0
-                  AND CAST(f.finspdate AS DATE) BETWEEN ? AND ?
+                  AND f.finspdate >= ? AND f.finspdate < DATEADD(DAY, 1, ?)
                   {cust_fi_sql}
             ) AS Combined
             WHERE Combined.ReworkQty > 0
@@ -2948,6 +3005,9 @@ def quality_analysis_records(request):
         required_tables = ["InJob_Mas", "InJob_Det", "InterInspectionEntry", "FinalInspectionEntry", "ProcessDet"]
         if all(table_exists(cursor, t) for t in required_tables):
             has_rework_table = table_exists(cursor, "FinalInspReworkEntryOrg")
+            has_final_rej_table = table_exists(cursor, "FinalInspRejectionEntryOrg")
+            has_inter_rej_table = table_exists(cursor, "Insp_RejectionEntry")
+            has_rejection_master = table_exists(cursor, "Rejection")
             has_job_rc_table = table_exists(cursor, "JobIncomeDetInspRouteCard")
             has_inter_rc_table = table_exists(cursor, "InterInspEntryRouteCard")
             has_final_rc_table = table_exists(cursor, "FinalInspRouteCard")
@@ -2974,8 +3034,8 @@ def quality_analysis_records(request):
                     FROM JobIncomeDetInspRouteCard
                     WHERE RouCardNo IS NOT NULL AND LTRIM(RTRIM(RouCardNo)) <> ''
                       AND (
-                          InspNo IN (SELECT inspno FROM InJob_Mas WHERE ISNULL(deleted, 0) = 0 AND CAST(inspdate AS DATE) BETWEEN '{start_date}' AND '{end_date}')
-                          OR JiNo IN (SELECT jino FROM InJob_Mas WHERE ISNULL(deleted, 0) = 0 AND CAST(inspdate AS DATE) BETWEEN '{start_date}' AND '{end_date}')
+                          InspNo IN (SELECT inspno FROM InJob_Mas WHERE ISNULL(deleted, 0) = 0 AND inspdate >= '{start_date}' AND inspdate < DATEADD(DAY, 1, '{end_date}'))
+                          OR JiNo IN (SELECT jino FROM InJob_Mas WHERE ISNULL(deleted, 0) = 0 AND inspdate >= '{start_date}' AND inspdate < DATEADD(DAY, 1, '{end_date}'))
                       )
                     GROUP BY InspNo, JiNo, PartNo
                 ) jrc ON (
@@ -2996,7 +3056,7 @@ def quality_analysis_records(request):
                     WHERE ISNULL(deleted, 0) = 0 AND RouCardNo IS NOT NULL AND LTRIM(RTRIM(RouCardNo)) <> ''
                       AND inter_inspno IN (
                           SELECT inter_inspno FROM InterInspectionEntry
-                          WHERE ISNULL(deleted, 0) = 0 AND CAST(inter_inspdate AS DATE) BETWEEN '{start_date}' AND '{end_date}'
+                          WHERE ISNULL(deleted, 0) = 0 AND inter_inspdate >= '{start_date}' AND inter_inspdate < DATEADD(DAY, 1, '{end_date}')
                       )
                     GROUP BY inter_inspno, partno
                 ) irc ON LTRIM(RTRIM(i.inter_inspno)) = LTRIM(RTRIM(irc.inter_inspno)) AND LTRIM(RTRIM(i.partno)) = LTRIM(RTRIM(irc.partno))
@@ -3024,7 +3084,7 @@ def quality_analysis_records(request):
                     WHERE ISNULL(frc.deleted, 0) = 0 AND frc.RouCardNo IS NOT NULL AND LTRIM(RTRIM(frc.RouCardNo)) <> ''
                       AND frc.FinspNo IN (
                           SELECT finspno FROM FinalInspectionEntry
-                          WHERE ISNULL(deleted, 0) = 0 AND CAST(finspdate AS DATE) BETWEEN '{start_date}' AND '{end_date}'
+                          WHERE ISNULL(deleted, 0) = 0 AND finspdate >= '{start_date}' AND finspdate < DATEADD(DAY, 1, '{end_date}')
                       )
                     GROUP BY LTRIM(RTRIM(FinspNo)), LTRIM(RTRIM(partno))
                 ) frc_agg ON LTRIM(RTRIM(f.finspno)) = frc_agg.FinspNo AND LTRIM(RTRIM(f.partno)) = frc_agg.partno
@@ -3036,8 +3096,78 @@ def quality_analysis_records(request):
             final_search = "AND (f.partno LIKE ? OR f.finspno LIKE ?)" if like_term else ""
 
             qty_col_ij = find_first_column(cursor, "InJob_Det", ["recqty", "RecQty", "RECQTY", "rec_qty", "Rec_Qty", "jobqty", "JobQty", "qty", "Qty", "totqty", "TotQty", "okqty"]) or "recqty"
+            cte_part_cust = _build_part_customer_cte(cursor)
+
+            if has_inter_rej_table:
+                rej_join = "LEFT JOIN Rejection rej ON r.rejection = rej.rejection" if has_rejection_master else ""
+                matrej_case = "CASE WHEN ISNULL(rej.matrej, 0) = 1 THEN ISNULL(r.qty, 0) ELSE 0 END" if has_rejection_master else "0"
+                macrej_case = "CASE WHEN ISNULL(rej.matrej, 0) = 0 THEN ISNULL(r.qty, 0) ELSE 0 END" if has_rejection_master else "ISNULL(r.qty, 0)"
+                inter_rej_cte = f"""
+                , INTER_REJ_AGG AS (
+                    SELECT
+                        r.inter_inspno,
+                        SUM({matrej_case}) AS matrej_qty,
+                        SUM({macrej_case}) AS macrej_qty
+                    FROM Insp_RejectionEntry r
+                    {rej_join}
+                    WHERE ISNULL(r.deleted, 0) = 0
+                    GROUP BY r.inter_inspno
+                )
+                """
+            else:
+                inter_rej_cte = """
+                , INTER_REJ_AGG AS (
+                    SELECT CAST('' AS NVARCHAR(100)) AS inter_inspno, CAST(0 AS INT) AS matrej_qty, CAST(0 AS INT) AS macrej_qty WHERE 1=0
+                )
+                """
+
+            if has_final_rej_table:
+                rej_join = "LEFT JOIN Rejection rej ON fr.rejection = rej.rejection" if has_rejection_master else ""
+                matrej_case = "CASE WHEN ISNULL(rej.matrej, 0) = 1 THEN ISNULL(fr.qty, 0) ELSE 0 END" if has_rejection_master else "0"
+                macrej_case = "CASE WHEN ISNULL(rej.matrej, 0) = 0 THEN ISNULL(fr.qty, 0) ELSE 0 END" if has_rejection_master else "ISNULL(fr.qty, 0)"
+                final_rej_cte = f"""
+                , FINAL_REJ_AGG AS (
+                    SELECT
+                        fr.finspno,
+                        SUM({matrej_case}) AS matrej_qty,
+                        SUM({macrej_case}) AS macrej_qty
+                    FROM FinalInspRejectionEntryOrg fr
+                    {rej_join}
+                    WHERE ISNULL(fr.deleted, 0) = 0
+                    GROUP BY fr.finspno
+                )
+                """
+            else:
+                final_rej_cte = """
+                , FINAL_REJ_AGG AS (
+                    SELECT CAST('' AS NVARCHAR(100)) AS finspno, CAST(0 AS INT) AS matrej_qty, CAST(0 AS INT) AS macrej_qty WHERE 1=0
+                )
+                """
+
+            if has_rework_table:
+                final_rwk_cte = f"""
+                , FINAL_RWK_AGG AS (
+                    SELECT
+                        fr.finspno,
+                        fr.partno,
+                        SUM(ISNULL(fr.qty, 0)) AS rework_qty
+                    FROM FinalInspReworkEntryOrg fr
+                    WHERE ISNULL(fr.deleted, 0) = 0
+                    GROUP BY fr.finspno, fr.partno
+                )
+                """
+            else:
+                final_rwk_cte = """
+                , FINAL_RWK_AGG AS (
+                    SELECT CAST('' AS NVARCHAR(100)) AS finspno, CAST('' AS NVARCHAR(100)) AS partno, CAST(0 AS INT) AS rework_qty WHERE 1=0
+                )
+                """
 
             sql = f"""
+            {cte_part_cust}
+            {inter_rej_cte}
+            {final_rej_cte}
+            {final_rwk_cte}
             SELECT
                 InspType,
                 SubType,
@@ -3064,14 +3194,7 @@ def quality_analysis_records(request):
                     m.inspno AS InspNo,
                     m.inspdate AS InspDate,
                     d.partno AS PartNo,
-                    COALESCE(
-                        NULLIF(LTRIM(RTRIM(d.description)), ''),
-                        (SELECT TOP 1 Description FROM WithMatMas WHERE PartNo = d.partno AND ISNULL(Deleted, 0) = 0 AND Description IS NOT NULL AND LTRIM(RTRIM(Description)) <> ''),
-                        (SELECT TOP 1 description FROM CustJobRawMat WHERE partno = d.partno AND ISNULL(deleted, 0) = 0 AND description IS NOT NULL AND LTRIM(RTRIM(description)) <> ''),
-                        (SELECT TOP 1 Description FROM ProductMast WHERE PartNo = d.partno AND ISNULL(Deleted, 0) = 0 AND Description IS NOT NULL AND LTRIM(RTRIM(Description)) <> ''),
-                        (SELECT TOP 1 ItemName FROM ProdMast WHERE Partno = d.partno AND ISNULL(Deleted, 0) = 0 AND ItemName IS NOT NULL AND LTRIM(RTRIM(ItemName)) <> ''),
-                        ''
-                    ) AS Description,
+                    COALESCE(NULLIF(LTRIM(RTRIM(d.description)), ''), pc_d.Description, '') AS Description,
                     ISNULL(pd.process, '') AS ProcessName,
                     CAST(ISNULL(d.[{qty_col_ij}], 0) AS INT) AS InspQty,
                     CAST(ISNULL(d.okqty, 0) AS INT) AS OKQty,
@@ -3082,15 +3205,7 @@ def quality_analysis_records(request):
                     COALESCE(
                         (SELECT TOP 1 CM.CName FROM CustMast CM WHERE CM.Id = m.cid AND ISNULL(CM.deleted, 0) = 0),
                         (SELECT TOP 1 CAM.CorpName FROM CustAliasMast CAM WHERE CAM.Id = m.cid AND ISNULL(CAM.deleted, 0) = 0),
-                        (SELECT TOP 1 CM_WM.CName FROM WithMatMas WM_P INNER JOIN CustMast CM_WM ON WM_P.Cid = CM_WM.Id WHERE WM_P.PartNo = d.partno AND ISNULL(WM_P.Deleted, 0) = 0 AND ISNULL(CM_WM.deleted, 0) = 0),
-                        (SELECT TOP 1 CAM_WM.CorpName FROM WithMatMas WM_P INNER JOIN CustAliasMast CAM_WM ON WM_P.Cid = CAM_WM.Id WHERE WM_P.PartNo = d.partno AND ISNULL(WM_P.Deleted, 0) = 0 AND ISNULL(CAM_WM.deleted, 0) = 0),
-                        (SELECT TOP 1 CM_CJ.CName FROM CustJobRawMat CJ_P INNER JOIN CustMast CM_CJ ON CJ_P.cid = CM_CJ.Id WHERE CJ_P.partno = d.partno AND ISNULL(CJ_P.deleted, 0) = 0 AND ISNULL(CM_CJ.deleted, 0) = 0),
-                        (SELECT TOP 1 CAM_CJ.CorpName FROM CustJobRawMat CJ_P INNER JOIN CustAliasMast CAM_CJ ON CJ_P.cid = CAM_CJ.Id WHERE CJ_P.partno = d.partno AND ISNULL(CJ_P.deleted, 0) = 0 AND ISNULL(CAM_CJ.deleted, 0) = 0),
-                        (SELECT TOP 1 CM_PM.CName FROM ProductMast PM_P INNER JOIN CustMast CM_PM ON PM_P.Cid = CM_PM.Id WHERE PM_P.PartNo = d.partno AND ISNULL(PM_P.Deleted, 0) = 0 AND ISNULL(CM_PM.deleted, 0) = 0),
-                        (SELECT TOP 1 CAM_PM.CorpName FROM ProductMast PM_P INNER JOIN CustAliasMast CAM_PM ON PM_P.Cid = CAM_PM.Id WHERE PM_P.PartNo = d.partno AND ISNULL(PM_P.Deleted, 0) = 0 AND ISNULL(CAM_PM.deleted, 0) = 0),
-                        (SELECT TOP 1 CM_PRM.CName FROM ProdMast PRM_P INNER JOIN CustMast CM_PRM ON PRM_P.CId = CM_PRM.Id WHERE PRM_P.Partno = d.partno AND ISNULL(PRM_P.Deleted, 0) = 0 AND ISNULL(CM_PRM.deleted, 0) = 0),
-                        (SELECT TOP 1 CAM_PRM.CorpName FROM ProdMast PRM_P INNER JOIN CustAliasMast CAM_PRM ON PRM_P.CId = CAM_PRM.Id WHERE PRM_P.Partno = d.partno AND ISNULL(PRM_P.Deleted, 0) = 0 AND ISNULL(CAM_PRM.deleted, 0) = 0),
-                        NULL
+                        pc_d.PartyName
                     ) AS PartyName,
                     'Vendor Rej' AS MachineNo,
                     NULL AS Shift,
@@ -3099,10 +3214,11 @@ def quality_analysis_records(request):
                 FROM InJob_Mas m
                 INNER JOIN InJob_Det d ON m.inspno = d.inspno
                 LEFT JOIN ProcessDet pd ON d.process = pd.pcode AND ISNULL(pd.deleted, 0) = 0
+                LEFT JOIN CTE_PartCustomer pc_d ON LTRIM(RTRIM(d.partno)) = pc_d.PartNo
                 {job_rc_join}
                 WHERE ISNULL(m.deleted, 0) = 0 AND ISNULL(d.deleted, 0) = 0
                   AND ISNULL(m.dtype, '') != 'Without Process'
-                  AND CAST(m.inspdate AS DATE) BETWEEN ? AND ?
+                  AND m.inspdate >= ? AND m.inspdate < DATEADD(DAY, 1, ?)
                   {injob_search}
                   {cust_ij_sql}
 
@@ -3114,65 +3230,26 @@ def quality_analysis_records(request):
                     i.inter_inspno AS InspNo,
                     i.inter_inspdate AS InspDate,
                     i.partno AS PartNo,
-                    COALESCE(
-                        NULLIF(LTRIM(RTRIM(i.description)), ''),
-                        (SELECT TOP 1 Description FROM WithMatMas WHERE PartNo = i.partno AND ISNULL(Deleted, 0) = 0 AND Description IS NOT NULL AND LTRIM(RTRIM(Description)) <> ''),
-                        (SELECT TOP 1 description FROM CustJobRawMat WHERE partno = i.partno AND ISNULL(deleted, 0) = 0 AND description IS NOT NULL AND LTRIM(RTRIM(description)) <> ''),
-                        (SELECT TOP 1 Description FROM ProductMast WHERE PartNo = i.partno AND ISNULL(Deleted, 0) = 0 AND Description IS NOT NULL AND LTRIM(RTRIM(Description)) <> ''),
-                        (SELECT TOP 1 ItemName FROM ProdMast WHERE Partno = i.partno AND ISNULL(Deleted, 0) = 0 AND ItemName IS NOT NULL AND LTRIM(RTRIM(ItemName)) <> ''),
-                        (SELECT TOP 1 description FROM InJob_Det WHERE partno = i.partno AND description IS NOT NULL AND LTRIM(RTRIM(description)) <> ''),
-                        (SELECT TOP 1 description FROM FinalInspectionEntry WHERE partno = i.partno AND description IS NOT NULL AND LTRIM(RTRIM(description)) <> ''),
-                        ''
-                    ) AS Description,
+                    COALESCE(NULLIF(LTRIM(RTRIM(i.description)), ''), pc_i.Description, '') AS Description,
                     ISNULL(pd.process, '') AS ProcessName,
                     CAST(ISNULL(i.inspqty, 0) AS INT) AS InspQty,
                     CAST(ISNULL(i.okqty, 0) AS INT) AS OKQty,
-                    CAST(CASE 
-                        WHEN EXISTS (SELECT 1 FROM Insp_RejectionEntry WHERE inter_inspno = i.inter_inspno AND ISNULL(deleted, 0) = 0)
-                        THEN ISNULL((
-                            SELECT SUM(ISNULL(r.qty, 0))
-                            FROM Insp_RejectionEntry r
-                            LEFT JOIN Rejection rej ON r.rejection = rej.rejection
-                            WHERE r.inter_inspno = i.inter_inspno
-                              AND ISNULL(r.deleted, 0) = 0
-                              AND ISNULL(rej.matrej, 0) = 1
-                        ), 0)
-                        ELSE ISNULL(i.matrejqty, 0)
-                    END AS INT) AS MatRejQty,
-                    CAST(CASE 
-                        WHEN EXISTS (SELECT 1 FROM Insp_RejectionEntry WHERE inter_inspno = i.inter_inspno AND ISNULL(deleted, 0) = 0)
-                        THEN ISNULL((
-                            SELECT SUM(ISNULL(r.qty, 0))
-                            FROM Insp_RejectionEntry r
-                            LEFT JOIN Rejection rej ON r.rejection = rej.rejection
-                            WHERE r.inter_inspno = i.inter_inspno
-                              AND ISNULL(r.deleted, 0) = 0
-                              AND ISNULL(rej.matrej, 0) = 0
-                        ), 0)
-                        ELSE ISNULL(i.rejqty, 0)
-                    END AS INT) AS MacRejQty,
+                    CAST(COALESCE(ir_agg.matrej_qty, i.matrejqty, 0) AS INT) AS MatRejQty,
+                    CAST(COALESCE(ir_agg.macrej_qty, i.rejqty, 0) AS INT) AS MacRejQty,
                     CAST(ISNULL(i.rwqty, 0) AS INT) AS ReworkQty,
                     i.inspby AS InspBy,
-                    COALESCE(
-                        (SELECT TOP 1 CM_WM.CName FROM WithMatMas WM_P INNER JOIN CustMast CM_WM ON WM_P.Cid = CM_WM.Id WHERE WM_P.PartNo = i.partno AND ISNULL(WM_P.Deleted, 0) = 0 AND ISNULL(CM_WM.deleted, 0) = 0),
-                        (SELECT TOP 1 CAM_WM.CorpName FROM WithMatMas WM_P INNER JOIN CustAliasMast CAM_WM ON WM_P.Cid = CAM_WM.Id WHERE WM_P.PartNo = i.partno AND ISNULL(WM_P.Deleted, 0) = 0 AND ISNULL(CAM_WM.deleted, 0) = 0),
-                        (SELECT TOP 1 CM_CJ.CName FROM CustJobRawMat CJ_P INNER JOIN CustMast CM_CJ ON CJ_P.cid = CM_CJ.Id WHERE CJ_P.partno = i.partno AND ISNULL(CJ_P.deleted, 0) = 0 AND ISNULL(CM_CJ.deleted, 0) = 0),
-                        (SELECT TOP 1 CAM_CJ.CorpName FROM CustJobRawMat CJ_P INNER JOIN CustAliasMast CAM_CJ ON CJ_P.cid = CAM_CJ.Id WHERE CJ_P.partno = i.partno AND ISNULL(CJ_P.deleted, 0) = 0 AND ISNULL(CAM_CJ.deleted, 0) = 0),
-                        (SELECT TOP 1 CM_PM.CName FROM ProductMast PM_P INNER JOIN CustMast CM_PM ON PM_P.Cid = CM_PM.Id WHERE PM_P.PartNo = i.partno AND ISNULL(PM_P.Deleted, 0) = 0 AND ISNULL(CM_PM.deleted, 0) = 0),
-                        (SELECT TOP 1 CAM_PM.CorpName FROM ProductMast PM_P INNER JOIN CustAliasMast CAM_PM ON PM_P.Cid = CAM_PM.Id WHERE PM_P.PartNo = i.partno AND ISNULL(PM_P.Deleted, 0) = 0 AND ISNULL(CAM_PM.deleted, 0) = 0),
-                        (SELECT TOP 1 CM_PRM.CName FROM ProdMast PRM_P INNER JOIN CustMast CM_PRM ON PRM_P.CId = CM_PRM.Id WHERE PRM_P.Partno = i.partno AND ISNULL(PRM_P.Deleted, 0) = 0 AND ISNULL(CM_PRM.deleted, 0) = 0),
-                        (SELECT TOP 1 CAM_PRM.CorpName FROM ProdMast PRM_P INNER JOIN CustAliasMast CAM_PRM ON PRM_P.CId = CAM_PRM.Id WHERE PRM_P.Partno = i.partno AND ISNULL(PRM_P.Deleted, 0) = 0 AND ISNULL(CAM_PRM.deleted, 0) = 0),
-                        NULL
-                    ) AS PartyName,
+                    pc_i.PartyName AS PartyName,
                     i.macno AS MachineNo,
                     i.shift AS Shift,
                     i.oprname AS OperatorName,
                     {inter_rc_select} AS RouteCardDetails
                 FROM InterInspectionEntry i
                 LEFT JOIN ProcessDet pd ON i.process = pd.pcode AND ISNULL(pd.deleted, 0) = 0
+                LEFT JOIN CTE_PartCustomer pc_i ON LTRIM(RTRIM(i.partno)) = pc_i.PartNo
+                LEFT JOIN INTER_REJ_AGG ir_agg ON i.inter_inspno = ir_agg.inter_inspno
                 {inter_rc_join}
                 WHERE ISNULL(i.deleted, 0) = 0
-                  AND CAST(i.inter_inspdate AS DATE) BETWEEN ? AND ?
+                  AND i.inter_inspdate >= ? AND i.inter_inspdate < DATEADD(DAY, 1, ?)
                   {inter_search}
                   {cust_it_sql}
 
@@ -3184,55 +3261,27 @@ def quality_analysis_records(request):
                     f.finspno AS InspNo,
                     f.finspdate AS InspDate,
                     f.partno AS PartNo,
-                    COALESCE(
-                        NULLIF(LTRIM(RTRIM(f.description)), ''),
-                        (SELECT TOP 1 Description FROM WithMatMas WHERE PartNo = f.partno AND ISNULL(Deleted, 0) = 0 AND Description IS NOT NULL AND LTRIM(RTRIM(Description)) <> ''),
-                        (SELECT TOP 1 description FROM CustJobRawMat WHERE partno = f.partno AND ISNULL(deleted, 0) = 0 AND description IS NOT NULL AND LTRIM(RTRIM(description)) <> ''),
-                        (SELECT TOP 1 Description FROM ProductMast WHERE PartNo = f.partno AND ISNULL(Deleted, 0) = 0 AND Description IS NOT NULL AND LTRIM(RTRIM(Description)) <> ''),
-                        (SELECT TOP 1 ItemName FROM ProdMast WHERE Partno = f.partno AND ISNULL(Deleted, 0) = 0 AND ItemName IS NOT NULL AND LTRIM(RTRIM(ItemName)) <> ''),
-                        ''
-                    ) AS Description,
+                    COALESCE(NULLIF(LTRIM(RTRIM(f.description)), ''), pc_f.Description, '') AS Description,
                     ISNULL(pd.process, '') AS ProcessName,
                     CAST(ISNULL(f.okqty, 0) + ISNULL(f.rejqty, 0) + ISNULL(f.matrejqty, 0) AS INT) AS InspQty,
                     CAST(ISNULL(f.okqty, 0) AS INT) AS OKQty,
-                    CAST(ISNULL((
-                        SELECT SUM(ISNULL(fr.qty, 0))
-                        FROM FinalInspRejectionEntryOrg fr
-                        LEFT JOIN Rejection rej ON fr.rejection = rej.rejection
-                        WHERE fr.finspno = f.finspno
-                          AND ISNULL(fr.deleted, 0) = 0
-                          AND ISNULL(rej.matrej, 0) = 1
-                    ), 0) AS INT) AS MatRejQty,
-                    CAST(ISNULL((
-                        SELECT SUM(ISNULL(fr.qty, 0))
-                        FROM FinalInspRejectionEntryOrg fr
-                        LEFT JOIN Rejection rej ON fr.rejection = rej.rejection
-                        WHERE fr.finspno = f.finspno
-                          AND ISNULL(fr.deleted, 0) = 0
-                          AND ISNULL(rej.matrej, 0) = 0
-                    ), 0) AS INT) AS MacRejQty,
-                    {rework_subquery} AS ReworkQty,
+                    CAST(ISNULL(fr_agg.matrej_qty, 0) AS INT) AS MatRejQty,
+                    CAST(ISNULL(fr_agg.macrej_qty, 0) AS INT) AS MacRejQty,
+                    CAST(ISNULL(fw_agg.rework_qty, 0) AS INT) AS ReworkQty,
                     f.inspby AS InspBy,
-                    COALESCE(
-                        (SELECT TOP 1 CM_WM.CName FROM WithMatMas WM_P INNER JOIN CustMast CM_WM ON WM_P.Cid = CM_WM.Id WHERE WM_P.PartNo = f.partno AND ISNULL(WM_P.Deleted, 0) = 0 AND ISNULL(CM_WM.deleted, 0) = 0),
-                        (SELECT TOP 1 CAM_WM.CorpName FROM WithMatMas WM_P INNER JOIN CustAliasMast CAM_WM ON WM_P.Cid = CAM_WM.Id WHERE WM_P.PartNo = f.partno AND ISNULL(WM_P.Deleted, 0) = 0 AND ISNULL(CAM_WM.deleted, 0) = 0),
-                        (SELECT TOP 1 CM_CJ.CName FROM CustJobRawMat CJ_P INNER JOIN CustMast CM_CJ ON CJ_P.cid = CM_CJ.Id WHERE CJ_P.partno = f.partno AND ISNULL(CJ_P.deleted, 0) = 0 AND ISNULL(CM_CJ.deleted, 0) = 0),
-                        (SELECT TOP 1 CAM_CJ.CorpName FROM CustJobRawMat CJ_P INNER JOIN CustAliasMast CAM_CJ ON CJ_P.cid = CAM_CJ.Id WHERE CJ_P.partno = f.partno AND ISNULL(CJ_P.deleted, 0) = 0 AND ISNULL(CAM_CJ.deleted, 0) = 0),
-                        (SELECT TOP 1 CM_PM.CName FROM ProductMast PM_P INNER JOIN CustMast CM_PM ON PM_P.Cid = CM_PM.Id WHERE PM_P.PartNo = f.partno AND ISNULL(PM_P.Deleted, 0) = 0 AND ISNULL(CM_PM.deleted, 0) = 0),
-                        (SELECT TOP 1 CAM_PM.CorpName FROM ProductMast PM_P INNER JOIN CustAliasMast CAM_PM ON PM_P.Cid = CAM_PM.Id WHERE PM_P.PartNo = f.partno AND ISNULL(PM_P.Deleted, 0) = 0 AND ISNULL(CAM_PM.deleted, 0) = 0),
-                        (SELECT TOP 1 CM_PRM.CName FROM ProdMast PRM_P INNER JOIN CustMast CM_PRM ON PRM_P.CId = CM_PRM.Id WHERE PRM_P.Partno = f.partno AND ISNULL(PRM_P.Deleted, 0) = 0 AND ISNULL(CM_PRM.deleted, 0) = 0),
-                        (SELECT TOP 1 CAM_PRM.CorpName FROM ProdMast PRM_P INNER JOIN CustAliasMast CAM_PRM ON PRM_P.CId = CAM_PRM.Id WHERE PRM_P.Partno = f.partno AND ISNULL(PRM_P.Deleted, 0) = 0 AND ISNULL(CAM_PRM.deleted, 0) = 0),
-                        NULL
-                    ) AS PartyName,
+                    pc_f.PartyName AS PartyName,
                     NULL AS MachineNo,
                     NULL AS Shift,
                     NULL AS OperatorName,
                     {final_rc_select} AS RouteCardDetails
                 FROM FinalInspectionEntry f
                 LEFT JOIN ProcessDet pd ON f.process = pd.pcode AND ISNULL(pd.deleted, 0) = 0
+                LEFT JOIN CTE_PartCustomer pc_f ON LTRIM(RTRIM(f.partno)) = pc_f.PartNo
+                LEFT JOIN FINAL_REJ_AGG fr_agg ON f.finspno = fr_agg.finspno
+                LEFT JOIN FINAL_RWK_AGG fw_agg ON f.finspno = fw_agg.finspno AND f.partno = fw_agg.partno
                 {final_rc_join}
                 WHERE ISNULL(f.deleted, 0) = 0
-                  AND CAST(f.finspdate AS DATE) BETWEEN ? AND ?
+                  AND f.finspdate >= ? AND f.finspdate < DATEADD(DAY, 1, ?)
                   {final_search}
                   {cust_fi_sql}
             ) AS Combined
@@ -3266,65 +3315,76 @@ def quality_analysis_records(request):
                         rc_c = rc_item.strip().upper()
                         if rc_c and rc_c not in ("—", "NONE", "NULL"):
                             needed_rcs.add(rc_c)
-                if len(r) > 3 and r[3]:
-                    p_c = str(r[3]).strip().upper()
+                # r[4] = PartNo (r[3] is InspDate) — see SELECT column order above
+                if len(r) > 4 and r[4]:
+                    p_c = str(r[4]).strip().upper()
                     if p_c:
                         needed_parts.add(p_c)
 
+            # Lookups are batched (SQL Server allows max 2100 parameters per
+            # statement). Previously the lists were truncated to the first 500
+            # entries, so parts/route cards beyond that silently resolved to "—".
+            _LOOKUP_BATCH = 500
+
+            def _batches(items):
+                items = list(items)
+                for _i in range(0, len(items), _LOOKUP_BATCH):
+                    yield items[_i:_i + _LOOKUP_BATCH]
+
             # 1. From RouteCard Production Tables (targeted only to active route cards)
             if needed_rcs:
-                rc_list = list(needed_rcs)[:500]
-                placeholders = ",".join("?" for _ in rc_list)
-                for _rc_tbl, _extra_w in [
-                    ("ConvProdEntryRouteCard", "AND ISNULL(deleted, 0) = 0"),
-                    ("ConvProdEntryRodRouteCard", ""),
-                    ("DayPrdPlan_LoadRouCardDet", ""),
-                ]:
+                for rc_list in _batches(needed_rcs):
+                    placeholders = ",".join("?" for _ in rc_list)
+                    for _rc_tbl, _extra_w in [
+                        ("ConvProdEntryRouteCard", "AND ISNULL(deleted, 0) = 0"),
+                        ("ConvProdEntryRodRouteCard", ""),
+                        ("DayPrdPlan_LoadRouCardDet", ""),
+                    ]:
+                        try:
+                            cursor.execute(f"SELECT RouCardNo, macno FROM {_rc_tbl} WHERE macno IS NOT NULL AND LTRIM(RTRIM(macno)) <> '' AND UPPER(LTRIM(RTRIM(RouCardNo))) IN ({placeholders}) {_extra_w}", rc_list)
+                            for _rc, _m in cursor.fetchall():
+                                if _rc and _m and str(_rc).strip() and str(_m).strip():
+                                    rc_mac_lookup[str(_rc).strip().upper()] = str(_m).strip()
+                        except Exception:
+                            pass
+
                     try:
-                        cursor.execute(f"SELECT RouCardNo, macno FROM {_rc_tbl} WHERE macno IS NOT NULL AND LTRIM(RTRIM(macno)) <> '' AND UPPER(LTRIM(RTRIM(RouCardNo))) IN ({placeholders}) {_extra_w}", rc_list)
+                        cursor.execute(f"SELECT irc.RouCardNo, i.macno FROM InterInspEntryRouteCard irc INNER JOIN InterInspectionEntry i ON irc.inter_inspno = i.inter_inspno WHERE i.macno IS NOT NULL AND LTRIM(RTRIM(i.macno)) <> '' AND ISNULL(irc.deleted, 0) = 0 AND ISNULL(i.deleted, 0) = 0 AND UPPER(LTRIM(RTRIM(irc.RouCardNo))) IN ({placeholders})", rc_list)
                         for _rc, _m in cursor.fetchall():
                             if _rc and _m and str(_rc).strip() and str(_m).strip():
                                 rc_mac_lookup[str(_rc).strip().upper()] = str(_m).strip()
                     except Exception:
                         pass
 
-                try:
-                    cursor.execute(f"SELECT irc.RouCardNo, i.macno FROM InterInspEntryRouteCard irc INNER JOIN InterInspectionEntry i ON irc.inter_inspno = i.inter_inspno WHERE i.macno IS NOT NULL AND LTRIM(RTRIM(i.macno)) <> '' AND ISNULL(irc.deleted, 0) = 0 AND ISNULL(i.deleted, 0) = 0 AND UPPER(LTRIM(RTRIM(irc.RouCardNo))) IN ({placeholders})", rc_list)
-                    for _rc, _m in cursor.fetchall():
-                        if _rc and _m and str(_rc).strip() and str(_m).strip():
-                            rc_mac_lookup[str(_rc).strip().upper()] = str(_m).strip()
-                except Exception:
-                    pass
-
             # 2. From ProgramNo & InterInspectionEntry (targeted only to needed parts)
             if needed_parts:
-                part_list = list(needed_parts)[:500]
-                p_placeholders = ",".join("?" for _ in part_list)
-                try:
-                    cursor.execute(f"SELECT partno, process, macno FROM ProgramNo WHERE macno IS NOT NULL AND LTRIM(RTRIM(macno)) <> '' AND ISNULL(deleted, 0) = 0 AND UPPER(LTRIM(RTRIM(partno))) IN ({p_placeholders})", part_list)
-                    for _p, _pr, _m in cursor.fetchall():
-                        if _p and _m:
-                            _p_u = str(_p).strip().upper()
-                            _m_s = str(_m).strip()
-                            if _pr:
-                                part_proc_mac_lookup[f"{_p_u}___{str(_pr).strip().upper()}"] = _m_s
-                            if _p_u not in part_mac_lookup:
-                                part_mac_lookup[_p_u] = _m_s
-                except Exception:
-                    pass
+                for part_list in _batches(needed_parts):
+                    p_placeholders = ",".join("?" for _ in part_list)
+                    try:
+                        cursor.execute(f"SELECT partno, process, macno FROM ProgramNo WHERE macno IS NOT NULL AND LTRIM(RTRIM(macno)) <> '' AND ISNULL(deleted, 0) = 0 AND UPPER(LTRIM(RTRIM(partno))) IN ({p_placeholders})", part_list)
+                        for _p, _pr, _m in cursor.fetchall():
+                            if _p and _m:
+                                _p_u = str(_p).strip().upper()
+                                _m_s = str(_m).strip()
+                                if _pr:
+                                    part_proc_mac_lookup[f"{_p_u}___{str(_pr).strip().upper()}"] = _m_s
+                                if _p_u not in part_mac_lookup:
+                                    part_mac_lookup[_p_u] = _m_s
+                    except Exception:
+                        pass
 
-                try:
-                    cursor.execute(f"SELECT partno, process, macno FROM InterInspectionEntry WHERE macno IS NOT NULL AND LTRIM(RTRIM(macno)) <> '' AND ISNULL(deleted, 0) = 0 AND UPPER(LTRIM(RTRIM(partno))) IN ({p_placeholders}) ORDER BY inter_inspdate DESC", part_list)
-                    for _p, _pr, _m in cursor.fetchall():
-                        if _p and _m:
-                            _p_u = str(_p).strip().upper()
-                            _m_s = str(_m).strip()
-                            if _pr and f"{_p_u}___{str(_pr).strip().upper()}" not in part_proc_mac_lookup:
-                                part_proc_mac_lookup[f"{_p_u}___{str(_pr).strip().upper()}"] = _m_s
-                            if _p_u not in part_mac_lookup:
-                                part_mac_lookup[_p_u] = _m_s
-                except Exception:
-                    pass
+                    try:
+                        cursor.execute(f"SELECT partno, process, macno FROM InterInspectionEntry WHERE macno IS NOT NULL AND LTRIM(RTRIM(macno)) <> '' AND ISNULL(deleted, 0) = 0 AND UPPER(LTRIM(RTRIM(partno))) IN ({p_placeholders}) ORDER BY inter_inspdate DESC", part_list)
+                        for _p, _pr, _m in cursor.fetchall():
+                            if _p and _m:
+                                _p_u = str(_p).strip().upper()
+                                _m_s = str(_m).strip()
+                                if _pr and f"{_p_u}___{str(_pr).strip().upper()}" not in part_proc_mac_lookup:
+                                    part_proc_mac_lookup[f"{_p_u}___{str(_pr).strip().upper()}"] = _m_s
+                                if _p_u not in part_mac_lookup:
+                                    part_mac_lookup[_p_u] = _m_s
+                    except Exception:
+                        pass
 
             def _resolve_mac(rc_str, p_str, proc_str=None):
                 if rc_str and str(rc_str).strip() not in ("", "—", "None", "null"):
@@ -3444,6 +3504,7 @@ def quality_analysis_records(request):
                 
                 try:
                     custom_sql = f"""
+                    {cte_part_cust}
                     SELECT
                         InspNo,
                         InspDate,
@@ -3494,23 +3555,17 @@ def quality_analysis_records(request):
                                 ), '') AS Reason,
                                 CAST(ISNULL(d.matrej,0) + ISNULL(d.macrej,0) AS INT) AS RejectionQty,
                                 'Job Order' AS InspType,
-                                COALESCE(
-                                    NULLIF(LTRIM(RTRIM(d.description)), ''),
-                                    (SELECT TOP 1 Description FROM WithMatMas WHERE PartNo = d.partno AND ISNULL(Deleted, 0) = 0 AND Description IS NOT NULL AND LTRIM(RTRIM(Description)) <> ''),
-                                    (SELECT TOP 1 description FROM CustJobRawMat WHERE partno = d.partno AND ISNULL(deleted, 0) = 0 AND description IS NOT NULL AND LTRIM(RTRIM(description)) <> ''),
-                                    (SELECT TOP 1 Description FROM ProductMast WHERE PartNo = d.partno AND ISNULL(Deleted, 0) = 0 AND Description IS NOT NULL AND LTRIM(RTRIM(Description)) <> ''),
-                                    (SELECT TOP 1 ItemName FROM ProdMast WHERE Partno = d.partno AND ISNULL(Deleted, 0) = 0 AND ItemName IS NOT NULL AND LTRIM(RTRIM(ItemName)) <> ''),
-                                    ''
-                                ) AS Description,
+                                COALESCE(NULLIF(LTRIM(RTRIM(d.description)), ''), pc_d.Description, '') AS Description,
                                 CAST(ISNULL(d.matrej,0) AS INT) AS MatRejQty,
                                 CAST(ISNULL(d.macrej,0) AS INT) AS MacRejQty
                             FROM InJob_Mas m
                             INNER JOIN InJob_Det d
                                 ON m.inspno = d.inspno
+                            LEFT JOIN CTE_PartCustomer pc_d ON LTRIM(RTRIM(d.partno)) = pc_d.PartNo
                             WHERE ISNULL(m.deleted,0) = 0
                               AND ISNULL(d.deleted,0) = 0
                               AND ISNULL(m.dtype, '') != 'Without Process'
-                              AND CAST(m.inspdate AS DATE) BETWEEN ? AND ?
+                              AND m.inspdate >= ? AND m.inspdate < DATEADD(DAY, 1, ?)
                               {cust_ij_sql}
 
                             UNION ALL
@@ -3536,16 +3591,7 @@ def quality_analysis_records(request):
                                 ), '') AS Reason,
                                 CAST(ISNULL(i.matrejqty,0) + ISNULL(i.rejqty,0) AS INT) AS RejectionQty,
                                 'Intermediate Inspection' AS InspType,
-                                COALESCE(
-                                    NULLIF(LTRIM(RTRIM(i.description)), ''),
-                                    (SELECT TOP 1 Description FROM WithMatMas WHERE PartNo = i.partno AND ISNULL(Deleted, 0) = 0 AND Description IS NOT NULL AND LTRIM(RTRIM(Description)) <> ''),
-                                    (SELECT TOP 1 description FROM CustJobRawMat WHERE partno = i.partno AND ISNULL(deleted, 0) = 0 AND description IS NOT NULL AND LTRIM(RTRIM(description)) <> ''),
-                                    (SELECT TOP 1 Description FROM ProductMast WHERE PartNo = i.partno AND ISNULL(Deleted, 0) = 0 AND Description IS NOT NULL AND LTRIM(RTRIM(Description)) <> ''),
-                                    (SELECT TOP 1 ItemName FROM ProdMast WHERE Partno = i.partno AND ISNULL(Deleted, 0) = 0 AND ItemName IS NOT NULL AND LTRIM(RTRIM(ItemName)) <> ''),
-                                    (SELECT TOP 1 description FROM InJob_Det WHERE partno = i.partno AND description IS NOT NULL AND LTRIM(RTRIM(description)) <> ''),
-                                    (SELECT TOP 1 description FROM FinalInspectionEntry WHERE partno = i.partno AND description IS NOT NULL AND LTRIM(RTRIM(description)) <> ''),
-                                    ''
-                                ) AS Description,
+                                COALESCE(NULLIF(LTRIM(RTRIM(i.description)), ''), pc_i.Description, '') AS Description,
                                 CAST(CASE 
                                     WHEN EXISTS (SELECT 1 FROM Insp_RejectionEntry WHERE inter_inspno = i.inter_inspno AND ISNULL(deleted, 0) = 0)
                                     THEN ISNULL((
@@ -3571,8 +3617,9 @@ def quality_analysis_records(request):
                                     ELSE ISNULL(i.rejqty, 0)
                                 END AS INT) AS MacRejQty
                             FROM InterInspectionEntry i
+                            LEFT JOIN CTE_PartCustomer pc_i ON LTRIM(RTRIM(i.partno)) = pc_i.PartNo
                             WHERE ISNULL(i.deleted,0) = 0
-                              AND CAST(i.inter_inspdate AS DATE) BETWEEN ? AND ?
+                              AND i.inter_inspdate >= ? AND i.inter_inspdate < DATEADD(DAY, 1, ?)
                               {cust_it_sql}
 
                             UNION ALL
@@ -3603,14 +3650,7 @@ def quality_analysis_records(request):
                                       AND ISNULL(fr2.deleted, 0) = 0
                                 ), 0) AS INT) AS RejectionQty,
                                 'Final Inspection' AS InspType,
-                                COALESCE(
-                                    NULLIF(LTRIM(RTRIM(f.description)), ''),
-                                    (SELECT TOP 1 Description FROM WithMatMas WHERE PartNo = f.partno AND ISNULL(Deleted, 0) = 0 AND Description IS NOT NULL AND LTRIM(RTRIM(Description)) <> ''),
-                                    (SELECT TOP 1 description FROM CustJobRawMat WHERE partno = f.partno AND ISNULL(deleted, 0) = 0 AND description IS NOT NULL AND LTRIM(RTRIM(description)) <> ''),
-                                    (SELECT TOP 1 Description FROM ProductMast WHERE PartNo = f.partno AND ISNULL(Deleted, 0) = 0 AND Description IS NOT NULL AND LTRIM(RTRIM(Description)) <> ''),
-                                    (SELECT TOP 1 ItemName FROM ProdMast WHERE Partno = f.partno AND ISNULL(Deleted, 0) = 0 AND ItemName IS NOT NULL AND LTRIM(RTRIM(ItemName)) <> ''),
-                                    ''
-                                ) AS Description,
+                                COALESCE(NULLIF(LTRIM(RTRIM(f.description)), ''), pc_f.Description, '') AS Description,
                                 CAST(ISNULL((
                                     SELECT SUM(ISNULL(fr2.qty, 0))
                                     FROM FinalInspRejectionEntryOrg fr2
@@ -3630,8 +3670,9 @@ def quality_analysis_records(request):
                                       AND ISNULL(rej.matrej, 0) = 0
                                 ), 0) AS INT) AS MacRejQty
                             FROM FinalInspectionEntry f
+                            LEFT JOIN CTE_PartCustomer pc_f ON LTRIM(RTRIM(f.partno)) = pc_f.PartNo
                             WHERE ISNULL(f.deleted, 0) = 0
-                              AND CAST(f.finspdate AS DATE) BETWEEN ? AND ?
+                              AND f.finspdate >= ? AND f.finspdate < DATEADD(DAY, 1, ?)
                               {cust_fi_sql}
                         ) AS Combined
                         WHERE ISNULL(Combined.RejectionQty,0) > 0
@@ -3664,25 +3705,19 @@ def quality_analysis_records(request):
                                 ISNULL(NULLIF(LTRIM(RTRIM(rw.rework)), ''), 'Rework Needed') AS Reason,
                                 CAST(ISNULL(rw.Qty,0) AS INT) AS ReworkQty,
                                 'Job Order' AS InspType,
-                                COALESCE(
-                                    NULLIF(LTRIM(RTRIM(d.description)), ''),
-                                    (SELECT TOP 1 Description FROM WithMatMas WHERE PartNo = d.partno AND ISNULL(Deleted, 0) = 0 AND Description IS NOT NULL AND LTRIM(RTRIM(Description)) <> ''),
-                                    (SELECT TOP 1 description FROM CustJobRawMat WHERE partno = d.partno AND ISNULL(deleted, 0) = 0 AND description IS NOT NULL AND LTRIM(RTRIM(description)) <> ''),
-                                    (SELECT TOP 1 Description FROM ProductMast WHERE PartNo = d.partno AND ISNULL(Deleted, 0) = 0 AND Description IS NOT NULL AND LTRIM(RTRIM(Description)) <> ''),
-                                    (SELECT TOP 1 ItemName FROM ProdMast WHERE Partno = d.partno AND ISNULL(Deleted, 0) = 0 AND ItemName IS NOT NULL AND LTRIM(RTRIM(ItemName)) <> ''),
-                                    ''
-                                ) AS Description,
+                                COALESCE(NULLIF(LTRIM(RTRIM(d.description)), ''), pc_d.Description, '') AS Description,
                                 0 AS MatRejQty,
                                 0 AS MacRejQty
                             FROM InJob_Mas m
                             INNER JOIN InJob_Det d
                                 ON m.inspno = d.inspno
+                            LEFT JOIN CTE_PartCustomer pc_d ON LTRIM(RTRIM(d.partno)) = pc_d.PartNo
                             INNER JOIN JobInspRWDetail rw
                                 ON rw.Ins_No = m.inspno AND rw.PartNo = d.partno
                             WHERE ISNULL(m.deleted,0) = 0
                               AND ISNULL(d.deleted,0) = 0
                               AND ISNULL(m.dtype, '') != 'Without Process'
-                              AND CAST(m.inspdate AS DATE) BETWEEN ? AND ?
+                              AND m.inspdate >= ? AND m.inspdate < DATEADD(DAY, 1, ?)
                               {cust_ij_sql}
 
                             UNION ALL
@@ -3694,19 +3729,13 @@ def quality_analysis_records(request):
                                 'Rework Needed' AS Reason,
                                 CAST(ISNULL(d.rwqty,0) AS INT) AS ReworkQty,
                                 'Job Order' AS InspType,
-                                COALESCE(
-                                    NULLIF(LTRIM(RTRIM(d.description)), ''),
-                                    (SELECT TOP 1 Description FROM WithMatMas WHERE PartNo = d.partno AND ISNULL(Deleted, 0) = 0 AND Description IS NOT NULL AND LTRIM(RTRIM(Description)) <> ''),
-                                    (SELECT TOP 1 description FROM CustJobRawMat WHERE partno = d.partno AND ISNULL(deleted, 0) = 0 AND description IS NOT NULL AND LTRIM(RTRIM(description)) <> ''),
-                                    (SELECT TOP 1 Description FROM ProductMast WHERE PartNo = d.partno AND ISNULL(Deleted, 0) = 0 AND Description IS NOT NULL AND LTRIM(RTRIM(Description)) <> ''),
-                                    (SELECT TOP 1 ItemName FROM ProdMast WHERE Partno = d.partno AND ISNULL(Deleted, 0) = 0 AND ItemName IS NOT NULL AND LTRIM(RTRIM(ItemName)) <> ''),
-                                    ''
-                                ) AS Description,
+                                COALESCE(NULLIF(LTRIM(RTRIM(d.description)), ''), pc_d.Description, '') AS Description,
                                 0 AS MatRejQty,
                                 0 AS MacRejQty
                             FROM InJob_Mas m
                             INNER JOIN InJob_Det d
                                 ON m.inspno = d.inspno
+                            LEFT JOIN CTE_PartCustomer pc_d ON LTRIM(RTRIM(d.partno)) = pc_d.PartNo
                             WHERE ISNULL(m.deleted,0) = 0
                               AND ISNULL(d.deleted,0) = 0
                               AND ISNULL(m.dtype, '') != 'Without Process'
@@ -3715,7 +3744,7 @@ def quality_analysis_records(request):
                                   SELECT 1 FROM JobInspRWDetail rw
                                   WHERE rw.Ins_No = m.inspno AND rw.PartNo = d.partno
                               )
-                              AND CAST(m.inspdate AS DATE) BETWEEN ? AND ?
+                              AND m.inspdate >= ? AND m.inspdate < DATEADD(DAY, 1, ?)
                               {cust_ij_sql}
 
                             UNION ALL
@@ -3730,24 +3759,16 @@ def quality_analysis_records(request):
                                 ISNULL(NULLIF(LTRIM(RTRIM(rw.rework)), ''), 'Rework Needed') AS Reason,
                                 CAST(ISNULL(rw.qty,0) AS INT) AS ReworkQty,
                                 'Intermediate Inspection' AS InspType,
-                                COALESCE(
-                                    NULLIF(LTRIM(RTRIM(i.description)), ''),
-                                    (SELECT TOP 1 Description FROM WithMatMas WHERE PartNo = i.partno AND ISNULL(Deleted, 0) = 0 AND Description IS NOT NULL AND LTRIM(RTRIM(Description)) <> ''),
-                                    (SELECT TOP 1 description FROM CustJobRawMat WHERE partno = i.partno AND ISNULL(deleted, 0) = 0 AND description IS NOT NULL AND LTRIM(RTRIM(description)) <> ''),
-                                    (SELECT TOP 1 Description FROM ProductMast WHERE PartNo = i.partno AND ISNULL(Deleted, 0) = 0 AND Description IS NOT NULL AND LTRIM(RTRIM(Description)) <> ''),
-                                    (SELECT TOP 1 ItemName FROM ProdMast WHERE Partno = i.partno AND ISNULL(Deleted, 0) = 0 AND ItemName IS NOT NULL AND LTRIM(RTRIM(ItemName)) <> ''),
-                                    (SELECT TOP 1 description FROM InJob_Det WHERE partno = i.partno AND description IS NOT NULL AND LTRIM(RTRIM(description)) <> ''),
-                                    (SELECT TOP 1 description FROM FinalInspectionEntry WHERE partno = i.partno AND description IS NOT NULL AND LTRIM(RTRIM(description)) <> ''),
-                                    ''
-                                ) AS Description,
+                                COALESCE(NULLIF(LTRIM(RTRIM(i.description)), ''), pc_i.Description, '') AS Description,
                                 0 AS MatRejQty,
                                 0 AS MacRejQty
                             FROM InterInspectionEntry i
                             INNER JOIN Insp_ReworkEntry rw
                                 ON rw.inter_inspno = i.inter_inspno AND rw.PartNo = i.partno
+                            LEFT JOIN CTE_PartCustomer pc_i ON LTRIM(RTRIM(i.partno)) = pc_i.PartNo
                             WHERE ISNULL(i.deleted,0) = 0
                               AND ISNULL(rw.deleted,0) = 0
-                              AND CAST(i.inter_inspdate AS DATE) BETWEEN ? AND ?
+                              AND i.inter_inspdate >= ? AND i.inter_inspdate < DATEADD(DAY, 1, ?)
                               {cust_it_sql}
 
                             UNION ALL
@@ -3759,26 +3780,18 @@ def quality_analysis_records(request):
                                 'Rework Needed' AS Reason,
                                 CAST(ISNULL(i.rwqty,0) AS INT) AS ReworkQty,
                                 'Intermediate Inspection' AS InspType,
-                                COALESCE(
-                                    NULLIF(LTRIM(RTRIM(i.description)), ''),
-                                    (SELECT TOP 1 Description FROM WithMatMas WHERE PartNo = i.partno AND ISNULL(Deleted, 0) = 0 AND Description IS NOT NULL AND LTRIM(RTRIM(Description)) <> ''),
-                                    (SELECT TOP 1 description FROM CustJobRawMat WHERE partno = i.partno AND ISNULL(deleted, 0) = 0 AND description IS NOT NULL AND LTRIM(RTRIM(description)) <> ''),
-                                    (SELECT TOP 1 Description FROM ProductMast WHERE PartNo = i.partno AND ISNULL(Deleted, 0) = 0 AND Description IS NOT NULL AND LTRIM(RTRIM(Description)) <> ''),
-                                    (SELECT TOP 1 ItemName FROM ProdMast WHERE Partno = i.partno AND ISNULL(Deleted, 0) = 0 AND ItemName IS NOT NULL AND LTRIM(RTRIM(ItemName)) <> ''),
-                                    (SELECT TOP 1 description FROM InJob_Det WHERE partno = i.partno AND description IS NOT NULL AND LTRIM(RTRIM(description)) <> ''),
-                                    (SELECT TOP 1 description FROM FinalInspectionEntry WHERE partno = i.partno AND description IS NOT NULL AND LTRIM(RTRIM(description)) <> ''),
-                                    ''
-                                ) AS Description,
+                                COALESCE(NULLIF(LTRIM(RTRIM(i.description)), ''), pc_i.Description, '') AS Description,
                                 0 AS MatRejQty,
                                 0 AS MacRejQty
                             FROM InterInspectionEntry i
+                            LEFT JOIN CTE_PartCustomer pc_i ON LTRIM(RTRIM(i.partno)) = pc_i.PartNo
                             WHERE ISNULL(i.deleted,0) = 0
                               AND CAST(ISNULL(i.rwqty,0) AS INT) > 0
                               AND NOT EXISTS (
                                   SELECT 1 FROM Insp_ReworkEntry rw
                                   WHERE rw.inter_inspno = i.inter_inspno AND rw.PartNo = i.partno AND ISNULL(rw.deleted,0) = 0
                               )
-                              AND CAST(i.inter_inspdate AS DATE) BETWEEN ? AND ?
+                              AND i.inter_inspdate >= ? AND i.inter_inspdate < DATEADD(DAY, 1, ?)
                               {cust_it_sql}
 
                             UNION ALL
@@ -3793,22 +3806,16 @@ def quality_analysis_records(request):
                                 ISNULL(NULLIF(LTRIM(RTRIM(rw.rework)), ''), 'Rework Needed') AS Reason,
                                 CAST(ISNULL(rw.qty,0) AS INT) AS ReworkQty,
                                 'Final Inspection' AS InspType,
-                                COALESCE(
-                                    NULLIF(LTRIM(RTRIM(f.description)), ''),
-                                    (SELECT TOP 1 Description FROM WithMatMas WHERE PartNo = f.partno AND ISNULL(Deleted, 0) = 0 AND Description IS NOT NULL AND LTRIM(RTRIM(Description)) <> ''),
-                                    (SELECT TOP 1 description FROM CustJobRawMat WHERE partno = f.partno AND ISNULL(deleted, 0) = 0 AND description IS NOT NULL AND LTRIM(RTRIM(description)) <> ''),
-                                    (SELECT TOP 1 Description FROM ProductMast WHERE PartNo = f.partno AND ISNULL(Deleted, 0) = 0 AND Description IS NOT NULL AND LTRIM(RTRIM(Description)) <> ''),
-                                    (SELECT TOP 1 ItemName FROM ProdMast WHERE Partno = f.partno AND ISNULL(Deleted, 0) = 0 AND ItemName IS NOT NULL AND LTRIM(RTRIM(ItemName)) <> ''),
-                                    ''
-                                ) AS Description,
+                                COALESCE(NULLIF(LTRIM(RTRIM(f.description)), ''), pc_f.Description, '') AS Description,
                                 0 AS MatRejQty,
                                 0 AS MacRejQty
                             FROM FinalInspectionEntry f
                             INNER JOIN FinalInspReworkEntryOrg rw
                                 ON rw.finspno = f.finspno AND rw.partno = f.partno
+                            LEFT JOIN CTE_PartCustomer pc_f ON LTRIM(RTRIM(f.partno)) = pc_f.PartNo
                             WHERE ISNULL(f.deleted,0) = 0
                               AND ISNULL(rw.deleted,0) = 0
-                              AND CAST(f.finspdate AS DATE) BETWEEN ? AND ?
+                              AND f.finspdate >= ? AND f.finspdate < DATEADD(DAY, 1, ?)
                               {cust_fi_sql}
                         ) AS Combined
                         WHERE Combined.ReworkQty > 0
@@ -3833,6 +3840,18 @@ def quality_analysis_records(request):
                         _q_lower = q.lower()
                         custom_rows = [r for r in custom_rows if _q_lower in (str(r[2]) or "").lower() or _q_lower in (str(r[7] if len(r) > 7 else "") or "").lower()]
                     
+                    # O(1) lookups instead of scanning db_records for every row
+                    # (previously O(rows × records) — thousands × thousands).
+                    _rec_by_id_part = {}
+                    _rec_by_part = {}
+                    for _r in db_records:
+                        _k = (_r.get("id"), _r.get("partNo"))
+                        if _k not in _rec_by_id_part:
+                            _rec_by_id_part[_k] = _r
+                        _p = _r.get("partNo")
+                        if _p not in _rec_by_part:
+                            _rec_by_part[_p] = _r
+
                     for idx, row in enumerate(custom_rows):
                         insp_no = row[0]
                         insp_date = row[1]
@@ -3857,9 +3876,7 @@ def quality_analysis_records(request):
                                 
                         part_no_val = part_details or "—"
                         desc_val_rej = desc_from_sql or "—"
-                        match_rec = next((r for r in db_records if r.get("id") == insp_no and r.get("partNo") == part_no_val), None)
-                        if not match_rec:
-                            match_rec = next((r for r in db_records if r.get("partNo") == part_no_val), None)
+                        match_rec = _rec_by_id_part.get((insp_no, part_no_val)) or _rec_by_part.get(part_no_val)
                         if match_rec:
                             if desc_val_rej == "—":
                                 desc_val_rej = match_rec.get("description") or match_rec.get("product") or "—"
@@ -4126,6 +4143,7 @@ def quality_analysis_calibration(request):
             spec = (row.get("Specification") or "").strip()
 
             # Normalise nxtcalibdt to a date object
+            nxt_date: date = today
             if isinstance(nxt, datetime):
                 nxt_date = nxt.date()
             elif isinstance(nxt, date):
@@ -4166,7 +4184,7 @@ def quality_analysis_calibration(request):
                 "name": desc,
                 "id": sub_label,
                 "date": nxt_date.strftime("%d-%b-%Y"),
-                "last_calib": lst.strftime("%d-%b-%Y") if hasattr(lst, "strftime") else (str(lst)[:10] if lst else "—"),
+                "last_calib": lst.strftime("%d-%b-%Y") if isinstance(lst, date) else (str(lst)[:10] if lst else "—"),
                 "frequency": str(freq) if freq else "—",
                 "spec": spec or "—",
                 "cls": cls,
@@ -4243,7 +4261,7 @@ def quality_analysis_insights(request):
             INNER JOIN InJob_Mas m ON d.inspno = m.inspno
             WHERE ISNULL(m.deleted,0)=0 AND ISNULL(d.deleted,0)=0
               AND ISNULL(m.dtype, '') != 'Without Process'
-              AND CAST(m.inspdate AS DATE) BETWEEN ? AND ?
+              AND m.inspdate >= ? AND m.inspdate < DATEADD(DAY, 1, ?)
               {cust_ij_sql}
 
             UNION ALL
@@ -4255,7 +4273,7 @@ def quality_analysis_insights(request):
                 CAST(ISNULL(rwqty,0) AS INT)
             FROM InterInspectionEntry
             WHERE ISNULL(deleted,0)=0
-              AND CAST(inter_inspdate AS DATE) BETWEEN ? AND ?
+              AND inter_inspdate >= ? AND inter_inspdate < DATEADD(DAY, 1, ?)
               {cust_it_sql}
 
             UNION ALL
@@ -4278,7 +4296,7 @@ def quality_analysis_insights(request):
                 ), 0) AS INT)
             FROM FinalInspectionEntry f
             WHERE ISNULL(f.deleted, 0) = 0
-              AND CAST(f.finspdate AS DATE) BETWEEN ? AND ?
+              AND f.finspdate >= ? AND f.finspdate < DATEADD(DAY, 1, ?)
               {cust_fi_sql}
         """
         cursor.execute(combined_sql, [start_date, end_date] + cust_ij_p + [start_date, end_date] + cust_it_p + [start_date, end_date] + cust_fi_p)
@@ -4301,27 +4319,34 @@ def quality_analysis_insights(request):
             product_map[prod]["rw"]   += rw
 
         # ── 2. Defect causes (rejection reasons) ─────────────
+        # `rejectreason` does not exist on every ERP schema (older DBs keep the
+        # reason in `remarks`); resolve from the tenant catalog instead of
+        # failing the whole insights query with "Invalid column name".
+        ij_reason_col = find_column_ci(cursor, "dbo", "InJob_Det", ["rejectreason", "RejectReason", "remarks"])
+        it_reason_col = find_column_ci(cursor, "dbo", "InterInspectionEntry", ["rejectreason", "RejectReason", "remarks"])
+        ij_reason_expr = f"NULLIF(LTRIM(RTRIM(d.[{ij_reason_col}])), '')" if ij_reason_col else "NULL"
+        it_reason_expr = f"NULLIF(LTRIM(RTRIM([{it_reason_col}])), '')" if it_reason_col else "NULL"
         cause_sql = f"""
             SELECT
-                ISNULL(d.rejectreason, 'Surface defects') AS Cause,
+                ISNULL({ij_reason_expr}, 'Surface defects') AS Cause,
                 CAST(ISNULL(d.matrej,0)+ISNULL(d.macrej,0) AS INT) AS Qty
             FROM InJob_Det d
             INNER JOIN InJob_Mas m ON d.inspno = m.inspno
             WHERE ISNULL(m.deleted,0)=0 AND ISNULL(d.deleted,0)=0
               AND (ISNULL(d.matrej,0)+ISNULL(d.macrej,0)) > 0
               AND ISNULL(m.dtype, '') != 'Without Process'
-              AND CAST(m.inspdate AS DATE) BETWEEN ? AND ?
+              AND m.inspdate >= ? AND m.inspdate < DATEADD(DAY, 1, ?)
               {cust_ij_sql}
 
             UNION ALL
 
             SELECT
-                ISNULL(rejectreason,'Surface defects'),
+                ISNULL({it_reason_expr}, 'Surface defects'),
                 CAST(ISNULL(matrejqty,0)+ISNULL(rejqty,0) AS INT)
             FROM InterInspectionEntry
             WHERE ISNULL(deleted,0)=0
               AND (ISNULL(matrejqty,0)+ISNULL(rejqty,0)) > 0
-              AND CAST(inter_inspdate AS DATE) BETWEEN ? AND ?
+              AND inter_inspdate >= ? AND inter_inspdate < DATEADD(DAY, 1, ?)
               {cust_it_sql}
         """
         cursor.execute(cause_sql, [start_date, end_date] + cust_ij_p + [start_date, end_date] + cust_it_p)
@@ -4348,7 +4373,7 @@ def quality_analysis_insights(request):
         conn.close()
         db_ok = True
     except Exception as ex:
-        pass
+        logger.error("quality_analysis_insights failed: %s", ex, exc_info=True)
 
     # ── Build insight messages from live numbers ──────────────
     insights_left  = []
@@ -4608,7 +4633,7 @@ def quality_analysis_search(request):
                 WHERE ISNULL(m.deleted, 0) = 0
                   AND ISNULL(d.deleted, 0) = 0
                   AND ISNULL(m.dtype, '') != 'Without Process'
-                  AND CAST(m.inspdate AS DATE) BETWEEN ? AND ?
+                  AND m.inspdate >= ? AND m.inspdate < DATEADD(DAY, 1, ?)
                   AND (d.partno LIKE ? OR d.description LIKE ?)
                 GROUP BY d.partno, d.description
                 ORDER BY SUM(CAST(ISNULL(d.[{qty_col_ij}], 0) AS INT)) DESC
@@ -4672,7 +4697,7 @@ def quality_analysis_search(request):
                     SUM(CAST(ISNULL(i.rwqty,     0) AS INT)) AS ReworkQty
                 FROM InterInspectionEntry i
                 WHERE ISNULL(i.deleted, 0) = 0
-                  AND CAST(i.inter_inspdate AS DATE) BETWEEN ? AND ?
+                  AND i.inter_inspdate >= ? AND i.inter_inspdate < DATEADD(DAY, 1, ?)
                   AND (i.partno LIKE ? OR i.description LIKE ?)
                 GROUP BY i.partno, i.description, i.inter_inspno, i.matrejqty, i.rejqty
                 ORDER BY SUM(CAST(ISNULL(i.inspqty, 0) AS INT)) DESC
@@ -4728,7 +4753,7 @@ def quality_analysis_search(request):
                     0                                         AS ReworkQty
                 FROM FinalInspectionEntry f
                 WHERE ISNULL(f.deleted, 0) = 0
-                  AND CAST(f.finspdate AS DATE) BETWEEN ? AND ?
+                  AND f.finspdate >= ? AND f.finspdate < DATEADD(DAY, 1, ?)
                   AND (f.partno LIKE ? OR f.description LIKE ?)
                 GROUP BY f.partno, f.description, f.finspno
                 ORDER BY SUM(CAST(ISNULL(f.okqty, 0) + ISNULL(f.rejqty, 0) + ISNULL(f.matrejqty, 0) AS INT)) DESC
@@ -4808,7 +4833,7 @@ def quality_analysis_supplier_rejections(request):
             INNER JOIN inspdet id ON im.irno = id.irno
             LEFT JOIN CustMast cm ON gm.cid = cm.Id
             WHERE
-                CAST(gm.grndate AS DATE) BETWEEN ? AND ?
+                gm.grndate >= ? AND gm.grndate < DATEADD(DAY, 1, ?)
                 AND ISNULL(gm.deleted, 0) = 0
                 AND ISNULL(im.deleted, 0) = 0
                 AND ISNULL(id.deleted, 0) = 0
@@ -4881,3 +4906,35 @@ def quality_analysis_supplier_rejections(request):
             "macRej": chart_mac_rej
         }
     })
+
+
+# ─────────────────────────────────────────────────────────────
+#  BUNDLE: one HTTP request → several panels, one shared tenant
+#  connection per worker thread. Select panels with ?keys=a,b,c
+# ─────────────────────────────────────────────────────────────
+
+from .utils.bundle import run_bundle
+
+_QA_BUNDLE_REGISTRY = [
+    ("summary", quality_analysis_summary),
+    ("charts", quality_analysis_charts),
+    ("product_performance", quality_analysis_product_performance),
+    ("defect_causes", quality_analysis_defect_causes),
+    ("insights", quality_analysis_insights),
+    ("records", quality_analysis_records),
+    ("calibration", quality_analysis_calibration),
+    ("supplier_rejections", quality_analysis_supplier_rejections),
+    ("settings", quality_analysis_settings),
+]
+
+
+@api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="qa_bundle")
+def quality_analysis_bundle(request):
+    start_date, end_date = parse_date_range(request)
+    return run_bundle(
+        request,
+        _QA_BUNDLE_REGISTRY,
+        max_workers=3,
+        extra={"from": str(start_date), "to": str(end_date)},
+    )

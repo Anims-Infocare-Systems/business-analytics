@@ -39,6 +39,7 @@ from .views_userrights import (
     user_rights_add_user, user_rights_delete, user_settings_date_presets,
 )
 from .views_sales_analysis import (
+    sales_analysis_bundle,
     sales_analysis_summary_strip, sales_analysis_grand_total, sales_analysis_weekly_trend, sales_analysis_revenue_charts,
     sales_analysis_month_summary, sales_analysis_invoice_details, sales_analysis_customer_part_wise, sales_analysis_top_products,
     sales_analysis_monthly_sales_trend, sales_analysis_bill_type_revenue, sales_analysis_monthly_tax_trend,
@@ -49,15 +50,16 @@ from .views_idle_time_report import idle_time_report
 from .views_efficiency_report import efficiency_report
 from .views_production_analysis import (
     production_analysis_report, production_value_report, production_idle_breakdown, daily_production_details,
-    machine_card_data, production_analysis_filters, production_mhr_inputs
+    machine_card_data, production_analysis_filters, production_mhr_inputs, production_analysis_bundle
 )
 from .views_purchaseanalysis import (
     purchase_analysis_summary, purchase_analysis_weekly_trend, purchase_analysis_charts, purchase_analysis_pipeline, purchase_analysis_po_details, purchase_analysis_grn_aging, purchase_analysis_month_summary, purchase_analysis_po_types, purchase_analysis_po_table, purchase_analysis_amended_po_table, purchase_analysis_short_close_table, purchase_analysis_price_trend_table, purchase_analysis_management_alerts, purchase_analysis_traceability_table, purchase_analysis_supplier_rating,
     purchase_analysis_fulfillment_schedule, purchase_analysis_average_purchase_value, purchase_analysis_advanced_purchase_analytics,
+    purchase_analysis_bundle,
 )
 from .views_qualityanalysis import (
     quality_analysis_summary, quality_analysis_charts, quality_analysis_product_performance, quality_analysis_defect_causes, quality_analysis_records, quality_analysis_calibration, quality_analysis_insights,
-    quality_analysis_supplier_rejections, quality_analysis_settings,
+    quality_analysis_supplier_rejections, quality_analysis_settings, quality_analysis_bundle,
 )
 from .views_qualitytimeline import (
     quality_timeline_invoices_view,
@@ -193,6 +195,7 @@ urlpatterns = [
     path('dashboard1/quality-rejections-weekly/', dashboard1_quality_rejections_weekly, name='dashboard1_quality_rejections_weekly'),
 
     # ── Sales Analysis ────────────────────────────────────────────────
+    path('sales-analysis/bundle/', sales_analysis_bundle, name='sales_analysis_bundle'),
     path('sales-analysis/summary-strip/', sales_analysis_summary_strip, name='sales_analysis_summary_strip'),
     path('sales-analysis/grand-total/', sales_analysis_grand_total, name='sales_analysis_grand_total'),
     path('sales-analysis/weekly-trend/', sales_analysis_weekly_trend, name='sales_analysis_weekly_trend'),
@@ -218,6 +221,7 @@ urlpatterns = [
     path('efficiency-report/', efficiency_report, name='efficiency_report'),
 
     # ── Production Analysis ───────────────────────────────────────────
+    path('production-analysis/bundle/', production_analysis_bundle, name='production_analysis_bundle'),
     path('production-analysis-report/', production_analysis_report, name='production_analysis_report'),
     path('production-value-report/', production_value_report, name='production_value_report'),
     path('production-idle-breakdown/', production_idle_breakdown, name='production_idle_breakdown'),
@@ -227,6 +231,7 @@ urlpatterns = [
     path('machines/<path:macno>/card/', machine_card_data, name='machine_card_data'),
 
     # ── Purchase Analysis ─────────────────────────────────────────────
+    path('purchase-analysis/bundle/', purchase_analysis_bundle, name='purchase_analysis_bundle'),
     path('purchase-analysis/summary/', purchase_analysis_summary, name='purchase_analysis_summary'),
     path('purchase-analysis/weekly-trend/', purchase_analysis_weekly_trend, name='purchase_analysis_weekly_trend'),
     path('purchase-analysis/charts/', purchase_analysis_charts, name='purchase_analysis_charts'),
@@ -247,6 +252,7 @@ urlpatterns = [
     path('purchase-analysis/advanced-purchase-analytics/', purchase_analysis_advanced_purchase_analytics, name='purchase_analysis_advanced_purchase_analytics'),
 
     # ── Quality Analysis ──────────────────────────────────────────────
+    path('quality-analysis/bundle/', quality_analysis_bundle, name='quality_analysis_bundle'),
     path('quality-analysis/summary/', quality_analysis_summary, name='quality_analysis_summary'),
     path('quality-analysis/charts/', quality_analysis_charts, name='quality_analysis_charts'),
     path('quality-analysis/product-performance/', quality_analysis_product_performance, name='quality_analysis_product_performance'),

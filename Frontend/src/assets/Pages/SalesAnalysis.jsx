@@ -48,6 +48,7 @@ import { FaReact } from "react-icons/fa";
 import "./SalesAnalysis.css";
 import SalesAnalysisDatePicker from "./SalesAnalysisDatePicker";
 import { getModuleDefaultDateRange } from "./dateSettingsHelper";
+import DebouncedSearchInput from "./DebouncedSearchInput";
 
 Chart.register(...registerables, ChartDataLabels);
 Chart.defaults.font.family = "'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
@@ -1736,6 +1737,10 @@ export default function SalesAnalysis() {
   const [projMonthDropdownOpen, setProjMonthDropdownOpen] = useState(false);
   const projMonthRef = useRef(null);
   const [weeklyChartType, setWeeklyChartType] = useState("combo");
+  const [activeSectionTab, setActiveSectionTab] = useState("all");
+  const isSectionVisible = useCallback((tabId) => {
+    return activeSectionTab === "all" || activeSectionTab === tabId;
+  }, [activeSectionTab]);
   const [customerSearch, setCustomerSearch] = useState("");
   const [planSearchQuery, setPlanSearchQuery] = useState("");
 
@@ -3159,7 +3164,7 @@ export default function SalesAnalysis() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
   const filteredInvoices = useMemo(() => {
-    let list = invoiceRows.filter((r) => {
+    return invoiceRows.filter((r) => {
       if (appliedSelectedCustomers.length > 0 && !appliedSelectedCustomers.includes(r.customer)) return false;
       if (appliedSelectedInvoiceTypes.length > 0) {
         let bt = r.btype || "";
@@ -3175,28 +3180,7 @@ export default function SalesAnalysis() {
         (r.description && r.description.toLowerCase().includes(q))
       );
     });
-
-    if (invSortConfig) {
-      list.sort((a, b) => {
-        let valA = a[invSortConfig.key];
-        let valB = b[invSortConfig.key];
-        if (["qty", "rate", "amount"].includes(invSortConfig.key)) {
-          valA = Number(valA || 0);
-          valB = Number(valB || 0);
-        } else if (invSortConfig.key === "date") {
-          valA = new Date(valA || 0).getTime();
-          valB = new Date(valB || 0).getTime();
-        } else {
-          valA = String(valA || "").toLowerCase();
-          valB = String(valB || "").toLowerCase();
-        }
-        if (valA < valB) return invSortConfig.direction === "asc" ? -1 : 1;
-        if (valA > valB) return invSortConfig.direction === "asc" ? 1 : -1;
-        return 0;
-      });
-    }
-    return list;
-  }, [invoiceRows, appliedSearchQuery, appliedSelectedCustomers, appliedSelectedInvoiceTypes, invSortConfig]);
+  }, [invoiceRows, appliedSearchQuery, appliedSelectedCustomers, appliedSelectedInvoiceTypes]);
 
   const derivedSummary = useMemo(() => {
     if (!summary) return null;
@@ -3843,52 +3827,45 @@ export default function SalesAnalysis() {
     return buildTopProducts(topProductsRaw?.products);
   }, [filteredInvoices, topProductsRaw]);
 
-  const uniqueInvoiceCustomers = useMemo(() => {
-    const set = new Set();
-    filteredInvoices.forEach(r => {
-      if (r.customer) set.add(r.customer);
-    });
-    return Array.from(set).sort();
-  }, [filteredInvoices]);
+  const {
+    uniqueInvoiceCustomers,
+    uniqueInvoiceNumbers,
+    uniqueInvoicePartNumbers,
+    custLineCounts,
+    invoiceLineCounts,
+    partLineCounts,
+  } = useMemo(() => {
+    const custSet = new Set();
+    const invSet = new Set();
+    const partSet = new Set();
+    const cCounts = {};
+    const iCounts = {};
+    const pCounts = {};
 
-  const uniqueInvoiceNumbers = useMemo(() => {
-    const set = new Set();
-    filteredInvoices.forEach(r => {
-      if (r.invoice_no) set.add(r.invoice_no);
-    });
-    return Array.from(set).sort();
-  }, [filteredInvoices]);
+    for (let i = 0; i < filteredInvoices.length; i++) {
+      const r = filteredInvoices[i];
+      if (r.customer) {
+        custSet.add(r.customer);
+        cCounts[r.customer] = (cCounts[r.customer] || 0) + 1;
+      }
+      if (r.invoice_no) {
+        invSet.add(r.invoice_no);
+        iCounts[r.invoice_no] = (iCounts[r.invoice_no] || 0) + 1;
+      }
+      if (r.part_no) {
+        partSet.add(r.part_no);
+        pCounts[r.part_no] = (pCounts[r.part_no] || 0) + 1;
+      }
+    }
 
-  const uniqueInvoicePartNumbers = useMemo(() => {
-    const set = new Set();
-    filteredInvoices.forEach(r => {
-      if (r.part_no) set.add(r.part_no);
-    });
-    return Array.from(set).sort();
-  }, [filteredInvoices]);
-
-  const custLineCounts = useMemo(() => {
-    const counts = {};
-    filteredInvoices.forEach(r => {
-      if (r.customer) counts[r.customer] = (counts[r.customer] || 0) + 1;
-    });
-    return counts;
-  }, [filteredInvoices]);
-
-  const invoiceLineCounts = useMemo(() => {
-    const counts = {};
-    filteredInvoices.forEach(r => {
-      if (r.invoice_no) counts[r.invoice_no] = (counts[r.invoice_no] || 0) + 1;
-    });
-    return counts;
-  }, [filteredInvoices]);
-
-  const partLineCounts = useMemo(() => {
-    const counts = {};
-    filteredInvoices.forEach(r => {
-      if (r.part_no) counts[r.part_no] = (counts[r.part_no] || 0) + 1;
-    });
-    return counts;
+    return {
+      uniqueInvoiceCustomers: Array.from(custSet).sort(),
+      uniqueInvoiceNumbers: Array.from(invSet).sort(),
+      uniqueInvoicePartNumbers: Array.from(partSet).sort(),
+      custLineCounts: cCounts,
+      invoiceLineCounts: iCounts,
+      partLineCounts: pCounts,
+    };
   }, [filteredInvoices]);
 
   const filteredUniqueInvoiceCustomers = useMemo(() => {
@@ -3940,22 +3917,43 @@ export default function SalesAnalysis() {
   }, [uniqueInvoicePartNumbers, invTablePartFilter]);
 
   const displayedInvoices = useMemo(() => {
-    if (invTableCustFilter.length === 0 && invTableInvoiceFilter.length === 0 && invTablePartFilter.length === 0) {
-      return filteredInvoices;
+    let list = filteredInvoices;
+    if (invTableCustFilter.length > 0 || invTableInvoiceFilter.length > 0 || invTablePartFilter.length > 0) {
+      list = filteredInvoices.filter(r => {
+        if (invTableCustFilter.length > 0 && !invTableCustFilter.includes(r.customer)) {
+          return false;
+        }
+        if (invTableInvoiceFilter.length > 0 && !invTableInvoiceFilter.includes(r.invoice_no)) {
+          return false;
+        }
+        if (invTablePartFilter.length > 0 && !invTablePartFilter.includes(r.part_no)) {
+          return false;
+        }
+        return true;
+      });
     }
-    return filteredInvoices.filter(r => {
-      if (invTableCustFilter.length > 0 && !invTableCustFilter.includes(r.customer)) {
-        return false;
-      }
-      if (invTableInvoiceFilter.length > 0 && !invTableInvoiceFilter.includes(r.invoice_no)) {
-        return false;
-      }
-      if (invTablePartFilter.length > 0 && !invTablePartFilter.includes(r.part_no)) {
-        return false;
-      }
-      return true;
-    });
-  }, [filteredInvoices, invTableCustFilter, invTableInvoiceFilter, invTablePartFilter]);
+
+    if (invSortConfig) {
+      return [...list].sort((a, b) => {
+        let valA = a[invSortConfig.key];
+        let valB = b[invSortConfig.key];
+        if (["qty", "rate", "amount"].includes(invSortConfig.key)) {
+          valA = Number(valA || 0);
+          valB = Number(valB || 0);
+        } else if (invSortConfig.key === "date") {
+          valA = new Date(valA || 0).getTime();
+          valB = new Date(valB || 0).getTime();
+        } else {
+          valA = String(valA || "").toLowerCase();
+          valB = String(valB || "").toLowerCase();
+        }
+        if (valA < valB) return invSortConfig.direction === "asc" ? -1 : 1;
+        if (valA > valB) return invSortConfig.direction === "asc" ? 1 : -1;
+        return 0;
+      });
+    }
+    return list;
+  }, [filteredInvoices, invTableCustFilter, invTableInvoiceFilter, invTablePartFilter, invSortConfig]);
 
   const totalInvPages = useMemo(() => {
     if (invPageSize === -1) return 1;
@@ -4478,7 +4476,7 @@ export default function SalesAnalysis() {
       trendChart.current?.destroy();
 
       const ctx = trendRef.current.getContext("2d");
-      const monthYearMap = getMonthYearMap(dateRange.from, dateRange.to);
+      const monthYearMap = getMonthYearMap(appliedDateRange.from, appliedDateRange.to);
       const labels = (derivedWeeklyTrend?.labels ?? []).map(lbl => formatWeeklyLabelWithDays(lbl, monthYearMap));
       const sales = derivedWeeklyTrend?.sales ?? [];
       const cumulative = derivedWeeklyTrend?.cumulative ?? [];
@@ -4740,7 +4738,7 @@ export default function SalesAnalysis() {
       const isBar = performanceChartType === "bar";
       const isShare = performanceChartType === "share";
 
-      const monthYearMap = getMonthYearMap(dateRange.from, dateRange.to);
+      const monthYearMap = getMonthYearMap(appliedDateRange.from, appliedDateRange.to);
       const apiLabels = (derivedMonthlyTrendData?.labels ?? []).map(lbl => formatLabelWithYear(lbl, monthYearMap));
       const apiValuesLakhs = derivedMonthlyTrendData?.sales_values_lakhs ?? [];
 
@@ -4914,7 +4912,7 @@ export default function SalesAnalysis() {
         ["rgba(16, 185, 129, 0.95)", "rgba(16, 185, 129, 0.4)", "rgba(16, 185, 129, 0.5)", "rgba(16, 185, 129, 0.05)", "rgba(16, 185, 129, 1)"],
       ];
 
-      const monthYearMap = getMonthYearMap(dateRange.from, dateRange.to);
+      const monthYearMap = getMonthYearMap(appliedDateRange.from, appliedDateRange.to);
       const apiLabels = (derivedBillTypeRevenueData?.labels ?? []).map(lbl => formatLabelWithYear(lbl, monthYearMap));
       const apiDatasets = derivedBillTypeRevenueData?.datasets ?? [];
 
@@ -5033,7 +5031,7 @@ export default function SalesAnalysis() {
       const isBar = performanceChartType === "bar";
       const isShare = performanceChartType === "share";
 
-      const monthYearMap = getMonthYearMap(dateRange.from, dateRange.to);
+      const monthYearMap = getMonthYearMap(appliedDateRange.from, appliedDateRange.to);
       const apiLabels = (derivedMonthlyTaxData?.labels ?? []).map(lbl => formatLabelWithYear(lbl, monthYearMap));
       const apiTaxLakhs = derivedMonthlyTaxData?.tax_values_lakhs ?? [];
       const apiSalesLakhs = derivedMonthlyTrendData?.sales_values_lakhs ?? [];
@@ -5657,6 +5655,9 @@ export default function SalesAnalysis() {
       from: toIsoDate(fromDate),
       to: toIsoDate(toDate),
     });
+    if (appliedSelectedCustomers.length > 0) {
+      params.set("customer", appliedSelectedCustomers.join(","));
+    }
     if (appliedSelectedInvoiceTypes.length > 0) {
       params.set("btype", appliedSelectedInvoiceTypes.join(","));
     }
@@ -5666,296 +5667,80 @@ export default function SalesAnalysis() {
     const ctrl = new AbortController();
     const fetchOpts = { credentials: "include", signal: ctrl.signal };
 
-    // ── Tier 1: Instant Executive Viewport (Summary Strip, Grand Total, Avg Rates, Weekly Trend) ──
-    const p1 = fetch(`${API_BASE}/sales-analysis/summary-strip/?${params}`, fetchOpts)
+    // ── Tier 1 & 2: Consolidated High-Speed Analytics Bundle (1 single HTTP request instead of 10) ──
+    const pBundle = fetch(`${API_BASE}/sales-analysis/bundle/?${params}`, fetchOpts)
       .then(async (r) => {
-        const data = await r.json();
-        if (!r.ok || data?.error) {
-          console.error("Sales summary:", data?.error || r.statusText);
-          setSummary(null);
+        const bundleData = await r.json();
+        if (!r.ok || !bundleData?.data) {
+          console.error("Sales bundle fetch error:", bundleData?.error || r.statusText);
           return;
         }
-        setSummary(data);
+        const d = bundleData.data;
+        if (d.summary) setSummary(d.summary);
+        if (d.grand_total !== undefined && d.grand_total !== null) {
+          setGrandTotalVal(d.grand_total?.grand_total ?? null);
+        }
+        if (d.avg_rate_cards) setAvgRateData(d.avg_rate_cards);
+        if (d.weekly_trend) setWeeklyTrend(d.weekly_trend);
+        if (d.revenue_charts) setRevenueCharts(d.revenue_charts);
+        if (d.month_summary) setMonthSummary(d.month_summary);
+        if (d.top_products) setTopProductsRaw(d.top_products);
+        if (d.monthly_sales_trend) setMonthlyTrendData(d.monthly_sales_trend);
+        if (d.bill_type_revenue) setBillTypeRevenueData(d.bill_type_revenue);
+        if (d.monthly_tax_trend) setMonthlyTaxData(d.monthly_tax_trend);
       })
       .catch((err) => {
         if (err.name !== "AbortError") {
-          console.error("Sales summary fetch failed:", err);
-          setSummary(null);
+          console.error("Sales bundle fetch failed:", err);
         }
       });
 
-    const pGT = fetch(`${API_BASE}/sales-analysis/grand-total/?${params}`, fetchOpts)
+    // ── Tier 3: Deep Data & Tables — one bundle request, started immediately so
+    //    it overlaps the head bundle instead of waiting for it (was a waterfall).
+    const tablesParams = new URLSearchParams(params);
+    tablesParams.set("keys", "invoice_details,future_projections,plan_vs_actual,po_ledger,traceability");
+    const pTables = fetch(`${API_BASE}/sales-analysis/bundle/?${tablesParams}`, fetchOpts)
       .then(async (r) => {
-        const data = await r.json();
-        if (!r.ok || data?.error) {
-          console.error("Grand total fetch error:", data?.error || r.statusText);
-          setGrandTotalVal(null);
-          return;
-        }
-        setGrandTotalVal(data?.grand_total ?? null);
+        const bundleData = await r.json();
+        const d = (r.ok && bundleData?.data) || {};
+        const errs = bundleData?.errors || {};
+        const pick = (key, label, onOk, onErr) => {
+          if (d[key] && !d[key].error) onOk(d[key]);
+          else {
+            if (errs[key]) console.error(`${label}:`, errs[key]);
+            onErr();
+          }
+        };
+        pick("invoice_details", "Invoice details",
+          (x) => { setInvoiceRows(x.rows ?? []); setInvoiceBtypes(x.btypes ?? []); },
+          () => { setInvoiceRows([]); setInvoiceBtypes([]); });
+        pick("future_projections", "Future projections", (x) => setProjections(x.rows ?? []), () => setProjections([]));
+        pick("plan_vs_actual", "Plan vs actual", (x) => setPlanVsActual(x.rows ?? []), () => setPlanVsActual([]));
+        pick("po_ledger", "PO ledger", (x) => setPoLedger(x.rows ?? []), () => setPoLedger([]));
+        pick("traceability", "Traceability", (x) => setTraceability(x.rows ?? []), () => setTraceability([]));
       })
       .catch((err) => {
         if (err.name !== "AbortError") {
-          console.error("Grand total fetch failed:", err);
-          setGrandTotalVal(null);
+          console.error("Sales tables bundle fetch failed:", err);
+          setInvoiceRows([]); setInvoiceBtypes([]); setProjections([]);
+          setPlanVsActual([]); setPoLedger([]); setTraceability([]);
         }
-      });
-
-    const p13 = fetch(`${API_BASE}/sales-analysis/avg-rate-cards/?${params}`, fetchOpts)
-      .then(async (r) => {
-        const data = await r.json();
-        if (!r.ok || data?.error) {
-          console.error("Avg rate cards:", data?.error || r.statusText);
-          setAvgRateData(null);
-          return;
-        }
-        setAvgRateData(data);
       })
-      .catch((err) => {
-        if (err.name !== "AbortError") {
-          console.error("Avg rate cards fetch failed:", err);
-          setAvgRateData(null);
-        }
-      });
-
-    const p2 = fetch(`${API_BASE}/sales-analysis/weekly-trend/?${params}`, fetchOpts)
-      .then(async (r) => {
-        const data = await r.json();
-        if (!r.ok || data?.error) {
-          console.error("Weekly trend:", data?.error || r.statusText);
-          setWeeklyTrend(null);
-          return;
-        }
-        setWeeklyTrend(data);
-      })
-      .catch((err) => {
-        if (err.name !== "AbortError") {
-          console.error("Weekly trend fetch failed:", err);
-          setWeeklyTrend(null);
-        }
-      });
-
-    const tier1Promises = [p1, pGT, p13, p2];
-
-    // ── Tier 2: Analytical Visualizations (Revenue Charts, Month Summary, Top Products, Monthly Trend, Bill Type, Tax) ──
-    const runTier2 = () => {
-      setLoadingProgress((prev) => Math.max(prev, 48));
-
-      const p3 = fetch(`${API_BASE}/sales-analysis/revenue-charts/?${params}`, fetchOpts)
-        .then(async (r) => {
-          const data = await r.json();
-          if (!r.ok || data?.error) {
-            console.error("Revenue charts:", data?.error || r.statusText);
-            setRevenueCharts(null);
-            return;
-          }
-          setRevenueCharts(data);
-        })
-        .catch((err) => {
-          if (err.name !== "AbortError") {
-            console.error("Revenue charts fetch failed:", err);
-            setRevenueCharts(null);
-          }
-        });
-
-      const p4 = fetch(`${API_BASE}/sales-analysis/month-summary/?${params}`, fetchOpts)
-        .then(async (r) => {
-          const data = await r.json();
-          if (!r.ok || data?.error) {
-            console.error("Month summary:", data?.error || r.statusText);
-            setMonthSummary(null);
-            return;
-          }
-          setMonthSummary(data);
-        })
-        .catch((err) => {
-          if (err.name !== "AbortError") {
-            console.error("Month summary fetch failed:", err);
-            setMonthSummary(null);
-          }
-        });
-
-      const p5 = fetch(`${API_BASE}/sales-analysis/top-products/?${params}`, fetchOpts)
-        .then(async (r) => {
-          const data = await r.json();
-          if (!r.ok || data?.error) {
-            console.error("Top products:", data?.error || r.statusText);
-            setTopProductsRaw(null);
-            return;
-          }
-          setTopProductsRaw(data);
-        })
-        .catch((err) => {
-          if (err.name !== "AbortError") {
-            console.error("Top products fetch failed:", err);
-            setTopProductsRaw(null);
-          }
-        });
-
-      const p6 = fetch(`${API_BASE}/sales-analysis/monthly-sales-trend/?${params}`, fetchOpts)
-        .then(async (r) => {
-          const data = await r.json();
-          if (!r.ok || data?.error) {
-            console.error("Monthly sales trend:", data?.error || r.statusText);
-            setMonthlyTrendData(null);
-            return;
-          }
-          setMonthlyTrendData(data);
-        })
-        .catch((err) => {
-          if (err.name !== "AbortError") {
-            console.error("Monthly sales trend fetch failed:", err);
-            setMonthlyTrendData(null);
-          }
-        });
-
-      const p7 = fetch(`${API_BASE}/sales-analysis/bill-type-revenue/?${params}`, fetchOpts)
-        .then(async (r) => {
-          const data = await r.json();
-          if (!r.ok || data?.error) {
-            console.error("Bill type revenue:", data?.error || r.statusText);
-            setBillTypeRevenueData(null);
-            return;
-          }
-          setBillTypeRevenueData(data);
-        })
-        .catch((err) => {
-          if (err.name !== "AbortError") {
-            console.error("Bill type revenue fetch failed:", err);
-            setBillTypeRevenueData(null);
-          }
-        });
-
-      const p8 = fetch(`${API_BASE}/sales-analysis/monthly-tax-trend/?${params}`, fetchOpts)
-        .then(async (r) => {
-          const data = await r.json();
-          if (!r.ok || data?.error) {
-            console.error("Monthly tax trend:", data?.error || r.statusText);
-            setMonthlyTaxData(null);
-            return;
-          }
-          setMonthlyTaxData(data);
-        })
-        .catch((err) => {
-          if (err.name !== "AbortError") {
-            console.error("Monthly tax trend fetch failed:", err);
-            setMonthlyTaxData(null);
-          }
-        });
-
-      return Promise.all([p3, p4, p5, p6, p7, p8]);
-    };
-
-    // ── Tier 3: Deep Data & Tables (Invoice Details, Future Projections, Plan vs Actual, PO Ledger, Traceability) ──
-    const runTier3 = () => {
-      setLoadingProgress((prev) => Math.max(prev, 78));
-
-      const pInv = fetch(`${API_BASE}/sales-analysis/invoice-details/?${params}`, fetchOpts)
-        .then(async (r) => {
-          const data = await r.json();
-          if (!r.ok || data?.error) {
-            console.error("Invoice details:", data?.error || r.statusText);
-            setInvoiceRows([]);
-            setInvoiceBtypes([]);
-            return;
-          }
-          setInvoiceRows(data.rows ?? []);
-          setInvoiceBtypes(data.btypes ?? []);
-        })
-        .catch((err) => {
-          if (err.name !== "AbortError") {
-            console.error("Invoice details fetch failed:", err);
-            setInvoiceRows([]);
-            setInvoiceBtypes([]);
-          }
-        })
-        .finally(() => {
-          setTableLoading(false);
-        });
-
-      const p9 = fetch(`${API_BASE}/sales-analysis/future-projections/?${params}`, fetchOpts)
-        .then(async (r) => {
-          const data = await r.json();
-          if (!r.ok || data?.error) {
-            console.error("Future projections:", data?.error || r.statusText);
-            setProjections([]);
-            return;
-          }
-          setProjections(data.rows ?? []);
-        })
-        .catch((err) => {
-          if (err.name !== "AbortError") {
-            console.error("Future projections fetch failed:", err);
-            setProjections([]);
-          }
-        });
-
-      const p10 = fetch(`${API_BASE}/sales-analysis/plan-vs-actual/?${params}`, fetchOpts)
-        .then(async (r) => {
-          const data = await r.json();
-          if (!r.ok || data?.error) {
-            console.error("Plan vs actual:", data?.error || r.statusText);
-            setPlanVsActual([]);
-            return;
-          }
-          setPlanVsActual(data.rows ?? []);
-        })
-        .catch((err) => {
-          if (err.name !== "AbortError") {
-            console.error("Plan vs actual fetch failed:", err);
-            setPlanVsActual([]);
-          }
-        });
-
-      const p11 = fetch(`${API_BASE}/sales-analysis/po-ledger/?${params}`, fetchOpts)
-        .then(async (r) => {
-          const data = await r.json();
-          if (!r.ok || data?.error) {
-            console.error("PO ledger:", data?.error || r.statusText);
-            setPoLedger([]);
-            return;
-          }
-          setPoLedger(data.rows ?? []);
-        })
-        .catch((err) => {
-          if (err.name !== "AbortError") {
-            console.error("PO ledger fetch failed:", err);
-            setPoLedger([]);
-          }
-        });
-
-      const p12 = fetch(`${API_BASE}/sales-analysis/traceability/?${params}`, fetchOpts)
-        .then(async (r) => {
-          const data = await r.json();
-          if (!r.ok || data?.error) {
-            console.error("Traceability:", data?.error || r.statusText);
-            setTraceability([]);
-            return;
-          }
-          setTraceability(data.rows ?? []);
-        })
-        .catch((err) => {
-          if (err.name !== "AbortError") {
-            console.error("Traceability fetch failed:", err);
-            setTraceability([]);
-          }
-        });
-
-      return Promise.all([pInv, p9, p10, p11, p12]);
-    };
-
-    // Execute staged tiers in clean sequence
-    Promise.all(tier1Promises)
-      .then(() => runTier2())
-      .then(() => runTier3())
       .finally(() => {
-        setLoadingProgress(100);
-        setLoading(false);
-        setTableLoading(false);
+        if (!ctrl.signal.aborted) setTableLoading(false);
       });
+
+    pBundle.then(() => setLoadingProgress((prev) => Math.max(prev, 60)));
+
+    Promise.allSettled([pBundle, pTables]).finally(() => {
+      if (ctrl.signal.aborted) return;
+      setLoadingProgress(100);
+      setLoading(false);
+      setTableLoading(false);
+    });
 
     return () => ctrl.abort();
-  }, [appliedDateRange.from, appliedDateRange.to, appliedSelectedInvoiceTypes, appliedSearchQuery, fetchTrigger]);
+  }, [appliedDateRange.from, appliedDateRange.to, appliedSelectedCustomers, appliedSelectedInvoiceTypes, appliedSearchQuery, fetchTrigger]);
 
   // ── Real-time Live Background Sync for Despatch Planning Status (15s Lightweight Poll) ──
   const fetchDespatchPlanLive = useCallback(async () => {
@@ -6003,25 +5788,18 @@ export default function SalesAnalysis() {
   }, [appliedDateRange.from, appliedDateRange.to, appliedSelectedInvoiceTypes, appliedSearchQuery]);
 
   useEffect(() => {
-    // Background polling every 15 seconds for live despatch data (avoids CPU/GC stutter)
+    // Background polling every 5 min (was 60s — each poll re-runs the plan-vs-actual
+    // SQL against the ERP over the tunnel), only when tab is visible and not loading
     const interval = setInterval(() => {
-      if (document.visibilityState === "visible") {
+      if (document.visibilityState === "visible" && !loading) {
         fetchDespatchPlanLive();
       }
-    }, 15000);
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        fetchDespatchPlanLive();
-      }
-    };
-    document.addEventListener("visibilitychange", handleVisibilityChange);
+    }, 5 * 60 * 1000);
 
     return () => {
       clearInterval(interval);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [fetchDespatchPlanLive]);
+  }, [fetchDespatchPlanLive, loading]);
 
   const setF = (k, v) => setFilters(p => ({ ...p, [k]: v }));
   const resetFilters = () => {
@@ -6585,8 +6363,81 @@ export default function SalesAnalysis() {
         })}
       </div>
 
+      {/* ── Executive View Switcher Bar ── */}
+      {/* <div className="sa-section-tabs-bar" role="tablist" aria-label="Sales Analysis Sections">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeSectionTab === "all"}
+          className={`sa-section-tab-btn ${activeSectionTab === "all" ? "is-active" : ""}`}
+          onClick={() => setActiveSectionTab("all")}
+        >
+          <Layers size={14} />
+          <span>  s</span>
+        </button>
+
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeSectionTab === "overview"}
+          className={`sa-section-tab-btn ${activeSectionTab === "overview" ? "is-active" : ""}`}
+          onClick={() => setActiveSectionTab("overview")}
+        >
+          <TrendingUp size={14} />
+          <span>Overview &amp; Trends</span>
+        </button>
+
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeSectionTab === "invoices"}
+          className={`sa-section-tab-btn ${activeSectionTab === "invoices" ? "is-active" : ""}`}
+          onClick={() => setActiveSectionTab("invoices")}
+        >
+          <FileText size={14} />
+          <span>Invoices &amp; Billing</span>
+          {invoiceRows?.length > 0 && (
+            <span className="sa-section-tab-badge">
+              {invoiceRows.length.toLocaleString()}
+            </span>
+          )}
+        </button>
+
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeSectionTab === "despatch"}
+          className={`sa-section-tab-btn ${activeSectionTab === "despatch" ? "is-active" : ""}`}
+          onClick={() => setActiveSectionTab("despatch")}
+        >
+          <Package size={14} />
+          <span>Despatch &amp; Planning</span>
+          {filteredDespatchPlan?.length > 0 && (
+            <span className="sa-section-tab-badge">
+              {filteredDespatchPlan.length.toLocaleString()}
+            </span>
+          )}
+        </button>
+
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeSectionTab === "traceability"}
+          className={`sa-section-tab-btn ${activeSectionTab === "traceability" ? "is-active" : ""}`}
+          onClick={() => setActiveSectionTab("traceability")}
+        >
+          <Zap size={14} />
+          <span>PO &amp; Traceability</span>
+          {filteredPoLedger?.length > 0 && (
+            <span className="sa-section-tab-badge">
+              {filteredPoLedger.length.toLocaleString()}
+            </span>
+          )}
+        </button>
+      </div> */}
+
       {/* ── Weekly Sales Trend (Full Width Row) ── */}
-      <div className="sa-animate" style={{ marginBottom: "1.4rem" }}>
+      <div className="sa-animate sa-contain-auto" style={{ marginBottom: "1.4rem", display: isSectionVisible("overview") ? undefined : "none" }}>
         <div className="sa-card sa-card--chart" data-spotlight="sa-weekly-trend" style={{ width: "100%" }}>
           <div className="sa-card__head" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', flexWrap: 'wrap', gap: '10px' }}>
             <span className="sa-card__title" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
@@ -6634,8 +6485,9 @@ export default function SalesAnalysis() {
 
       {/* ── Customer & Part-Wise Pending PO Summary & Schedule Analysis (Dual Column Row) ── */}
       <div
-        className={`sa-dual-tables-row sa-animate ${pendingPoExpanded ? 'expand-left' : ''} ${schedExpanded ? 'expand-right' : ''}`}
+        className={`sa-dual-tables-row sa-animate sa-contain-auto ${pendingPoExpanded ? 'expand-left' : ''} ${schedExpanded ? 'expand-right' : ''}`}
         data-spotlight="sa-revenue-split"
+        style={{ display: isSectionVisible("despatch") ? undefined : "none" }}
       >
         {/* ── Card 1: Customer & Part-Wise Pending PO Summary ── */}
         <div className={`sa-card sa-card--table sa-card--pending-po ${pendingPoExpanded ? 'is-expanded' : ''} ${schedExpanded ? 'is-collapsed' : ''}`} data-spotlight="sa-pending-po-summary">
@@ -7112,7 +6964,7 @@ export default function SalesAnalysis() {
       </div>
 
       {/* Despatch Planning Status Table Card */}
-      <div className="sa-card sa-card--table sa-card--despatch-plan sa-animate" data-spotlight="sa-despatch-plan" style={{ marginBottom: "1.4rem" }}>
+      <div className="sa-card sa-card--table sa-card--despatch-plan sa-animate sa-contain-auto" data-spotlight="sa-despatch-plan" style={{ marginBottom: "1.4rem", display: isSectionVisible("despatch") ? undefined : "none" }}>
         <div className="sa-card__head sa-despatch-head">
           <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'nowrap', gap: '8px', flexShrink: 0 }}>
             <span className="sa-card__title" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}>
@@ -7841,7 +7693,7 @@ export default function SalesAnalysis() {
       </div>
 
       {/* ── Monthly Analytics Section ── */}
-      <div className="sa-card sa-monthly-analytics-card" data-spotlight="sa-monthly-analytics">
+      <div className="sa-card sa-monthly-analytics-card sa-contain-auto" data-spotlight="sa-monthly-analytics" style={{ display: isSectionVisible("overview") ? undefined : "none" }}>
         <div className="sa-card__head" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
           <span className="sa-card__title" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
             <TrendingUp size={16} style={{ color: "#2d6de8" }} /> Monthly Performance & Bill Type Analytics
@@ -7918,7 +7770,7 @@ export default function SalesAnalysis() {
 
 
       {/* ── Two-Col: Ranking + Month Summary ── */}
-      <div className="sa-two-col">
+      <div className="sa-two-col sa-contain-auto" style={{ display: isSectionVisible("invoices") ? undefined : "none" }}>
 
         {/* Customer Ranking */}
         <div className="sa-card" data-spotlight="sa-customer-ranking" style={{ display: 'flex', flexDirection: 'column' }}>
@@ -8092,7 +7944,7 @@ export default function SalesAnalysis() {
       </div>
 
       {/* ── Customer & Part-Wise Sales Analysis Section ── */}
-      <div className="sa-card sa-card--cust-part sa-animate" data-spotlight="sa-customer-part-wise">
+      <div className="sa-card sa-card--cust-part sa-animate sa-contain-auto" data-spotlight="sa-customer-part-wise" style={{ display: isSectionVisible("despatch") ? undefined : "none" }}>
         {/* Card Header with Title, Inline Filters, and Actions in Same Row */}
         <div className="sa-card__head sa-custpart-head">
           <div className="sa-custpart-head-title-wrap">
@@ -8311,12 +8163,13 @@ export default function SalesAnalysis() {
             {/* Quick Part Search */}
             <div className="sa-custpart-search-wrap">
               <Search size={12} className="sa-custpart-search-icon" />
-              <input
+              <DebouncedSearchInput
                 type="text"
                 className="sa-custpart-search-input"
                 placeholder="Search part no / desc..."
                 value={custPartSearchQuery}
-                onChange={(e) => setCustPartSearchQuery(e.target.value)}
+                onChange={setCustPartSearchQuery}
+                debounceMs={200}
               />
               {custPartSearchQuery && (
                 <button
@@ -8864,7 +8717,7 @@ export default function SalesAnalysis() {
       </div>
 
       {/* ── Invoice Table ── */}
-      <div className="sa-card sa-card--table" data-spotlight="sa-invoice-details">
+      <div className="sa-card sa-card--table sa-contain-auto" data-spotlight="sa-invoice-details" style={{ display: isSectionVisible("invoices") ? undefined : "none" }}>
         <div className="sa-card__head sa-card__head--inv-details">
           <span className="sa-card__title" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
             <FileText size={16} style={{ color: "#2d6de8" }} /> Invoice Details — All Transactions
@@ -9421,7 +9274,7 @@ export default function SalesAnalysis() {
       {/* ═══════════════════════════════════════════════════════
           PART-WISE HISTORY & RATE INTELLIGENCE SECTION
       ═══════════════════════════════════════════════════════ */}
-      <div data-spotlight="sa-part-wise-history" className="sales-part-wise-history-section">
+      <div data-spotlight="sa-part-wise-history" className="sales-part-wise-history-section sa-contain-auto" style={{ display: isSectionVisible("despatch") ? undefined : "none" }}>
         <PartWiseHistorySection
           dateRange={appliedDateRange}
           selectedCustomers={appliedSelectedCustomers}
@@ -9429,7 +9282,7 @@ export default function SalesAnalysis() {
         />
       </div>
       {/* ── Projection Table ── */}
-      <div className="sa-card sa-card--table sa-proj-card" data-spotlight="sa-future-projections">
+      <div className="sa-card sa-card--table sa-proj-card sa-contain-auto" data-spotlight="sa-future-projections" style={{ display: isSectionVisible("traceability") ? undefined : "none" }}>
         <div className="sa-card__head">
           <span className="sa-card__title" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
             <TrendingUp size={16} style={{ color: "#8b5cf6" }} /> Future Projections & Order Book Status
@@ -9641,7 +9494,7 @@ export default function SalesAnalysis() {
       </div>
 
       {/* ── Plan vs Actual Section ── */}
-      <div className="sa-card sa-card--table sa-plan-actual-card sa-animate" data-spotlight="sa-plan-vs-actual">
+      <div className="sa-card sa-card--table sa-plan-actual-card sa-animate sa-contain-auto" data-spotlight="sa-plan-vs-actual" style={{ display: isSectionVisible("despatch") ? undefined : "none" }}>
         <div className="sa-card__head">
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Scale size={16} style={{ color: "#8b5cf6" }} />
@@ -9651,12 +9504,13 @@ export default function SalesAnalysis() {
             {/* Search Input */}
             <div className="sa-po-search-wrapper">
               <Search size={14} className="sa-po-search-icon" />
-              <input
+              <DebouncedSearchInput
                 type="text"
                 placeholder="Search Customer, Part..."
                 value={planSearchQuery}
-                onChange={(e) => setPlanSearchQuery(e.target.value)}
+                onChange={setPlanSearchQuery}
                 className="sa-po-search-input"
+                debounceMs={200}
               />
               {planSearchQuery && (
                 <button onClick={() => setPlanSearchQuery("")} className="sa-po-search-clear">
@@ -9809,7 +9663,7 @@ export default function SalesAnalysis() {
       </div>
 
       {/* ── Traceability Table ── */}
-      <div className="sa-card sa-card--table sa-trace-card sa-animate" data-spotlight="sa-traceability">
+      <div className="sa-card sa-card--table sa-trace-card sa-animate sa-contain-auto" data-spotlight="sa-traceability" style={{ display: isSectionVisible("traceability") ? undefined : "none" }}>
         <div className="sa-card__head sa-trace-head">
           <div className="sa-trace-head-title-wrap">
             <span className="sa-card__title" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
@@ -9996,14 +9850,15 @@ export default function SalesAnalysis() {
             </label>
             <div className="sa-trace-input-wrap">
               <Search size={13} className="sa-trace-input-lead-icon" />
-              <input
+              <DebouncedSearchInput
                 id="trace-filter-rc"
                 type="text"
                 className="sa-trace-filter-input"
                 placeholder="Search Routecard No..."
                 value={traceRcFilter}
-                onChange={(e) => setTraceRcFilter(e.target.value)}
+                onChange={setTraceRcFilter}
                 autoComplete="off"
+                debounceMs={200}
               />
               {traceRcFilter && (
                 <button
@@ -10026,14 +9881,15 @@ export default function SalesAnalysis() {
             </label>
             <div className="sa-trace-input-wrap">
               <Search size={13} className="sa-trace-input-lead-icon" />
-              <input
+              <DebouncedSearchInput
                 id="trace-filter-po"
                 type="text"
                 className="sa-trace-filter-input"
                 placeholder="Search GRN / PO..."
                 value={tracePoFilter}
-                onChange={(e) => setTracePoFilter(e.target.value)}
+                onChange={setTracePoFilter}
                 autoComplete="off"
+                debounceMs={200}
               />
               {tracePoFilter && (
                 <button
@@ -10056,14 +9912,15 @@ export default function SalesAnalysis() {
             </label>
             <div className="sa-trace-input-wrap">
               <Search size={13} className="sa-trace-input-lead-icon" />
-              <input
+              <DebouncedSearchInput
                 id="trace-filter-inv"
                 type="text"
                 className="sa-trace-filter-input"
                 placeholder="Search Invoice No..."
                 value={traceInvFilter}
-                onChange={(e) => setTraceInvFilter(e.target.value)}
+                onChange={setTraceInvFilter}
                 autoComplete="off"
+                debounceMs={200}
               />
               {traceInvFilter && (
                 <button
@@ -10331,7 +10188,7 @@ export default function SalesAnalysis() {
       </div>
 
       {/* ── PO Ledger Table ── */}
-      <div className="sa-card sa-card--table sa-po-card sa-animate" data-spotlight="sa-po-ledger">
+      <div className="sa-card sa-card--table sa-po-card sa-animate sa-contain-auto" data-spotlight="sa-po-ledger" style={{ display: isSectionVisible("traceability") ? undefined : "none" }}>
         <div className="sa-card__head">
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <FileText size={16} style={{ color: "#ec4899" }} />
@@ -10342,15 +10199,16 @@ export default function SalesAnalysis() {
             {/* Search Input */}
             <div className="sa-po-search-wrapper">
               <Search size={14} className="sa-po-search-icon" />
-              <input
+              <DebouncedSearchInput
                 type="text"
                 placeholder="Search PO No, Customer, Part..."
                 value={poSearchQuery}
-                onChange={(e) => {
-                  setPoSearchQuery(e.target.value);
+                onChange={(val) => {
+                  setPoSearchQuery(val);
                   setPoPage(1);
                 }}
                 className="sa-po-search-input"
+                debounceMs={200}
               />
               {poSearchQuery && (
                 <button onClick={() => { setPoSearchQuery(""); setPoPage(1); }} className="sa-po-search-clear">
@@ -10690,7 +10548,7 @@ export default function SalesAnalysis() {
       </div>
 
       {/* ── Two-Col: Top Products + Insights ── */}
-      <div className="sa-two-col">
+      <div className="sa-two-col sa-contain-auto" style={{ display: isSectionVisible("overview") ? undefined : "none" }}>
 
         {/* Top Products */}
         <div className="sa-card" data-spotlight="sa-top-products">

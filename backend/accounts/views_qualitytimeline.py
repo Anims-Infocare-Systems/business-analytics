@@ -15,6 +15,7 @@ from rest_framework.response import Response
 from rest_framework import status
 
 from .views import get_tenant_connection
+from .utils.cache import cache_analytics_response
 from .services_qualitytimeline import (
     get_invoice_list,
     search_invoices,
@@ -33,6 +34,7 @@ logger = logging.getLogger(__name__)
 @api_view(['GET'])
 @authentication_classes([])
 @permission_classes([AllowAny])
+@cache_analytics_response(timeout=300, key_prefix="qa_tl_invoices")
 def quality_timeline_invoices_view(request):
     """
     Returns recent invoices with customer name, parts count, and total value
@@ -75,6 +77,7 @@ def quality_timeline_invoices_view(request):
 @api_view(['GET'])
 @authentication_classes([])
 @permission_classes([AllowAny])
+@cache_analytics_response(timeout=300, key_prefix="qa_tl_search")
 def quality_timeline_search_view(request):
     """
     Search invoices across:
@@ -126,6 +129,7 @@ def quality_timeline_search_view(request):
 @api_view(['GET'])
 @authentication_classes([])
 @permission_classes([AllowAny])
+@cache_analytics_response(timeout=900, key_prefix="qa_tl_detail")
 def quality_timeline_detail_view(request, invoice_no: str):
     """
     Main End-to-End Quality Traceability Timeline API.
@@ -188,6 +192,7 @@ def quality_timeline_detail_view(request, invoice_no: str):
 @api_view(['GET'])
 @authentication_classes([])
 @permission_classes([AllowAny])
+@cache_analytics_response(timeout=900, key_prefix="qa_tl_stage")
 def quality_timeline_stage_view(request, invoice_no: str, stage_no: int):
     """
     Detailed Modal / Page data for an individual stage (1 to 6).

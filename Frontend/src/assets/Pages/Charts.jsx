@@ -1300,34 +1300,27 @@ function ChartCard({ def, onPreview, idx, dateRange }) {
         .then(data => { setMacLoading(false); if (data.machines && data.machines.length > 0) { setMachines(data.machines); } })
         .catch(err => { setMacLoading(false); console.error(err); });
     }
-    // ✅ Fetch vendors for vendor-1
-    if (def.id === "vendor-1") {
-      setVendorLoading(true);
-      fetch(api("/purchase/supplier-rating/?type=vendor"), { credentials: "include" })
-        .then(res => res.json())
-        .then(data => {
-          setVendorLoading(false);
-          const list = data.vendors || data.filterOptions?.vendors || [];
-          if (list.length > 0) setVendors(list);
-        })
-        .catch(err => { setVendorLoading(false); console.error(err); });
-    }
-    // ✅ Fetch suppliers for purchase-2
-    if (def.id === "purchase-2") {
-      setSupplierLoading(true);
-      fetch(api("/purchase/supplier-rating/?type=supplier"), { credentials: "include" })
-        .then(res => res.json())
-        .then(data => {
-          setSupplierLoading(false);
-          const list = data.vendors || data.filterOptions?.vendors || [];
-          if (list.length > 0) setSuppliers(list);
-        })
-        .catch(err => { setSupplierLoading(false); console.error(err); });
-    }
+    // vendor-1 / purchase-2: the name lists arrive with the chart payload
+    // (`data.vendors`), so no separate full-report fetch is needed here.
   }, [def.id]);
 
+  // Fetch only once the card is near the viewport. 16 cards firing at once
+  // used to queue behind each other on the single-threaded Passenger workers.
+  const cardRef = useRef(null);
+  const [inView, setInView] = useState(false);
   useEffect(() => {
-    if (!canvasRef.current) return;
+    if (inView) return;
+    const el = cardRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") { setInView(true); return; }
+    const io = new IntersectionObserver((entries) => {
+      if (entries.some(e => e.isIntersecting)) { setInView(true); io.disconnect(); }
+    }, { rootMargin: "300px 0px" });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [inView]);
+
+  useEffect(() => {
+    if (!canvasRef.current || !inView) return;
     if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; }
     
     // ── API charts ─────────
@@ -1384,8 +1377,12 @@ function ChartCard({ def, onPreview, idx, dateRange }) {
           if (ac.signal.aborted || !canvasRef.current) return;
           if (data.error) { setError(data.error); return; }
           if (data.fy) setFyLabel(data.fy);
-          if (data.vendors && data.vendors.length > 0) { setVendors(data.vendors); setVendorLoading(false); }
-          else if (data.filterOptions?.vendors && data.filterOptions.vendors.length > 0) { setVendors(data.filterOptions.vendors); setVendorLoading(false); }
+          const nameList = (data.vendors && data.vendors.length > 0) ? data.vendors : (data.filterOptions?.vendors || []);
+          if (def.id === "purchase-2") {
+            if (nameList.length > 0) setSuppliers(nameList);
+            setSupplierLoading(false);
+          } else if (nameList.length > 0) { setVendors(nameList); setVendorLoading(false); }
+          else if (def.id === "vendor-1") setVendorLoading(false);
           if (data.labels) {
             data.labels = mapLabelsWithYear(data.labels, data.fy);
           }
@@ -1666,7 +1663,7 @@ function ChartCard({ def, onPreview, idx, dateRange }) {
         options: getPremiumChartOptions(def.config.type, def.category, def.config.options)
       });
     }
-  }, [def, dateRange, selectedOpr, oprLoading, operators.length, selectedMac, macLoading, machines.length, selectedVendor, vendorLoading, vendors.length, selectedSupplier, supplierLoading, suppliers.length]);
+  }, [def, dateRange, inView, selectedOpr, oprLoading, operators.length, selectedMac, macLoading, machines.length, selectedVendor, selectedSupplier]);
 
   const handleDownload = () => {
     if (!canvasRef.current) return;
@@ -1696,6 +1693,7 @@ function ChartCard({ def, onPreview, idx, dateRange }) {
 
   return (
     <div
+      ref={cardRef}
       className="ch-card"
       data-chart-id={def.id}
       data-spotlight={chartSpotlightId}
@@ -2020,18 +2018,7 @@ function PreviewModal({ def, onClose, initialDateRange, initialOperator, initial
         .then(data => { setMacLoading(false); if (data.machines && data.machines.length > 0) { setMachines(data.machines); } })
         .catch(err => { setMacLoading(false); console.error(err); });
     }
-    if (def.id === "vendor-1" || def.id === "purchase-2") {
-      setVendorLoading(true);
-      const fetchType = def.id === "purchase-2" ? "supplier" : "vendor";
-      fetch(api(`/purchase/supplier-rating/?type=${fetchType}`), { credentials: "include" })
-        .then(res => res.json())
-        .then(data => {
-          setVendorLoading(false);
-          const list = data.vendors || data.filterOptions?.vendors || [];
-          if (list.length > 0) setVendors(list);
-        })
-        .catch(err => { setVendorLoading(false); console.error(err); });
-    }
+    // vendor-1 / purchase-2: name list is included in the chart payload below.
   }, [def.id]);
 
   const animatedClose = () => { setClosing(true); setTimeout(() => onClose(), 220); };

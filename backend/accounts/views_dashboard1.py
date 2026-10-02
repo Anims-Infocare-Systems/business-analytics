@@ -8,8 +8,7 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
 from .utils.cache import cache_analytics_response
-from .views import get_tenant_connection, month_key_from_db
-from .views_qualityanalysis import QUALITY_VALUE_BASE_CTE as _QV_BASE_CTE
+from .views import get_tenant_connection, month_key_from_db, table_exists
 
 
 def rupees_to_lakhs(amount):
@@ -86,15 +85,25 @@ EXCLUDED_SALES_BTYPES_SQL = """
     AND LOWER(LTRIM(RTRIM(ISNULL(btype, '')))) NOT LIKE '%insp%rej%'
 """
 
+BILL_ADDL_CHRG_JOIN_SQL = """
+    LEFT JOIN (
+        SELECT invno, SUM(ISNULL(addlchrgamt, 0)) AS tot_addl
+        FROM Bill_AddlChrgDet
+        WHERE ISNULL(deleted, 0) = 0
+        GROUP BY invno
+    ) a ON b.invno = a.invno
+"""
+
 SALES_ANALYSIS_BTYPE_SQL = f"""
     SELECT
-        ISNULL(btype, '') AS btype,
-        SUM(ISNULL(tamt, 0)) AS total_amount
-    FROM Bill_Mas
-    WHERE deleted = 0
+        ISNULL(b.btype, '') AS btype,
+        SUM(ISNULL(b.tamt, 0) + ISNULL(a.tot_addl, 0)) AS total_amount
+    FROM Bill_Mas b
+    {BILL_ADDL_CHRG_JOIN_SQL}
+    WHERE ISNULL(b.deleted, 0) = 0
       {EXCLUDED_SALES_BTYPES_SQL}
-      AND CAST(invdt AS DATE) BETWEEN ? AND ?
-    GROUP BY ISNULL(btype, '')
+      AND CAST(b.invdt AS DATE) BETWEEN ? AND ?
+    GROUP BY ISNULL(b.btype, '')
 """
 
 
@@ -148,12 +157,13 @@ def dashboard1_sales_kpi(request):
         
         # ── Get Month-wise Sales for Current FY (for sparkline & current value) ──
         cursor.execute(f"""
-            SELECT MONTH(invdt) AS mth, SUM(tamt) AS total 
-            FROM Bill_Mas 
-            WHERE ISNULL(deleted, 0) = 0
+            SELECT MONTH(b.invdt) AS mth, SUM(ISNULL(b.tamt, 0) + ISNULL(a.tot_addl, 0)) AS total 
+            FROM Bill_Mas b
+            {BILL_ADDL_CHRG_JOIN_SQL}
+            WHERE ISNULL(b.deleted, 0) = 0
             {EXCLUDED_SALES_BTYPES_SQL}
-            AND CAST(invdt AS DATE) BETWEEN ? AND ?
-            GROUP BY MONTH(invdt)
+            AND CAST(b.invdt AS DATE) BETWEEN ? AND ?
+            GROUP BY MONTH(b.invdt)
             ORDER BY mth
         """, (fy_start_date, fy_end_date))
         
@@ -164,11 +174,12 @@ def dashboard1_sales_kpi(request):
         prev_fy_end = datetime(fy_start_year, 3, 31)
         
         cursor.execute(f"""
-            SELECT SUM(tamt) AS total 
-            FROM Bill_Mas 
-            WHERE ISNULL(deleted, 0) = 0
+            SELECT SUM(ISNULL(b.tamt, 0) + ISNULL(a.tot_addl, 0)) AS total 
+            FROM Bill_Mas b
+            {BILL_ADDL_CHRG_JOIN_SQL}
+            WHERE ISNULL(b.deleted, 0) = 0
             {EXCLUDED_SALES_BTYPES_SQL}
-            AND CAST(invdt AS DATE) BETWEEN ? AND ?
+            AND CAST(b.invdt AS DATE) BETWEEN ? AND ?
         """, (prev_fy_start, prev_fy_end))
         
         prev_fy_row = cursor.fetchone()
@@ -182,11 +193,12 @@ def dashboard1_sales_kpi(request):
             current_month_end = datetime(selected_year, selected_month + 1, 1) - timedelta(days=1)
         
         cursor.execute(f"""
-            SELECT SUM(tamt) AS total 
-            FROM Bill_Mas 
-            WHERE ISNULL(deleted, 0) = 0
+            SELECT SUM(ISNULL(b.tamt, 0) + ISNULL(a.tot_addl, 0)) AS total 
+            FROM Bill_Mas b
+            {BILL_ADDL_CHRG_JOIN_SQL}
+            WHERE ISNULL(b.deleted, 0) = 0
             {EXCLUDED_SALES_BTYPES_SQL}
-            AND CAST(invdt AS DATE) BETWEEN ? AND ?
+            AND CAST(b.invdt AS DATE) BETWEEN ? AND ?
         """, (current_month_start, current_month_end))
         
         current_month_row = cursor.fetchone()
@@ -199,11 +211,12 @@ def dashboard1_sales_kpi(request):
         prev_prev_month_start = prev_prev_month_end.replace(day=1)
         
         cursor.execute(f"""
-            SELECT SUM(tamt) AS total 
-            FROM Bill_Mas 
-            WHERE ISNULL(deleted, 0) = 0
+            SELECT SUM(ISNULL(b.tamt, 0) + ISNULL(a.tot_addl, 0)) AS total 
+            FROM Bill_Mas b
+            {BILL_ADDL_CHRG_JOIN_SQL}
+            WHERE ISNULL(b.deleted, 0) = 0
             {EXCLUDED_SALES_BTYPES_SQL}
-            AND CAST(invdt AS DATE) BETWEEN ? AND ?
+            AND CAST(b.invdt AS DATE) BETWEEN ? AND ?
         """, (prev_month_start, prev_month_end))
         
         prev_month_row = cursor.fetchone()
@@ -497,58 +510,130 @@ def dashboard1_purchase_kpi(request):
     })
 
 
-def production_date_params(start_date, end_date):
-    return [start_date, end_date, start_date, end_date, start_date, end_date]
+def _build_production_value_query(cursor, group_by_month=False):
+    has_touch_cnc = table_exists(cursor, "CncProd_TouchDet") and table_exists(cursor, "CncProd_TouchMas")
+    has_touch_conv = table_exists(cursor, "ConvProd_TouchDet") and table_exists(cursor, "ConvProd_TouchMas")
+    has_touch_rod = table_exists(cursor, "ConvRodProd_TouchDet") and table_exists(cursor, "ConvRodProd_TouchMas")
 
+    t_cnc_val = """
+        UNION ALL
+        SELECT
+            CTM.macno,
+            CTM.proddate AS entrydate,
+            CASE WHEN CTD.runto < CTD.runfrom THEN DATEDIFF(SECOND, CTD.runfrom, DATEADD(DAY, 1, CTD.runto)) ELSE DATEDIFF(SECOND, CTD.runfrom, CTD.runto) END AS RunTimeSecs,
+            CASE WHEN CTD.idlTime IS NOT NULL AND DATEDIFF(SECOND, 0, CTD.idlTime) > 0 THEN DATEDIFF(SECOND, 0, CTD.idlTime) ELSE 0 END AS IdleTimeSecs
+        FROM CncProd_TouchDet CTD
+        INNER JOIN CncProd_TouchMas CTM ON CTD.TchEntryNo = CTM.TchEntryNo
+        WHERE CTM.macno IS NOT NULL 
+          AND ISNULL(CTM.deleted, 0) = 0 
+          AND ISNULL(CTD.deleted, 0) = 0 
+          AND ISNULL(CTD.ProdTaken, 0) = 0
+          AND CAST(CTM.proddate AS DATE) BETWEEN ? AND ?
+    """ if has_touch_cnc else ""
 
-PRODUCTION_COMBINED_DATA_SQL = """
-WITH CombinedData AS (
-    SELECT P.proddate AS EntryDate,
-        (((CASE WHEN P.runto >= P.runfrom THEN DATEDIFF(SECOND, P.runfrom, P.runto)
-               ELSE DATEDIFF(SECOND, P.runfrom, DATEADD(DAY, 1, P.runto)) END
-          - ISNULL(CASE WHEN SQL_VARIANT_PROPERTY(P.idlTime, 'BaseType') IN ('datetime','time') THEN DATEDIFF(SECOND, 0, P.idlTime) ELSE CAST(ISNULL(P.idlTime, 0) AS INT) END, 0)) / 60.0)
-         * (ISNULL(M.RatePerHr, 0) / 60.0)) AS ProductionValue
-    FROM ProductionEntry P
-    LEFT JOIN MacMaster M ON P.macno = M.macno
-    WHERE P.deleted = 0 AND CAST(P.proddate AS DATE) BETWEEN ? AND ?
-    UNION ALL
-    SELECT C.entrydate AS EntryDate,
-        (((CASE WHEN C.endtime >= C.starttime THEN DATEDIFF(SECOND, C.starttime, C.endtime)
-               ELSE DATEDIFF(SECOND, C.starttime, DATEADD(DAY, 1, C.endtime)) END
-          - ISNULL(DATEDIFF(SECOND, 0, C.IdleTime), 0)) / 60.0)
-         * (ISNULL(M.RatePerHr, 0) / 60.0)) AS ProductionValue
-    FROM ConvProductionEntry C
-    LEFT JOIN MacMaster M ON C.macno = M.macno
-    WHERE C.deleted = 0 AND CAST(C.entrydate AS DATE) BETWEEN ? AND ?
-    UNION ALL
-    SELECT R.entrydate AS EntryDate,
-        (((CASE WHEN R.endtime >= R.starttime THEN DATEDIFF(SECOND, R.starttime, R.endtime)
-               ELSE DATEDIFF(SECOND, R.starttime, DATEADD(DAY, 1, R.endtime)) END
-          - ISNULL(DATEDIFF(SECOND, 0, R.IdleTime), 0)) / 60.0)
-         * (ISNULL(M.RatePerHr, 0) / 60.0)) AS ProductionValue
-    FROM ConvProductionEntryRod R
-    LEFT JOIN MacMaster M ON R.macno = M.macno
-    WHERE R.deleted = 0 AND CAST(R.entrydate AS DATE) BETWEEN ? AND ?
-)
-"""
+    t_conv_val = """
+        UNION ALL
+        SELECT
+            VTM.macno,
+            VTM.proddate AS entrydate,
+            CASE WHEN VTD.runto >= VTD.runfrom THEN DATEDIFF(SECOND, VTD.runfrom, VTD.runto) ELSE DATEDIFF(SECOND, VTD.runfrom, DATEADD(DAY, 1, VTD.runto)) END AS RunTimeSecs,
+            DATEDIFF(SECOND, 0, ISNULL(VTD.idlTime, '1900-01-01 00:00:00')) AS IdleTimeSecs
+        FROM ConvProd_TouchDet VTD
+        INNER JOIN ConvProd_TouchMas VTM ON VTD.TchEntryNo = VTM.TchEntryNo
+        WHERE VTM.macno IS NOT NULL 
+          AND ISNULL(VTM.deleted, 0) = 0 
+          AND ISNULL(VTD.deleted, 0) = 0 
+          AND ISNULL(VTD.ProdTaken, 0) = 0
+          AND CAST(VTM.proddate AS DATE) BETWEEN ? AND ?
+    """ if has_touch_conv else ""
 
-PRODUCTION_MONTHWISE_SQL = PRODUCTION_COMBINED_DATA_SQL + """
-SELECT MONTH(EntryDate) AS month_num, SUM(ProductionValue) AS total_amount
-FROM CombinedData
-GROUP BY MONTH(EntryDate)
-ORDER BY month_num
-"""
+    t_rod_val = """
+        UNION ALL
+        SELECT
+            RTM.macno,
+            RTM.proddate AS entrydate,
+            CASE WHEN RTD.runto >= RTD.runfrom THEN DATEDIFF(SECOND, RTD.runfrom, RTD.runto) ELSE DATEDIFF(SECOND, RTD.runfrom, DATEADD(DAY, 1, RTD.runto)) END AS RunTimeSecs,
+            DATEDIFF(SECOND, 0, ISNULL(RTD.idlTime, '1900-01-01 00:00:00')) AS IdleTimeSecs
+        FROM ConvRodProd_TouchDet RTD
+        INNER JOIN ConvRodProd_TouchMas RTM ON RTD.TchEntryNo = RTM.TchEntryNo
+        WHERE RTM.macno IS NOT NULL 
+          AND ISNULL(RTM.deleted, 0) = 0 
+          AND ISNULL(RTD.deleted, 0) = 0 
+          AND ISNULL(RTD.ProdTaken, 0) = 0
+          AND CAST(RTM.proddate AS DATE) BETWEEN ? AND ?
+    """ if has_touch_rod else ""
 
-PRODUCTION_TOTAL_SQL = PRODUCTION_COMBINED_DATA_SQL + """
-SELECT SUM(ProductionValue) AS total_amount
-FROM CombinedData
-"""
+    param_count = 3 + (1 if has_touch_cnc else 0) + (1 if has_touch_conv else 0) + (1 if has_touch_rod else 0)
+
+    if group_by_month:
+        select_clause = "SELECT MONTH(U.entrydate) AS month_num, SUM((CASE WHEN (U.RunTimeSecs - U.IdleTimeSecs) > 0 THEN (U.RunTimeSecs - U.IdleTimeSecs) ELSE 0 END) / 3600.0 * ISNULL(M.RatePerHr, 0)) AS total_amount"
+        group_clause = "GROUP BY MONTH(U.entrydate) ORDER BY month_num"
+    else:
+        select_clause = "SELECT SUM((CASE WHEN (U.RunTimeSecs - U.IdleTimeSecs) > 0 THEN (U.RunTimeSecs - U.IdleTimeSecs) ELSE 0 END) / 3600.0 * ISNULL(M.RatePerHr, 0)) AS total_amount"
+        group_clause = ""
+
+    sql = f"""
+    WITH UnifiedProduction AS (
+        SELECT 
+            PE.macno, 
+            PE.proddate AS entrydate, 
+            CASE 
+                WHEN PE.runto >= PE.runfrom THEN DATEDIFF(SECOND, PE.runfrom, PE.runto) 
+                ELSE DATEDIFF(SECOND, PE.runfrom, DATEADD(DAY, 1, PE.runto)) 
+            END AS RunTimeSecs,
+            CASE 
+                WHEN PE.idlTime IS NOT NULL AND DATEDIFF(SECOND, 0, PE.idlTime) > 0 THEN DATEDIFF(SECOND, 0, PE.idlTime) 
+                ELSE ISNULL(PE.accidletimesecs, 0) + ISNULL(PE.nonaccidletimesecs, 0) 
+            END AS IdleTimeSecs
+        FROM ProductionEntry PE 
+        WHERE PE.macno IS NOT NULL AND ISNULL(PE.deleted, 0) = 0
+          AND CAST(PE.proddate AS DATE) BETWEEN ? AND ?
+
+        UNION ALL 
+
+        SELECT 
+            CPE.macno, 
+            CPE.entrydate, 
+            CASE 
+                WHEN CPE.endtime >= CPE.starttime THEN DATEDIFF(SECOND, CPE.starttime, CPE.endtime) 
+                ELSE DATEDIFF(SECOND, CPE.starttime, DATEADD(DAY, 1, CPE.endtime)) 
+            END AS RunTimeSecs,
+            DATEDIFF(SECOND, 0, ISNULL(CPE.IdleTime, '1900-01-01 00:00:00')) AS IdleTimeSecs
+        FROM ConvProductionEntry CPE 
+        WHERE CPE.macno IS NOT NULL AND ISNULL(CPE.deleted, 0) = 0
+          AND CAST(CPE.entrydate AS DATE) BETWEEN ? AND ?
+
+        UNION ALL 
+
+        SELECT 
+            CPR.macno, 
+            CPR.entrydate, 
+            CASE 
+                WHEN CPR.endtime >= CPR.starttime THEN DATEDIFF(SECOND, CPR.starttime, CPR.endtime) 
+                ELSE DATEDIFF(SECOND, CPR.starttime, DATEADD(DAY, 1, CPR.endtime)) 
+            END AS RunTimeSecs,
+            DATEDIFF(SECOND, 0, ISNULL(CPR.IdleTime, '1900-01-01 00:00:00')) AS IdleTimeSecs
+        FROM ConvProductionEntryRod CPR 
+        WHERE CPR.macno IS NOT NULL AND ISNULL(CPR.deleted, 0) = 0
+          AND CAST(CPR.entrydate AS DATE) BETWEEN ? AND ?
+        {t_cnc_val}
+        {t_conv_val}
+        {t_rod_val}
+    )
+    {select_clause}
+    FROM UnifiedProduction U
+    LEFT JOIN MacMaster M ON M.macno = U.macno AND ISNULL(M.deleted, 0) = 0
+    {group_clause}
+    """
+    return sql, param_count
 
 
 def fetch_production_month_totals(cursor, start_date, end_date):
     month_order = [4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3]
     totals = {m: 0.0 for m in month_order}
-    cursor.execute(PRODUCTION_MONTHWISE_SQL, production_date_params(start_date, end_date))
+    sql, param_count = _build_production_value_query(cursor, group_by_month=True)
+    params = [start_date, end_date] * param_count
+    cursor.execute(sql, params)
     for month_num, amount in cursor.fetchall():
         mk = month_key_from_db(month_num)
         if mk in totals:
@@ -557,7 +642,9 @@ def fetch_production_month_totals(cursor, start_date, end_date):
 
 
 def fetch_production_period_total(cursor, start_date, end_date):
-    cursor.execute(PRODUCTION_TOTAL_SQL, production_date_params(start_date, end_date))
+    sql, param_count = _build_production_value_query(cursor, group_by_month=False)
+    params = [start_date, end_date] * param_count
+    cursor.execute(sql, params)
     row = cursor.fetchone()
     return float(row[0] or 0) if row else 0.0
 
@@ -680,29 +767,493 @@ def dashboard1_production_kpi(request):
 #      Material Cost = (RM Rate × RM Consumption) × RejectionQty
 #      Process Value = Cumulative Process Rate × RejectionQty (or BaseRate × RejectionQty fallback)
 
-def _get_quality_value_sqls():
-    cte = _QV_BASE_CTE.format(injob_filter="", final_filter="", inter_filter="")
-    monthwise_sql = cte + """
+REJECTION_VALUE_BASE_CTE = """
+WITH CTE_Rejection AS
+(
+    -- ============================================================
+    -- 1. IN-PROCESS JOB REJECTIONS
+    -- ============================================================
+    SELECT
+        CONVERT(DATE, IM.inspdate) AS RejDate,
+        D.PartNo,
+        D.Process,
+        CAST(
+            ISNULL(D.matrej, 0) + ISNULL(D.macrej, 0)
+            AS FLOAT
+        ) AS RejectionQty
+    FROM InJob_Det D
+    INNER JOIN InJob_Mas IM
+        ON D.inspno = IM.inspno
+    WHERE ISNULL(D.deleted, 0) = 0
+      AND ISNULL(IM.deleted, 0) = 0
+      AND (
+            ISNULL(D.matrej, 0) > 0
+            OR ISNULL(D.macrej, 0) > 0
+          )
+      AND ISNULL(IM.dtype, '') <> 'Without Process'
+      AND CAST(IM.inspdate AS DATE)
+            BETWEEN ? AND ?
+
+    UNION ALL
+
+    -- ============================================================
+    -- 2. FINAL INSPECTION REJECTIONS
+    -- ============================================================
+    SELECT
+        CONVERT(DATE, FM.finspdate) AS RejDate,
+        F.PartNo,
+        F.Process,
+        CAST(
+            ISNULL(F.qty, 0)
+            AS FLOAT
+        ) AS RejectionQty
+    FROM FinalInspRejectionEntryOrg F
+    INNER JOIN FinalInspectionEntry FM
+        ON F.finspno = FM.finspno
+    WHERE ISNULL(F.deleted, 0) = 0
+      AND ISNULL(FM.deleted, 0) = 0
+      AND ISNULL(F.qty, 0) > 0
+      AND CAST(FM.finspdate AS DATE)
+            BETWEEN ? AND ?
+
+    UNION ALL
+
+    -- ============================================================
+    -- 3. INTERMEDIATE INSPECTION REJECTIONS
+    -- ============================================================
+    SELECT
+        CONVERT(DATE, IIM.inter_inspdate) AS RejDate,
+        IR.PartNo,
+        IR.Process,
+        CAST(
+            ISNULL(IR.qty, 0)
+            AS FLOAT
+        ) AS RejectionQty
+    FROM Insp_RejectionEntry IR
+    INNER JOIN InterInspectionEntry IIM
+        ON IR.inter_inspno = IIM.inter_inspno
+    WHERE ISNULL(IR.deleted, 0) = 0
+      AND ISNULL(IIM.deleted, 0) = 0
+      AND ISNULL(IR.qty, 0) > 0
+      AND CAST(IIM.inter_inspdate AS DATE)
+            BETWEEN ? AND ?
+),
+
+-- ================================================================
+-- PART TYPE + RAW MATERIAL INFORMATION
+-- ================================================================
+CTE_PartType AS
+(
+    SELECT
+        R.*,
+
+        CASE
+            WHEN WM.PartNo IS NOT NULL
+                THEN 'With Material'
+
+            WHEN CJ.PartNo IS NOT NULL
+                THEN 'Customer Job Raw Material'
+
+            WHEN PM.PartNo IS NOT NULL
+                THEN 'Customer Product'
+
+            ELSE 'Unknown'
+        END AS PartType,
+
+        COALESCE(
+            WM.RmName,
+            CJ.rmname
+        ) AS RmName,
+
+        COALESCE(
+            WM.Rmuom,
+            CJ.rmuom
+        ) AS Rmuom,
+
+        COALESCE(
+            CAST(WM.WtQty AS FLOAT),
+            CAST(CJ.WtQty AS FLOAT),
+            0.0
+        ) AS WtQty,
+
+        COALESCE(
+            NULLIF(CAST(WM.TotMmLength AS FLOAT), 0),
+            CAST(WM.MmLength AS FLOAT),
+            NULLIF(CAST(CJ.TotMmLength AS FLOAT), 0),
+            CAST(CJ.mmlength AS FLOAT),
+            0.0
+        ) AS TotMmLength
+
+    FROM CTE_Rejection R
+
+    OUTER APPLY
+    (
+        SELECT TOP 1
+            W.PartNo,
+            W.RmName,
+            W.Rmuom,
+            W.WtQty,
+            W.TotMmLength,
+            W.MmLength
+        FROM WithMatMas W
+        WHERE W.PartNo = R.PartNo
+          AND ISNULL(W.deleted, 0) = 0
+        ORDER BY W.PartNo
+    ) WM
+
+    OUTER APPLY
+    (
+        SELECT TOP 1
+            CJ2.PartNo,
+            CJ2.rmname,
+            CJ2.rmuom,
+            CJ2.WtQty,
+            CJ2.TotMmLength,
+            CJ2.mmlength
+        FROM CustJobRawMat CJ2
+        WHERE CJ2.PartNo = R.PartNo
+          AND ISNULL(CJ2.deleted, 0) = 0
+        ORDER BY CJ2.PartNo
+    ) CJ
+
+    OUTER APPLY
+    (
+        SELECT TOP 1
+            PM2.PartNo
+        FROM ProductMast PM2
+        WHERE PM2.PartNo = R.PartNo
+          AND ISNULL(PM2.deleted, 0) = 0
+        ORDER BY PM2.PartNo
+    ) PM
+),
+
+-- ================================================================
+-- FIND REJECTION PROCESS SEQUENCE
+-- ================================================================
+CTE_RejSeq AS
+(
+    SELECT
+        P.*,
+        PSD.seq AS RejSeq
+    FROM CTE_PartType P
+
+    OUTER APPLY
+    (
+        SELECT TOP 1
+            PSD2.seq
+        FROM ProcessSeqDet PSD2
+        WHERE PSD2.partno = P.PartNo
+          AND PSD2.process = P.Process
+          AND ISNULL(PSD2.deleted, 0) = 0
+        ORDER BY PSD2.seq DESC
+    ) PSD
+),
+
+-- ================================================================
+-- PROCESS RATE + PART BASE RATE
+-- ================================================================
+CTE_ProcessCalc AS
+(
+    SELECT
+        R.*,
+
+        -- --------------------------------------------------------
+        -- Cumulative Process Rate
+        -- --------------------------------------------------------
+        (
+            SELECT
+                SUM(
+                    CAST(
+                        ISNULL(CPD.Rate, 0)
+                        AS FLOAT
+                    )
+                )
+            FROM ProcessSeqDet PSD
+
+            OUTER APPLY
+            (
+                SELECT TOP 1
+                    CPD2.Rate
+                FROM Commer_ProcDet CPD2
+                WHERE CPD2.PartNo = PSD.partno
+                  AND CPD2.Process = PSD.process
+                  AND ISNULL(CPD2.deleted, 0) = 0
+                ORDER BY CPD2.PartNo
+            ) CPD
+
+            WHERE PSD.partno = R.PartNo
+              AND ISNULL(PSD.deleted, 0) = 0
+              AND PSD.seq <= R.RejSeq
+        ) AS ProcessRate,
+
+        -- --------------------------------------------------------
+        -- Number of processes
+        -- --------------------------------------------------------
+        (
+            SELECT
+                COUNT(*)
+            FROM ProcessSeqDet PSD
+            WHERE PSD.partno = R.PartNo
+              AND ISNULL(PSD.deleted, 0) = 0
+              AND PSD.seq <= R.RejSeq
+        ) AS TotalProcCount,
+
+        -- --------------------------------------------------------
+        -- Number of processes having valid rates
+        -- --------------------------------------------------------
+        (
+            SELECT
+                COUNT(*)
+            FROM ProcessSeqDet PSD
+
+            CROSS APPLY
+            (
+                SELECT TOP 1
+                    CPD3.Rate
+                FROM Commer_ProcDet CPD3
+                WHERE CPD3.PartNo = PSD.partno
+                  AND CPD3.Process = PSD.process
+                  AND ISNULL(CPD3.deleted, 0) = 0
+                  AND ISNULL(CPD3.Rate, 0) > 0
+                ORDER BY CPD3.PartNo
+            ) CPD
+
+            WHERE PSD.partno = R.PartNo
+              AND ISNULL(PSD.deleted, 0) = 0
+              AND PSD.seq <= R.RejSeq
+        ) AS ValidProcRateCount,
+
+        -- --------------------------------------------------------
+        -- PART BASE RATE
+        -- --------------------------------------------------------
+        (
+            SELECT TOP 1
+                CAST(CBD.BaseRate AS FLOAT)
+            FROM Commer_BaseRateDet CBD
+            WHERE CBD.PartNo = R.PartNo
+              AND ISNULL(CBD.deleted, 0) = 0
+              AND ISNULL(CBD.BaseRate, 0) > 0
+            ORDER BY CBD.BReffdt DESC
+        ) AS PartBaseRate
+
+    FROM CTE_RejSeq R
+),
+
+-- ================================================================
+-- RAW MATERIAL BASE RATE
+-- ================================================================
+CTE_RMRate AS
+(
+    SELECT
+        C.*,
+
+        -- --------------------------------------------------------
+        -- RAW MATERIAL BASE RATE
+        -- --------------------------------------------------------
+        (
+            SELECT TOP 1
+                CAST(CBD.BaseRate AS FLOAT)
+            FROM Commer_BaseRateDet CBD
+
+            LEFT JOIN Commer_Mas CM
+                ON CBD.cmno = CM.cmno
+
+            WHERE CBD.PartNo = C.RmName
+              AND ISNULL(CBD.deleted, 0) = 0
+              AND ISNULL(CBD.BaseRate, 0) > 0
+              AND (
+                    CM.deleted IS NULL
+                    OR CM.deleted = 0
+                  )
+
+            ORDER BY CBD.BReffdt DESC
+        ) AS RMRate
+
+    FROM CTE_ProcessCalc C
+),
+
+-- ================================================================
+-- FINAL VALUE CALCULATION
+-- ================================================================
+CTE_QualityValue AS
+(
+    SELECT
+
+        RejDate,
+        PartNo,
+        Process,
+        RejectionQty,
+        PartType,
+        RmName,
+        Rmuom,
+        WtQty,
+        TotMmLength,
+
+        ProcessRate,
+        TotalProcCount,
+        ValidProcRateCount,
+
+        PartBaseRate,
+        RMRate,
+
+        -- ========================================================
+        -- 1. RAW MATERIAL CONSUMPTION VALUE
+        -- ========================================================
+        CASE
+
+            WHEN PartType = 'With Material'
+            THEN
+                CASE
+
+                    WHEN Rmuom = 'NOS'
+                    THEN
+                        ISNULL(RMRate, 0)
+                        * RejectionQty
+
+                    WHEN Rmuom = 'KGS'
+                    THEN
+                        ISNULL(WtQty, 0)
+                        * ISNULL(RMRate, 0)
+                        * RejectionQty
+
+                    WHEN Rmuom = 'MTRS'
+                    THEN
+                        (
+                            ISNULL(TotMmLength, 0)
+                            / 1000.0
+                        )
+                        * ISNULL(RMRate, 0)
+                        * RejectionQty
+
+                    ELSE 0
+
+                END
+
+            WHEN PartType = 'Customer Job Raw Material'
+            THEN
+                CASE
+
+                    WHEN Rmuom = 'NOS'
+                    THEN
+                        ISNULL(RMRate, 0)
+                        * RejectionQty
+
+                    WHEN Rmuom = 'KGS'
+                    THEN
+                        ISNULL(WtQty, 0)
+                        * ISNULL(RMRate, 0)
+                        * RejectionQty
+
+                    WHEN Rmuom = 'MTRS'
+                    THEN
+                        (
+                            ISNULL(TotMmLength, 0)
+                            / 1000.0
+                        )
+                        * ISNULL(RMRate, 0)
+                        * RejectionQty
+
+                    ELSE 0
+
+                END
+
+            ELSE 0
+
+        END AS MaterialValue,
+
+        -- ========================================================
+        -- 2. PROCESS / PART VALUE
+        --
+        -- PRIORITY:
+        -- A. Valid cumulative process rate
+        -- B. Part BaseRate
+        -- C. Raw Material BaseRate
+        -- D. Zero
+        -- ========================================================
+        CASE
+
+            -- A. Process rate available
+            WHEN TotalProcCount > 0
+             AND TotalProcCount = ValidProcRateCount
+             AND ISNULL(ProcessRate, 0) > 0
+            THEN
+                ProcessRate * RejectionQty
+
+            -- B. Part BaseRate available
+            WHEN ISNULL(PartBaseRate, 0) > 0
+            THEN
+                PartBaseRate * RejectionQty
+
+            -- C. Part BaseRate NOT available
+            --    Use Raw Material BaseRate
+            WHEN ISNULL(RMRate, 0) > 0
+            THEN
+                RMRate * RejectionQty
+
+            -- D. Nothing available
+            ELSE 0
+
+        END AS ProcessValue
+
+    FROM CTE_RMRate
+),
+
+-- ================================================================
+-- FINAL VALUE
+-- ================================================================
+CTE_Final AS
+(
+    SELECT
+        *,
+        
+        ISNULL(MaterialValue, 0)
+        +
+        ISNULL(ProcessValue, 0)
+        AS TotalQualityValue
+
+    FROM CTE_QualityValue
+)
+"""
+
+REJECTION_VALUE_MONTHWISE_SQL = REJECTION_VALUE_BASE_CTE + """
 SELECT
     MONTH(RejDate) AS month_num,
-    SUM(TotalQualityValue) AS total_amount
-FROM CTE_QualityValue
-WHERE CAST(RejDate AS DATE) BETWEEN ? AND ?
+    ROUND(SUM(TotalQualityValue), 2) AS total_amount
+FROM CTE_Final
 GROUP BY MONTH(RejDate)
 ORDER BY month_num
 """
-    total_sql = cte + """
-SELECT SUM(TotalQualityValue) AS total_amount
-FROM CTE_QualityValue
-WHERE CAST(RejDate AS DATE) BETWEEN ? AND ?
+
+REJECTION_VALUE_TOTAL_SQL = REJECTION_VALUE_BASE_CTE + """
+SELECT
+    ROUND(SUM(TotalQualityValue), 2) AS total_amount
+FROM CTE_Final
 """
-    return monthwise_sql, total_sql
+
+
+def fetch_rejection_month_totals(cursor, start_date, end_date):
+    month_order = [4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3]
+    totals = {m: 0.0 for m in month_order}
+    params = [start_date, end_date] * 3
+    cursor.execute(REJECTION_VALUE_MONTHWISE_SQL, params)
+    for month_num, amount in cursor.fetchall():
+        mk = month_key_from_db(month_num)
+        if mk in totals:
+            totals[mk] = float(amount or 0)
+    return totals
+
+
+def fetch_rejection_period_total(cursor, start_date, end_date):
+    params = [start_date, end_date] * 3
+    cursor.execute(REJECTION_VALUE_TOTAL_SQL, params)
+    row = cursor.fetchone()
+    return float(row[0] or 0) if row else 0.0
 
 
 @api_view(["GET"])
 @cache_analytics_response(timeout=300, key_prefix="dash1_qv")
 def dashboard1_quality_value_kpi(request):
-    """Dashboard1 - Quality Value KPI using rejection cost logic."""
+    """Dashboard1 - Rejection Value KPI using exact logic requested."""
     try:
         conn, tenant = get_tenant_connection(request)
     except ValueError as e:
@@ -723,11 +1274,10 @@ def dashboard1_quality_value_kpi(request):
     prev_month_start = prev_month_end.replace(day=1)
 
     try:
-        monthwise_sql, total_sql = _get_quality_value_sqls()
         cursor = conn.cursor()
-        month_totals = fetch_month_totals(cursor, monthwise_sql, fy_start_date, fy_end_date)
-        current_month_total = fetch_period_total(cursor, total_sql, current_month_start, current_month_end)
-        prev_month_total = fetch_period_total(cursor, total_sql, prev_month_start, prev_month_end)
+        month_totals = fetch_rejection_month_totals(cursor, fy_start_date, fy_end_date)
+        current_month_total = fetch_rejection_period_total(cursor, current_month_start, current_month_end)
+        prev_month_total = fetch_rejection_period_total(cursor, prev_month_start, prev_month_end)
         cursor.close()
         conn.close()
     except Exception as e:
@@ -747,20 +1297,31 @@ def dashboard1_quality_value_kpi(request):
 
 
 SALES_PROJECTIONS_SALES_SQL = f"""
-    SELECT SUM(tamt) AS total
-    FROM Bill_Mas
-    WHERE deleted = 0
+    SELECT SUM(ISNULL(b.tamt, 0) + ISNULL(a.tot_addl, 0)) AS total
+    FROM Bill_Mas b
+    {BILL_ADDL_CHRG_JOIN_SQL}
+    WHERE ISNULL(b.deleted, 0) = 0
       {EXCLUDED_SALES_BTYPES_SQL}
-      AND CAST(invdt AS DATE) BETWEEN ? AND ?
+      AND CAST(b.invdt AS DATE) BETWEEN ? AND ?
 """
 
-SALES_PROJECTIONS_PO_SQL = """
+SALES_PROJECTIONS_PO_CURR_SQL = """
     SELECT SUM(ISNULL(PD.amt, 0) * CASE WHEN ISNULL(PD.CurrRate, 0) = 0 THEN 1 ELSE PD.CurrRate END) AS total
-    FROM In_PoMas PM
-    INNER JOIN In_PoDet PD ON PM.PONO = PD.PONO
-    WHERE ISNULL(PM.deleted, 0) = 0
-      AND ISNULL(PD.deleted, 0) = 0
-      AND CAST(PM.podt AS DATE) BETWEEN ? AND ?
+    FROM In_PoMas AS PM
+    INNER JOIN In_PoDet AS PD ON PM.pono = PD.pono
+    WHERE (ISNULL(PM.deleted, 0) = 0)
+      AND (ISNULL(PD.deleted, 0) = 0)
+      AND (CAST(PM.podt AS DATE) BETWEEN ? AND ?)
+"""
+
+SALES_PROJECTIONS_PO_BASE_SQL = """
+    SELECT SUM(ISNULL(amt, 0)) AS Value
+    FROM In_PoDet
+    WHERE (Apono IN
+            (SELECT DISTINCT Apono
+             FROM In_PoMas
+             WHERE (CAST(podt AS DATE) BETWEEN ? AND ?) AND (ISNULL(deleted, 0) = 0)))
+      AND (ISNULL(deleted, 0) = 0)
 """
 
 PURCHASE_PROJECTIONS_SQL = """
@@ -831,8 +1392,20 @@ def dashboard1_sales_projections(request):
 
     try:
         cursor = conn.cursor()
+
+        is_br_currency = 0
+        try:
+            cursor.execute("SELECT TOP 1 ISNULL(IsBRCurrency, 0) FROM CompanySetting")
+            cs_row = cursor.fetchone()
+            if cs_row and cs_row[0] is not None:
+                is_br_currency = int(cs_row[0])
+        except Exception:
+            is_br_currency = 0
+
+        po_sql = SALES_PROJECTIONS_PO_CURR_SQL if is_br_currency == 1 else SALES_PROJECTIONS_PO_BASE_SQL
+
         sales_total = fetch_period_total(cursor, SALES_PROJECTIONS_SALES_SQL, start_date, end_date)
-        po_total = fetch_period_total(cursor, SALES_PROJECTIONS_PO_SQL, start_date, end_date)
+        po_total = fetch_period_total(cursor, po_sql, start_date, end_date)
         cursor.close()
         conn.close()
     except Exception as e:
@@ -895,55 +1468,121 @@ def dashboard1_purchase_projections(request):
     })
 
 
-OA_EFFICIENCY_WEEKLY_SQL = """
-    SELECT
-        CASE
-            WHEN DAY(dt) BETWEEN 1 AND 7 THEN 1
-            WHEN DAY(dt) BETWEEN 8 AND 14 THEN 2
-            WHEN DAY(dt) BETWEEN 15 AND 21 THEN 3
-            WHEN DAY(dt) BETWEEN 22 AND 28 THEN 4
-            ELSE 5
-        END AS WeekNum,
-        AVG(CAST(OAEFF AS FLOAT)) AS Avg_OAEFF
-    FROM (
-        SELECT CAST(proddate AS DATE) AS dt, OAEFF
+def _build_oa_efficiency_queries(cursor):
+    """
+    Builds SQL queries for weekly OEE and monthly overall OEE matching Production Analysis logic.
+    Formula:
+      - ProductionEntry: CASE WHEN OAEFF IS NOT NULL AND QFNEW IS NOT NULL THEN (OAEFF * QFNEW) ELSE COALESCE(OEENEW, OAEFF, 0) END
+      - ConvProductionEntry: COALESCE(OAEFF, OEENEW, 0)
+      - ConvProductionEntryRod: COALESCE(OAEFF, OEENEW, 0)
+      - Touch tables (ProdTaken = 0, deleted = 0):
+          - CncProd_TouchDet: CASE WHEN CTD.OAEFF IS NOT NULL AND CTD.QFNEW IS NOT NULL THEN (CTD.OAEFF * CTD.QFNEW) ELSE COALESCE(CTD.OEENEW, CTD.OAEFF, 0) END
+          - ConvProd_TouchDet: COALESCE(VTD.OAEFF, VTD.OEENEW, 0)
+          - ConvRodProd_TouchDet: COALESCE(RTD.OAEFF, RTD.OEENEW, 0)
+    """
+    has_cnc = table_exists(cursor, "CncProd_TouchDet") and table_exists(cursor, "CncProd_TouchMas")
+    has_conv = table_exists(cursor, "ConvProd_TouchDet") and table_exists(cursor, "ConvProd_TouchMas")
+    has_rod = table_exists(cursor, "ConvRodProd_TouchDet") and table_exists(cursor, "ConvRodProd_TouchMas")
+
+    t_cnc = """
+        UNION ALL
+        SELECT CAST(CTM.proddate AS DATE) AS dt,
+               CASE WHEN CTD.OAEFF IS NOT NULL AND CTD.QFNEW IS NOT NULL THEN (CTD.OAEFF * CTD.QFNEW) ELSE COALESCE(CTD.OEENEW, CTD.OAEFF, 0) END AS OEE
+        FROM CncProd_TouchDet CTD
+        INNER JOIN CncProd_TouchMas CTM ON CTD.TchEntryNo = CTM.TchEntryNo
+        WHERE ISNULL(CTD.deleted, 0) = 0 AND ISNULL(CTM.deleted, 0) = 0 AND ISNULL(CTD.ProdTaken, 0) = 0
+          AND CAST(CTM.proddate AS DATE) BETWEEN ? AND ?
+          AND (CTD.OAEFF IS NOT NULL OR CTD.OEENEW IS NOT NULL OR CTD.QFNEW IS NOT NULL)
+    """ if has_cnc else ""
+
+    t_conv = """
+        UNION ALL
+        SELECT CAST(VTM.proddate AS DATE) AS dt,
+               COALESCE(VTD.OAEFF, VTD.OEENEW, 0) AS OEE
+        FROM ConvProd_TouchDet VTD
+        INNER JOIN ConvProd_TouchMas VTM ON VTD.TchEntryNo = VTM.TchEntryNo
+        WHERE ISNULL(VTD.deleted, 0) = 0 AND ISNULL(VTM.deleted, 0) = 0 AND ISNULL(VTD.ProdTaken, 0) = 0
+          AND CAST(VTM.proddate AS DATE) BETWEEN ? AND ?
+          AND (VTD.OAEFF IS NOT NULL OR VTD.OEENEW IS NOT NULL)
+    """ if has_conv else ""
+
+    t_rod = """
+        UNION ALL
+        SELECT CAST(RTM.proddate AS DATE) AS dt,
+               COALESCE(RTD.OAEFF, RTD.OEENEW, 0) AS OEE
+        FROM ConvRodProd_TouchDet RTD
+        INNER JOIN ConvRodProd_TouchMas RTM ON RTD.TchEntryNo = RTM.TchEntryNo
+        WHERE ISNULL(RTD.deleted, 0) = 0 AND ISNULL(RTM.deleted, 0) = 0 AND ISNULL(RTD.ProdTaken, 0) = 0
+          AND CAST(RTM.proddate AS DATE) BETWEEN ? AND ?
+          AND (RTD.OAEFF IS NOT NULL OR RTD.OEENEW IS NOT NULL)
+    """ if has_rod else ""
+
+    base_inner = f"""
+        SELECT CAST(proddate AS DATE) AS dt,
+               CASE WHEN OAEFF IS NOT NULL AND QFNEW IS NOT NULL THEN (OAEFF * QFNEW) ELSE COALESCE(OEENEW, OAEFF, 0) END AS OEE
         FROM ProductionEntry
-        WHERE CAST(proddate AS DATE) BETWEEN ? AND ?
-          AND deleted = 0
-          AND OAEFF IS NOT NULL
+        WHERE ISNULL(deleted, 0) = 0 AND CAST(proddate AS DATE) BETWEEN ? AND ?
+          AND (OAEFF IS NOT NULL OR OEENEW IS NOT NULL OR QFNEW IS NOT NULL)
 
         UNION ALL
 
-        SELECT CAST(entrydate AS DATE) AS dt, OAEFF
+        SELECT CAST(entrydate AS DATE) AS dt,
+               COALESCE(OAEFF, OEENEW, 0) AS OEE
         FROM ConvProductionEntry
-        WHERE CAST(entrydate AS DATE) BETWEEN ? AND ?
-          AND deleted = 0
-          AND OAEFF IS NOT NULL
+        WHERE ISNULL(deleted, 0) = 0 AND CAST(entrydate AS DATE) BETWEEN ? AND ?
+          AND (OAEFF IS NOT NULL OR OEENEW IS NOT NULL)
 
         UNION ALL
 
-        SELECT CAST(entrydate AS DATE) AS dt, OAEFF
+        SELECT CAST(entrydate AS DATE) AS dt,
+               COALESCE(OAEFF, OEENEW, 0) AS OEE
         FROM ConvProductionEntryRod
-        WHERE CAST(entrydate AS DATE) BETWEEN ? AND ?
-          AND deleted = 0
-          AND OAEFF IS NOT NULL
-    ) AS X
-    GROUP BY
-        CASE
-            WHEN DAY(dt) BETWEEN 1 AND 7 THEN 1
-            WHEN DAY(dt) BETWEEN 8 AND 14 THEN 2
-            WHEN DAY(dt) BETWEEN 15 AND 21 THEN 3
-            WHEN DAY(dt) BETWEEN 22 AND 28 THEN 4
-            ELSE 5
-        END
-    ORDER BY WeekNum
-"""
+        WHERE ISNULL(deleted, 0) = 0 AND CAST(entrydate AS DATE) BETWEEN ? AND ?
+          AND (OAEFF IS NOT NULL OR OEENEW IS NOT NULL)
+        {t_cnc}
+        {t_conv}
+        {t_rod}
+    """
+
+    weekly_sql = f"""
+        SELECT
+            CASE
+                WHEN DAY(dt) BETWEEN 1 AND 7 THEN 1
+                WHEN DAY(dt) BETWEEN 8 AND 14 THEN 2
+                WHEN DAY(dt) BETWEEN 15 AND 21 THEN 3
+                WHEN DAY(dt) BETWEEN 22 AND 28 THEN 4
+                ELSE 5
+            END AS WeekNum,
+            AVG(CAST(OEE AS FLOAT)) AS Avg_OEE
+        FROM (
+            {base_inner}
+        ) AS A
+        GROUP BY
+            CASE
+                WHEN DAY(dt) BETWEEN 1 AND 7 THEN 1
+                WHEN DAY(dt) BETWEEN 8 AND 14 THEN 2
+                WHEN DAY(dt) BETWEEN 15 AND 21 THEN 3
+                WHEN DAY(dt) BETWEEN 22 AND 28 THEN 4
+                ELSE 5
+            END
+        ORDER BY WeekNum
+    """
+
+    overall_sql = f"""
+        SELECT CAST(AVG(CAST(OEE AS FLOAT)) AS DECIMAL(18,2)) AS Overall_OEE
+        FROM (
+            {base_inner}
+        ) AS A
+    """
+
+    num_unions = 3 + (1 if has_cnc else 0) + (1 if has_conv else 0) + (1 if has_rod else 0)
+    return weekly_sql, overall_sql, num_unions
 
 
 @api_view(["GET"])
 @cache_analytics_response(timeout=300, key_prefix="dash1_oa_eff")
 def dashboard1_oa_efficiency_weekly(request):
-    """Dashboard1 - OA Efficiency grouped week-wise inside the selected month."""
+    """Dashboard1 - OA/OEE Efficiency grouped week-wise inside the selected month matching Production Analysis logic."""
     try:
         conn, tenant = get_tenant_connection(request)
     except ValueError as e:
@@ -955,12 +1594,21 @@ def dashboard1_oa_efficiency_weekly(request):
     day_ranges = ["1-7", "8-14", "15-21", "22-28", w5_label]
     labels = [f"W{i + 1} ({rng})" for i, rng in enumerate(day_ranges)]
     week_map = {1: 0.0, 2: 0.0, 3: 0.0, 4: 0.0, 5: 0.0}
+    overall_avg = None
 
     try:
         cursor = conn.cursor()
-        params = [start_date, end_date, start_date, end_date, start_date, end_date]
-        cursor.execute(OA_EFFICIENCY_WEEKLY_SQL, params)
+        weekly_sql, overall_sql, num_unions = _build_oa_efficiency_queries(cursor)
+        params = [start_date, end_date] * num_unions
+
+        cursor.execute(weekly_sql, params)
         rows = cursor.fetchall()
+
+        cursor.execute(overall_sql, params)
+        overall_row = cursor.fetchone()
+        if overall_row and overall_row[0] is not None:
+            overall_avg = round(float(overall_row[0]), 2)
+
         cursor.close()
         conn.close()
     except Exception as e:
@@ -975,6 +1623,7 @@ def dashboard1_oa_efficiency_weekly(request):
         "data": {
             "labels": labels,
             "data": [week_map[1], week_map[2], week_map[3], week_map[4], week_map[5]],
+            "overall_avg": overall_avg,
             "year": selected_year,
             "month": selected_month,
         },

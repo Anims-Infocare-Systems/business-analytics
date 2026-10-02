@@ -14,12 +14,34 @@ DirectoryIndex index.html index.php
   RewriteRule ^ index.html [L]
 </IfModule>
 
-# Gzip / Deflate Compression
+# ── Compression ───────────────────────────────────────────────
+# Brotli if the module is present (cPanel/EA4 ships mod_brotli), else deflate.
+<IfModule mod_brotli.c>
+  AddOutputFilterByType BROTLI_COMPRESS text/html text/plain text/xml text/css text/javascript application/javascript application/json application/manifest+json image/svg+xml font/woff2
+</IfModule>
 <IfModule mod_deflate.c>
-  AddOutputFilterByType DEFLATE text/html text/plain text/xml text/css text/javascript application/javascript application/json image/svg+xml
+  AddOutputFilterByType DEFLATE text/html text/plain text/xml text/css text/javascript application/javascript application/json application/manifest+json image/svg+xml
+  # Never double-compress already compressed assets
+  SetEnvIfNoCase Request_URI \.(?:gif|jpe?g|png|webp|woff2?|zip|gz|br)$ no-gzip dont-vary
 </IfModule>
 
-# Browser Cache Headers for 0ms Repeat Asset Loading
+# ── Browser caching ───────────────────────────────────────────
+# Vite emits content-hashed files under /assets/ → safe to cache for a year
+# and mark immutable (browser skips even the revalidation request).
+<IfModule mod_headers.c>
+  <FilesMatch "\.(?:js|css|woff2?|webp|png|jpe?g|svg)$">
+    Header set Cache-Control "public, max-age=31536000, immutable"
+  </FilesMatch>
+  # index.html must always be revalidated, otherwise users keep stale chunk
+  # names after a deploy and the app breaks with 404s on /assets/*.js
+  <FilesMatch "^index\.html$">
+    Header set Cache-Control "no-cache, must-revalidate"
+  </FilesMatch>
+  <FilesMatch "\.(?:json|webmanifest)$">
+    Header set Cache-Control "public, max-age=3600"
+  </FilesMatch>
+</IfModule>
+
 <IfModule mod_expires.c>
   ExpiresActive On
   ExpiresByType image/webp "access plus 1 year"
@@ -29,4 +51,5 @@ DirectoryIndex index.html index.php
   ExpiresByType text/css "access plus 1 year"
   ExpiresByType application/javascript "access plus 1 year"
   ExpiresByType font/woff2 "access plus 1 year"
+  ExpiresByType text/html "access plus 0 seconds"
 </IfModule>

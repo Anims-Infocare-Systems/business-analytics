@@ -1507,6 +1507,22 @@ export const SPOTLIGHT_REGISTRY = [
     //  6. REPORTS & ANALYTICS — PRODUCTION ANALYSIS
     // ═════════════════════════════════════════════════════════════════
     {
+        id: "pda-report-filters",
+        title: "Production Analysis — Report Filters",
+        module: "Production Analysis",
+        parentMenu: "Reports",
+        categoryType: "reports",
+        categoryLabel: "Parameters & Scope",
+        targetSelector: "[data-spotlight='pda-report-filters']",
+        fallbackSelector: ".pa2-filters",
+        description: "Unified production filtering deck scoping shopfloor data across date ranges, part numbers, machines, shifts, and operators.",
+        tags: ["production filters", "machine filter", "shift filter", "operator filter", "part search", "apply filter"],
+        keyActions: ["Scope Manufacturing Data", "Filter by Machine & Shift", "Search Part Numbers"],
+        badge: "Filters & Scope",
+        color: "#2563eb",
+        iconName: "SlidersHorizontal"
+    },
+    {
         id: "pda-kpis",
         title: "Production Analysis — Executive Production KPI Deck",
         module: "Production Analysis",
@@ -1569,15 +1585,16 @@ export const SPOTLIGHT_REGISTRY = [
     },
     {
         id: "pda-mhr",
-        title: "Production Analysis — Machine Hour Rate (MHR) Cost Analysis",
+        title: "Production Analysis — Production Value Report Vs Machine Hour Rate (MHR) Cost Analysis",
         module: "Production Analysis",
         parentMenu: "Reports",
         categoryType: "reports",
         categoryLabel: "Operational Costing",
-        targetSelector: "[data-spotlight='pda-mhr']",
+        targetSelector: "[data-spotlight='pda-production-value-vs-mhr'], [data-spotlight='pda-mhr']",
+        fallbackSelector: ".pa2-pvmhr-card",
         description: "Machine-wise comparative costing analyzing operating cost per hour (₹/hr) factoring power, operator wage, depreciation, and tooling.",
-        tags: ["mhr", "machine hour rate", "operating cost", "hourly rate", "cost analysis", "depreciation", "power cost"],
-        keyActions: ["Compare Machine Operating Costs", "Optimize Machine Job Scheduling by Hourly Rate"],
+        tags: ["mhr", "machine hour rate", "production value vs mhr", "operating cost", "hourly rate", "cost analysis", "depreciation", "power cost"],
+        keyActions: ["Compare Production Value vs MHR Cost", "Optimize Machine Job Scheduling by Hourly Rate"],
         badge: "Operational Costing",
         color: "#6366f1",
         iconName: "Clock"
@@ -3741,6 +3758,22 @@ export const SPOTLIGHT_REGISTRY = [
         badge: "Interactive Tour",
         color: "#8b5cf6",
         iconName: "Sparkles"
+    },
+    {
+        id: "spotlight-navigator-hero",
+        title: "Spotlight Navigator — Universal Feature Compass & Search",
+        module: "Spotlight",
+        parentMenu: "Spotlight",
+        categoryType: "utility",
+        categoryLabel: "Navigation Radar",
+        targetSelector: "[data-spotlight='spotlight-navigator-hero']",
+        fallbackSelector: ".sst-hero-banner",
+        description: "Universal visual directory indexing 100+ platform features, audit tables, and cockpits with instant contextual spotlight jumping.",
+        tags: ["spotlight navigator", "feature radar", "universal search", "quick jump", "feature finder", "compass", "command palette"],
+        keyActions: ["Browse All Platform Features", "Filter by Functional Category", "Spotlight Directly on Target UI"],
+        badge: "Precision Radar",
+        color: "#6366f1",
+        iconName: "Compass"
     }
 ];
 

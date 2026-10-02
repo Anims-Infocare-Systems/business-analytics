@@ -15,21 +15,12 @@ from rest_framework.response import Response
 from .utils.cache import cache_analytics_response
 from .views import get_tenant_connection, parse_date_range, table_exists as _raw_table_exists, find_column_ci as _raw_find_column_ci
 
-_SCHEMA_TABLE_CACHE = {}
-_SCHEMA_COL_CACHE = {}
-_SEARCH_COLS_CACHE = {}
+from .utils.schema import existing_columns as _existing_columns
+from .utils.query import date_range_sql, paginate_params, paginate_sql
 
-def table_exists(cursor, table_name):
-    key = str(table_name).strip().lower()
-    if key not in _SCHEMA_TABLE_CACHE:
-        _SCHEMA_TABLE_CACHE[key] = _raw_table_exists(cursor, table_name)
-    return _SCHEMA_TABLE_CACHE[key]
-
-def find_column_ci(cursor, table_schema, table_name, candidates):
-    key = (str(table_schema).strip().lower(), str(table_name).strip().lower(), tuple(str(c).strip().lower() for c in candidates))
-    if key not in _SCHEMA_COL_CACHE:
-        _SCHEMA_COL_CACHE[key] = _raw_find_column_ci(cursor, table_schema, table_name, candidates)
-    return _SCHEMA_COL_CACHE[key]
+# Schema probes are served from the tenant-scoped catalog (utils/schema.py).
+table_exists = _raw_table_exists
+find_column_ci = _raw_find_column_ci
 
 def _build_search_sql(cursor, search_q, table_name, alias=""):
     """
@@ -56,33 +47,14 @@ def _build_search_sql(cursor, search_q, table_name, alias=""):
     if not candidates:
         return "", []
 
-    t_key = table_name.lower()
-    if t_key not in _SEARCH_COLS_CACHE:
-        valid_cols = []
-        for col in candidates:
-            cursor.execute(
-                """
-                SELECT TOP 1 COLUMN_NAME 
-                FROM INFORMATION_SCHEMA.COLUMNS 
-                WHERE TABLE_SCHEMA = 'dbo' 
-                  AND TABLE_NAME = ? 
-                  AND UPPER(LTRIM(RTRIM(COLUMN_NAME))) = UPPER(LTRIM(RTRIM(?)))
-                """, 
-                (table_name, col)
-            )
-            row = cursor.fetchone()
-            if row:
-                valid_cols.append(row[0])
-        _SEARCH_COLS_CACHE[t_key] = valid_cols
-
-    valid_cols = _SEARCH_COLS_CACHE[t_key]
+    valid_cols = _existing_columns(cursor, table_name, candidates, schema="dbo")
     if not valid_cols:
         return "", []
 
     p = f"{alias}." if alias else ""
     like_val = f"%{search_q}%"
 
-    conds = [f"LOWER({p}[{col}]) LIKE LOWER(?)" for col in valid_cols]
+    conds = [f"{p}[{col}] LIKE ?" for col in valid_cols]
     sql_cond = " AND (" + " OR ".join(conds) + ")"
     params = [like_val] * len(valid_cols)
 
@@ -97,10 +69,11 @@ def _get_invoice_subquery_filter(cursor, search_q, bm_alias="BM"):
     if not sql_cond:
         return "", []
 
-    sql = f""" AND {bm_alias}.invno IN (
-        SELECT DISTINCT d.invno
+    sql = f""" AND EXISTS (
+        SELECT 1
         FROM Bill_Det d
-        WHERE ISNULL(d.deleted, 0) = 0
+        WHERE d.invno = {bm_alias}.invno
+          AND ISNULL(d.deleted, 0) = 0
           {sql_cond}
     )"""
     return sql, params
@@ -141,6 +114,32 @@ def _parse_btype_list(btype_filter):
     return []
 
 
+
+def _parse_customer_list(cust_filter):
+    if not cust_filter:
+        return []
+    if isinstance(cust_filter, (list, tuple, set)):
+        res = []
+        for x in cust_filter:
+            for part in str(x).split(","):
+                p = part.strip()
+                if p and p.lower() not in ("all", "all customers", ""):
+                    res.append(p)
+        return res
+    if isinstance(cust_filter, str):
+        return [p.strip() for p in cust_filter.split(",") if p.strip() and p.strip().lower() not in ("all", "all customers", "")]
+    return []
+
+
+def _customer_cond(cust_expr, cust_filter):
+    items = _parse_customer_list(cust_filter)
+    if not items:
+        return "", []
+    if len(items) == 1:
+        return f" AND {cust_expr} = ?", [items[0]]
+    placeholders = ", ".join(["?"] * len(items))
+    return f" AND {cust_expr} IN ({placeholders})", list(items)
+
 def _btype_param(btype_filter):
     items = _parse_btype_list(btype_filter)
     return tuple(items)
@@ -151,7 +150,7 @@ def _bill_mas_filters(alias="", btype_filter=""):
     cond = (
         f"ISNULL({p}deleted, 0) = 0 "
         f"AND ISNULL({p}btype, '') NOT IN ({EXCLUDED_BTYPES_SQL}) "
-        f"AND CAST({p}invdt AS DATE) BETWEEN ? AND ?"
+        f"AND {p}invdt >= ? AND {p}invdt < DATEADD(DAY, 1, ?)"
     )
     items = _parse_btype_list(btype_filter)
     if len(items) == 1:
@@ -167,7 +166,7 @@ def _bill_det_join_filters(btype_filter="", m_alias="m", d_alias="d"):
         f"ISNULL({d_alias}.deleted, 0) = 0 "
         f"AND ISNULL({m_alias}.deleted, 0) = 0 "
         f"AND ISNULL({m_alias}.btype, '') NOT IN ({EXCLUDED_BTYPES_SQL}) "
-        f"AND CAST({m_alias}.invdt AS DATE) BETWEEN ? AND ?"
+        f"AND {m_alias}.invdt >= ? AND {m_alias}.invdt < DATEADD(DAY, 1, ?)"
     )
     items = _parse_btype_list(btype_filter)
     if len(items) == 1:
@@ -193,7 +192,7 @@ def _bill_mas_filters_invoice_status(alias=""):
     p = f"{alias}." if alias else ""
     return (
         f"ISNULL({p}deleted, 0) = 0 "
-        f"AND CAST({p}invdt AS DATE) BETWEEN ? AND ?"
+        f"AND {p}invdt >= ? AND {p}invdt < DATEADD(DAY, 1, ?)"
     )
 
 
@@ -443,7 +442,7 @@ def sales_analysis_grand_total(request):
                 WHERE ISNULL(m.deleted, 0) = 0
                   AND ISNULL(d.deleted, 0) = 0
                   AND ISNULL(m.btype, '') NOT IN ({excluded_btypes})
-                  AND CAST(m.invdt AS DATE) BETWEEN ? AND ?
+                  AND m.invdt >= ? AND m.invdt < DATEADD(DAY, 1, ?)
                   {btype_cond}
                   {search_sql_det}
                 """,
@@ -457,7 +456,7 @@ def sales_analysis_grand_total(request):
                 FROM Bill_Mas
                 WHERE ISNULL(deleted, 0) = 0
                   AND ISNULL(btype, '') NOT IN ({excluded_btypes})
-                  AND CAST(invdt AS DATE) BETWEEN ? AND ?
+                  AND invdt >= ? AND invdt < DATEADD(DAY, 1, ?)
                   {btype_cond}
                 """,
                 (start_date, end_date) + btype_p,
@@ -560,7 +559,7 @@ def sales_analysis_summary_strip(request):
                 WHERE ISNULL(m.deleted, 0) = 0
                   AND ISNULL(d.deleted, 0) = 0
                   AND ISNULL(m.btype, '') NOT IN ({qty_excluded_btypes})
-                  AND CAST(m.invdt AS DATE) BETWEEN ? AND ?
+                  AND m.invdt >= ? AND m.invdt < DATEADD(DAY, 1, ?)
                   {btype_qty_cond}
                   {search_sql_det}
                 """,
@@ -575,7 +574,7 @@ def sales_analysis_summary_strip(request):
                 WHERE ISNULL(m.deleted, 0) = 0
                   AND ISNULL(d.deleted, 0) = 0
                   AND ISNULL(m.btype, '') NOT IN ({qty_excluded_btypes})
-                  AND CAST(m.invdt AS DATE) BETWEEN ? AND ?
+                  AND m.invdt >= ? AND m.invdt < DATEADD(DAY, 1, ?)
                   {btype_qty_cond}
                 """,
                 (start_date, end_date) + btype_p,
@@ -1140,7 +1139,7 @@ def sales_analysis_month_summary(request):
     det_status_filters = (
         "ISNULL(d.deleted, 0) = 0 "
         "AND ISNULL(m.deleted, 0) = 0 "
-        "AND CAST(m.invdt AS DATE) BETWEEN ? AND ?"
+        "AND m.invdt >= ? AND m.invdt < DATEADD(DAY, 1, ?)"
     )
     if btype_p:
         det_status_filters += " AND LTRIM(RTRIM(ISNULL(m.btype, N''))) = ?"
@@ -1342,6 +1341,7 @@ def _invoice_cust_name_expr(use_alias):
 
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="sales_analysis_inv_details")
 def sales_analysis_invoice_details(request):
     """
     Invoice line details for Sales Analysis (Bill_Mas + Bill_Det).
@@ -1365,7 +1365,7 @@ def sales_analysis_invoice_details(request):
         base_where = (
             "ISNULL(BM.deleted, 0) = 0 "
             "AND ISNULL(BD.deleted, 0) = 0 "
-            "AND CAST(BM.invdt AS DATE) BETWEEN ? AND ?"
+            "AND BM.invdt >= ? AND BM.invdt < DATEADD(DAY, 1, ?)"
         )
         params: list = [start_date, end_date]
         btype_items = _parse_btype_list(btype_filter)
@@ -1385,6 +1385,12 @@ def sales_analysis_invoice_details(request):
         cust_expr = _invoice_cust_name_expr(use_alias)
         join_sql = _invoice_cust_join_sql(use_alias)
 
+        customer_filter = (request.GET.get("customer") or "").strip()
+        cust_cond, cust_params = _customer_cond(cust_expr, customer_filter)
+        if cust_cond:
+            base_where += cust_cond
+            params.extend(cust_params)
+
         if search_q:
             cursor.execute(
                 f"""
@@ -1393,7 +1399,7 @@ def sales_analysis_invoice_details(request):
                 INNER JOIN Bill_Mas m ON d.invno = m.invno
                 WHERE ISNULL(m.deleted, 0) = 0
                   AND ISNULL(d.deleted, 0) = 0
-                  AND CAST(m.invdt AS DATE) BETWEEN ? AND ?
+                  AND m.invdt >= ? AND m.invdt < DATEADD(DAY, 1, ?)
                   AND LTRIM(RTRIM(ISNULL(m.btype, N''))) <> N''
                   {search_sql_d}
                 ORDER BY btype
@@ -1406,7 +1412,7 @@ def sales_analysis_invoice_details(request):
                 SELECT DISTINCT LTRIM(RTRIM(ISNULL(btype, N''))) AS btype
                 FROM Bill_Mas
                 WHERE ISNULL(deleted, 0) = 0
-                  AND CAST(invdt AS DATE) BETWEEN ? AND ?
+                  AND invdt >= ? AND invdt < DATEADD(DAY, 1, ?)
                   AND LTRIM(RTRIM(ISNULL(btype, N''))) <> N''
                 ORDER BY btype
                 """,
@@ -1443,15 +1449,18 @@ def sales_analysis_invoice_details(request):
             INNER JOIN Bill_Det BD ON BM.invno = BD.invno
             {join_sql}
             LEFT JOIN (
-                SELECT invno, SUM(ISNULL(txamt, 0)) AS total_tax
-                FROM Bill_Tax
-                WHERE ISNULL(deleted, 0) = 0
-                GROUP BY invno
+                SELECT BT.invno, SUM(ISNULL(BT.txamt, 0)) AS total_tax
+                FROM Bill_Tax BT
+                INNER JOIN Bill_Mas BM_tax ON BT.invno = BM_tax.invno
+                WHERE ISNULL(BT.deleted, 0) = 0
+                  AND ISNULL(BM_tax.deleted, 0) = 0
+                  AND BM_tax.invdt >= ? AND BM_tax.invdt < DATEADD(DAY, 1, ?)
+                GROUP BY BT.invno
             ) BT ON BM.invno = BT.invno
             WHERE {base_where}
             ORDER BY BM.invdt DESC, BM.invno DESC
             """,
-            params,
+            [start_date, end_date] + params,
         )
         rows = []
         inv_nos = set()
@@ -1502,6 +1511,7 @@ def sales_analysis_invoice_details(request):
 
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="sales_analysis_cust_part")
 def sales_analysis_customer_part_wise(request):
     """
     Dedicated Customer & Part-Wise Sales Analysis aggregation.
@@ -1546,7 +1556,7 @@ def sales_analysis_customer_part_wise(request):
         where_clauses = [
             "ISNULL(BM.deleted, 0) = 0",
             "ISNULL(BD.deleted, 0) = 0",
-            "CAST(BM.invdt AS DATE) BETWEEN ? AND ?",
+            "BM.invdt >= ? AND BM.invdt < DATEADD(DAY, 1, ?)",
             "NULLIF(LTRIM(RTRIM(ISNULL(BD.itcode, N''))), N'') IS NOT NULL"
         ]
         params: list = [start_date, end_date]
@@ -1643,7 +1653,7 @@ def sales_analysis_customer_part_wise(request):
             FROM Bill_Mas BM
             {cust_join}
             WHERE ISNULL(BM.deleted, 0) = 0
-              AND CAST(BM.invdt AS DATE) BETWEEN ? AND ?
+              AND BM.invdt >= ? AND BM.invdt < DATEADD(DAY, 1, ?)
               AND NULLIF({cust_expr}, N'') IS NOT NULL
             ORDER BY customer
             """,
@@ -1793,7 +1803,7 @@ def sales_analysis_monthly_sales_trend(request):
                 ISNULL(BD.deleted, 0) = 0
                 AND ISNULL(BM.deleted, 0) = 0
                 AND ISNULL(BM.btype, '') NOT IN ({EXCLUDED_BTYPES_SQL})
-                AND CAST(BM.invdt AS DATE) BETWEEN ? AND ?
+                AND BM.invdt >= ? AND BM.invdt < DATEADD(DAY, 1, ?)
                 {btype_sql}
                 {search_sql}
             GROUP BY
@@ -1897,7 +1907,7 @@ def sales_analysis_bill_type_revenue(request):
                 WHERE
                     bm.deleted = 0
                     AND bd.deleted = 0
-                    AND CAST(bm.invdt AS DATE) BETWEEN ? AND ?
+                    AND bm.invdt >= ? AND bm.invdt < DATEADD(DAY, 1, ?)
                     {btype_sql}
                     {search_sql}
                 GROUP BY
@@ -1923,7 +1933,7 @@ def sales_analysis_bill_type_revenue(request):
                 WHERE
                     bm.deleted = 0
                     AND bd.deleted = 0
-                    AND CAST(bm.invdt AS DATE) BETWEEN ? AND ?
+                    AND bm.invdt >= ? AND bm.invdt < DATEADD(DAY, 1, ?)
                     {btype_sql}
                 GROUP BY
                     MONTH(bm.invdt),
@@ -2034,7 +2044,7 @@ def sales_analysis_monthly_tax_trend(request):
             WHERE
                 BM.deleted = 0
                 AND BT.deleted = 0
-                AND CAST(BM.invdt AS DATE) BETWEEN ? AND ?
+                AND BM.invdt >= ? AND BM.invdt < DATEADD(DAY, 1, ?)
                 {btype_sql}
                 {search_sql}
             GROUP BY
@@ -2160,7 +2170,7 @@ def sales_analysis_future_projections(request):
           AND ISNULL(p.deleted, 0) = 0
           AND ISNULL(pd.deleted, 0) = 0
           AND s.shddate IS NOT NULL
-          AND CAST(s.shddate AS DATE) BETWEEN ? AND ?
+          AND s.shddate >= ? AND s.shddate < DATEADD(DAY, 1, ?)
           {search_sql_pd}
         ORDER BY s.reqdate ASC
         """
@@ -2212,7 +2222,7 @@ def sales_analysis_future_projections(request):
         WHERE ISNULL(s.deleted, 0) = 0
           AND ISNULL(p.deleted, 0) = 0
           AND s.shddate IS NOT NULL
-          AND CAST(s.shddate AS DATE) BETWEEN ? AND ?
+          AND s.shddate >= ? AND s.shddate < DATEADD(DAY, 1, ?)
           {search_sql_s}
         GROUP BY
             {cust_name_expr},
@@ -2366,6 +2376,7 @@ def sales_analysis_future_projections(request):
 
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="sales_analysis_plan_actual")
 def sales_analysis_plan_vs_actual(request):
     try:
         conn, tenant = get_tenant_connection(request)
@@ -2432,19 +2443,20 @@ def sales_analysis_plan_vs_actual(request):
 ROUTE_CARD_STOCK AS
 (
     SELECT
-        LTRIM(RTRIM(partno)) AS partno,
-        COUNT(DISTINCT CASE WHEN NULLIF(LTRIM(RTRIM(roucardno)), '') IS NOT NULL THEN roucardno END) AS RcCount,
-        SUM(ISNULL(prodqty, 0)) AS ProdQty,
-        SUM(ISNULL(interinspqty, 0)) AS InterInspQty,
-        SUM(ISNULL(finalinspqty, 0)) AS FinalInspQty,
-        SUM(ISNULL(dcqty, 0)) AS DcQty,
-        SUM(ISNULL(Jobqty, 0)) AS JobQty,
-        SUM(ISNULL(rejqty, 0)) AS RejQty,
-        SUM(ISNULL(rwqty, 0)) AS RwQty,
-        SUM(ISNULL(finalinsprejqty, 0)) AS FinalInspRejQty,
-        SUM(ISNULL(CustRWQty, 0)) AS CustRwQty
-    FROM RouteCardStock
-    GROUP BY LTRIM(RTRIM(partno))
+        LTRIM(RTRIM(RCS.partno)) AS partno,
+        COUNT(DISTINCT CASE WHEN NULLIF(LTRIM(RTRIM(RCS.roucardno)), '') IS NOT NULL THEN RCS.roucardno END) AS RcCount,
+        SUM(ISNULL(RCS.prodqty, 0)) AS ProdQty,
+        SUM(ISNULL(RCS.interinspqty, 0)) AS InterInspQty,
+        SUM(ISNULL(RCS.finalinspqty, 0)) AS FinalInspQty,
+        SUM(ISNULL(RCS.dcqty, 0)) AS DcQty,
+        SUM(ISNULL(RCS.Jobqty, 0)) AS JobQty,
+        SUM(ISNULL(RCS.rejqty, 0)) AS RejQty,
+        SUM(ISNULL(RCS.rwqty, 0)) AS RwQty,
+        SUM(ISNULL(RCS.finalinsprejqty, 0)) AS FinalInspRejQty,
+        SUM(ISNULL(RCS.CustRWQty, 0)) AS CustRwQty
+    FROM RouteCardStock RCS
+    INNER JOIN (SELECT DISTINCT PartNo FROM UNIQUE_COMBINATIONS) uc ON RCS.partno = uc.PartNo
+    GROUP BY LTRIM(RTRIM(RCS.partno))
 ),
 """
         else:
@@ -2460,18 +2472,19 @@ ROUTE_CARD_STOCK AS
 PROD_CURRENT_STOCK AS
 (
     SELECT
-        LTRIM(RTRIM(partno)) AS partno,
-        SUM(ISNULL(prodqty, 0)) AS ProdQty,
-        SUM(ISNULL(interinspqty, 0)) AS InterInspQty,
-        SUM(ISNULL(finalinspqty, 0)) AS FinalInspQty,
-        SUM(ISNULL(dcqty, 0)) AS DcQty,
-        SUM(ISNULL(Jobqty, 0)) AS JobQty,
-        SUM(ISNULL(rejqty, 0)) AS RejQty,
-        SUM(ISNULL(rwqty, 0)) AS RwQty,
-        SUM(ISNULL(finalinsprejqty, 0)) AS FinalInspRejQty,
-        SUM(ISNULL(CustRWQty, 0)) AS CustRwQty
-    FROM ProdCurrentStock
-    GROUP BY LTRIM(RTRIM(partno))
+        LTRIM(RTRIM(PCS.partno)) AS partno,
+        SUM(ISNULL(PCS.prodqty, 0)) AS ProdQty,
+        SUM(ISNULL(PCS.interinspqty, 0)) AS InterInspQty,
+        SUM(ISNULL(PCS.finalinspqty, 0)) AS FinalInspQty,
+        SUM(ISNULL(PCS.dcqty, 0)) AS DcQty,
+        SUM(ISNULL(PCS.Jobqty, 0)) AS JobQty,
+        SUM(ISNULL(PCS.rejqty, 0)) AS RejQty,
+        SUM(ISNULL(PCS.rwqty, 0)) AS RwQty,
+        SUM(ISNULL(PCS.finalinsprejqty, 0)) AS FinalInspRejQty,
+        SUM(ISNULL(PCS.CustRWQty, 0)) AS CustRwQty
+    FROM ProdCurrentStock PCS
+    INNER JOIN (SELECT DISTINCT PartNo FROM UNIQUE_COMBINATIONS) uc ON PCS.partno = uc.PartNo
+    GROUP BY LTRIM(RTRIM(PCS.partno))
 ),
 """
         else:
@@ -2508,9 +2521,6 @@ PROD_CURRENT_STOCK AS
     WHERE CJ.deleted = 0
 ),
 
-{rc_cte}
-{pcs_cte}
-
 UNIQUE_COMBINATIONS AS
 (
     SELECT
@@ -2541,6 +2551,9 @@ UNIQUE_COMBINATIONS AS
         AND DM.dcdate BETWEEN ? AND ?
         {uc_dispatch_filter}
 ),
+
+{rc_cte}
+{pcs_cte}
 
 PLAN_DATA AS
 (
@@ -2724,6 +2737,7 @@ ORDER BY
 
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="sales_analysis_po_ledger")
 def sales_analysis_po_ledger(request):
     try:
         conn, tenant = get_tenant_connection(request)
@@ -2755,16 +2769,23 @@ def sales_analysis_po_ledger(request):
         search_sql, search_params = _build_search_sql(cursor, search_q, "In_PoDet", "PD")
 
         sql = f"""
-        WITH DC_TOTALS AS (
+        WITH ACTIVE_POS AS (
+            SELECT DISTINCT PM_act.Apono
+            FROM In_PoMas PM_act
+            WHERE PM_act.Deleted = 0
+              AND PM_act.podt >= ? AND PM_act.podt < DATEADD(DAY, 1, ?)
+        ),
+        DC_TOTALS AS (
             SELECT 
-                Apono, partno, poslno,
-                SUM(okqty) AS TotalDcQty
+                d_all.Apono, d_all.partno, d_all.poslno,
+                SUM(d_all.okqty) AS TotalDcQty
             FROM (
                 SELECT Apono, partno, poslno, dcno, okqty FROM DcInSubDet WHERE deleted = 0
                 UNION ALL
                 SELECT Apono, partno, poslno, dcno, okqty FROM DcInSubDetAssmPoDet WHERE deleted = 0
             ) d_all
-            GROUP BY Apono, partno, poslno
+            INNER JOIN ACTIVE_POS ap ON d_all.Apono = ap.Apono
+            GROUP BY d_all.Apono, d_all.partno, d_all.poslno
         ),
         DC_BILL_DET AS (
             SELECT 
@@ -2783,6 +2804,7 @@ def sales_analysis_po_ledger(request):
                 UNION ALL
                 SELECT Apono, partno, poslno, dcno, okqty FROM DcInSubDetAssmPoDet WHERE deleted = 0
             ) d
+            INNER JOIN ACTIVE_POS ap ON d.Apono = ap.Apono
             INNER JOIN DC_Mas m ON d.dcno = m.dcno AND m.deleted = 0
             LEFT JOIN Bill_DcOrdDet bdo ON d.dcno = bdo.dcno AND bdo.deleted = 0
             LEFT JOIN Bill_Mas bm ON bdo.invno = bm.invno AND bm.deleted = 0 {btype_sql}
@@ -2816,12 +2838,16 @@ def sales_analysis_po_ledger(request):
         LEFT JOIN DC_TOTALS DT ON DT.Apono = PM.Apono AND DT.partno = PD.itcode AND DT.poslno = PD.poslno
         LEFT JOIN DC_BILL_DET D ON D.Apono = PM.Apono AND D.partno = PD.itcode AND D.poslno = PD.poslno
         WHERE PM.Deleted = 0 AND PD.Deleted = 0
-          AND CAST(PM.podt AS DATE) BETWEEN ? AND ?
+          AND PM.podt >= ? AND PM.podt < DATEADD(DAY, 1, ?)
           {search_sql}
         ORDER BY PM.podt DESC, PM.Apono, PD.itcode, D.dcDate, D.dcno;
         """
 
-        cursor.execute(sql, [start_date, end_date] + list(btype_p) + search_params)
+        customer_filter = (request.GET.get("customer") or "").strip()
+        cust_cond, cust_params = _customer_cond(cust_name_expr, customer_filter)
+        if cust_cond:
+            sql = sql.replace("WHERE PM.Deleted = 0 AND PD.Deleted = 0", f"WHERE PM.Deleted = 0 AND PD.Deleted = 0 {cust_cond}")
+        cursor.execute(sql, [start_date, end_date, start_date, end_date] + list(btype_p) + cust_params + search_params)
         rows = []
         for row in cursor.fetchall() or []:
             po_type = str(row[0]) if row[0] else ""
@@ -2888,6 +2914,7 @@ def sales_analysis_po_ledger(request):
 
 
 @api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="sales_analysis_trace")
 def sales_analysis_traceability(request):
     try:
         conn, tenant = get_tenant_connection(request)
@@ -2921,41 +2948,63 @@ def sales_analysis_traceability(request):
             extra_params.append(f"%{inv_q}%")
 
         sql = f"""
-    WITH GRN_DET AS (
+    WITH ACTIVE_DCS AS (
+        SELECT DISTINCT BDO.dcno
+        FROM Bill_DcOrdDet BDO
+        INNER JOIN Bill_Mas BM ON BDO.invno = BM.invno
+        WHERE ISNULL(BM.deleted, 0) = 0
+          AND ISNULL(BDO.deleted, 0) = 0
+          AND BM.invdt >= ? AND BM.invdt < DATEADD(DAY, 1, ?)
+    ),
+    GRN_DET AS (
         SELECT 
-            dcno, partno,
-            STRING_AGG(grn_val, ', ') AS grnNos
+            G.dcno, G.partno,
+            STRING_AGG(G.grn_val, ', ') AS grnNos
         FROM (
             SELECT DISTINCT 
-                dcno, 
-                partno,
+                D.dcno, 
+                D.partno,
                 COALESCE(
-                    NULLIF(LTRIM(RTRIM(grnno)), ''),
-                    NULLIF(LTRIM(RTRIM(Apono)), '')
+                    NULLIF(LTRIM(RTRIM(D.grnno)), ''),
+                    NULLIF(LTRIM(RTRIM(D.Apono)), '')
                 ) AS grn_val
-            FROM DcInSubDet
-            WHERE deleted = 0 
-              AND (LTRIM(RTRIM(ISNULL(grnno, ''))) <> '' OR LTRIM(RTRIM(ISNULL(Apono, ''))) <> '')
+            FROM DcInSubDet D
+            INNER JOIN ACTIVE_DCS ad ON D.dcno = ad.dcno
+            WHERE D.deleted = 0 
+              AND (LTRIM(RTRIM(ISNULL(D.grnno, ''))) <> '' OR LTRIM(RTRIM(ISNULL(D.Apono, ''))) <> '')
         ) G
-        GROUP BY dcno, partno
+        GROUP BY G.dcno, G.partno
     ),
     PO_DET AS (
-        SELECT dcno, partno, STRING_AGG(pono, ', ') AS poNos
+        SELECT P.dcno, P.partno, STRING_AGG(P.pono, ', ') AS poNos
         FROM (
-            SELECT DISTINCT dcno, partno, NULLIF(LTRIM(RTRIM(pono)), '') AS pono
-            FROM DcInSubDetAssmPoDet
-            WHERE deleted = 0 AND LTRIM(RTRIM(pono)) <> ''
+            SELECT DISTINCT D.dcno, D.partno, NULLIF(LTRIM(RTRIM(D.pono)), '') AS pono
+            FROM DcInSubDetAssmPoDet D
+            INNER JOIN ACTIVE_DCS ad ON D.dcno = ad.dcno
+            WHERE D.deleted = 0 AND LTRIM(RTRIM(D.pono)) <> ''
         ) P
-        GROUP BY dcno, partno
+        GROUP BY P.dcno, P.partno
     ),
     RC_DET AS (
-        SELECT dcno, PartNo, STRING_AGG(RouCardNo, ', ') AS routeCards
+        SELECT R.dcno, R.PartNo, STRING_AGG(R.RouCardNo, ', ') AS routeCards
         FROM (
-            SELECT DISTINCT dcno, PartNo, NULLIF(LTRIM(RTRIM(RouCardNo)), '') AS RouCardNo
-            FROM Dc_RouCardDet
-            WHERE deleted = 0 AND LTRIM(RTRIM(RouCardNo)) <> ''
+            SELECT DISTINCT D.dcno, D.PartNo, NULLIF(LTRIM(RTRIM(D.RouCardNo)), '') AS RouCardNo
+            FROM Dc_RouCardDet D
+            INNER JOIN ACTIVE_DCS ad ON D.dcno = ad.dcno
+            WHERE D.deleted = 0 AND LTRIM(RTRIM(D.RouCardNo)) <> ''
         ) R
-        GROUP BY dcno, PartNo
+        GROUP BY R.dcno, R.PartNo
+    ),
+    -- Per-DC line counts, computed once for the DCs in range instead of as
+    -- four correlated COUNT(*) sub-queries evaluated for every joined row.
+    DC_CNT AS (
+        SELECT
+            ad.dcno,
+            (SELECT COUNT(*) FROM DC_Det d1 WHERE d1.dcno = ad.dcno AND d1.deleted = 0) AS dd_cnt,
+            (SELECT COUNT(*) FROM DcInSubDet dis1 WHERE dis1.dcno = ad.dcno AND dis1.deleted = 0) AS dis_cnt,
+            (SELECT COUNT(*) FROM DcInSubDetAssmPoDet dap1 WHERE dap1.dcno = ad.dcno AND dap1.deleted = 0) AS dap_cnt,
+            (SELECT COUNT(*) FROM Dc_RouCardDet rc1 WHERE rc1.dcno = ad.dcno AND rc1.deleted = 0) AS rc_cnt
+        FROM ACTIVE_DCS ad
     )
     SELECT
         COALESCE(CA.CName, CM.CName, N'—') AS [Customer Name],
@@ -2977,6 +3026,7 @@ def sales_analysis_traceability(request):
     LEFT JOIN CustAliasMast CA ON BM.cid = CA.Id AND CA.Deleted = 0
     LEFT JOIN CustMast CM ON BM.cid = CM.Id AND CM.Deleted = 0
     INNER JOIN Bill_DcOrdDet BDO ON BM.invno = BDO.invno AND BDO.deleted = 0
+    LEFT JOIN DC_CNT CNT ON CNT.dcno = BDO.dcno
     LEFT JOIN DC_Det DD ON BDO.dcno = DD.dcno AND DD.deleted = 0
     LEFT JOIN Bill_Det BD ON BM.invno = BD.invno AND BD.deleted = 0
         AND (
@@ -2986,30 +3036,30 @@ def sales_analysis_traceability(request):
             OR LTRIM(RTRIM(DD.partno)) LIKE LTRIM(RTRIM(BD.itcode)) + '%'
             OR LTRIM(RTRIM(BD.itcode)) LIKE LTRIM(RTRIM(DD.partno)) + '%'
             OR (SUBSTRING(LTRIM(RTRIM(DD.partno)), 2, 4) = SUBSTRING(LTRIM(RTRIM(BD.itcode)), 2, 4) AND (DD.matrej = BD.qty OR DD.okqty = BD.qty))
-            OR (SELECT COUNT(*) FROM DC_Det d1 WHERE d1.dcno = BDO.dcno AND d1.deleted = 0) = 1
+            OR ISNULL(CNT.dd_cnt, 0) = 1
         )
     LEFT JOIN GRN_DET GD ON BDO.dcno = GD.dcno AND (
         LTRIM(RTRIM(GD.partno)) = LTRIM(RTRIM(COALESCE(DD.partno, BD.itcode)))
         OR LTRIM(RTRIM(GD.partno)) = LTRIM(RTRIM(DD.PrintPartNO))
-        OR (SELECT COUNT(*) FROM DcInSubDet dis1 WHERE dis1.dcno = BDO.dcno AND dis1.deleted = 0) = 1
+        OR ISNULL(CNT.dis_cnt, 0) = 1
     )
     LEFT JOIN PO_DET PD ON BDO.dcno = PD.dcno AND (
         LTRIM(RTRIM(PD.partno)) = LTRIM(RTRIM(COALESCE(DD.partno, BD.itcode)))
-        OR (SELECT COUNT(*) FROM DcInSubDetAssmPoDet dap1 WHERE dap1.dcno = BDO.dcno AND dap1.deleted = 0) = 1
+        OR ISNULL(CNT.dap_cnt, 0) = 1
     )
     LEFT JOIN RC_DET RD ON BDO.dcno = RD.dcno AND (
         LTRIM(RTRIM(RD.PartNo)) = LTRIM(RTRIM(COALESCE(DD.partno, BD.itcode)))
-        OR (SELECT COUNT(*) FROM Dc_RouCardDet rc1 WHERE rc1.dcno = BDO.dcno AND rc1.deleted = 0) = 1
+        OR ISNULL(CNT.rc_cnt, 0) = 1
     )
     WHERE BM.deleted = 0
-      AND CAST(BM.invdt AS DATE) BETWEEN ? AND ?
+      AND BM.invdt >= ? AND BM.invdt < DATEADD(DAY, 1, ?)
       {btype_sql}
       {search_sql}
       {extra_filter_sql}
     ORDER BY BM.invdt DESC, BM.invno DESC, BDO.dcno, DD.partno;
     """
 
-        all_params = [start_date, end_date] + list(btype_p) + search_params + extra_params
+        all_params = [start_date, end_date, start_date, end_date] + list(btype_p) + search_params + extra_params
         cursor.execute(sql, all_params)
         for row in cursor.fetchall() or []:
             customer = str(row[0]) if row[0] else "—"
@@ -3290,7 +3340,7 @@ def sales_analysis_part_rate_history(request):
                     ON BD.invno = BM.invno
 
                 WHERE BM.deleted = 0
-                  AND CAST(BM.invdt AS DATE) BETWEEN ? AND ?
+                  AND BM.invdt >= ? AND BM.invdt < DATEADD(DAY, 1, ?)
                   AND BD.deleted = 0
                   AND BD.itcode = ?
 
@@ -3420,3 +3470,66 @@ def sales_analysis_part_rate_history(request):
         "hero": hero,
     })
 
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Unified Sales Analysis Bundling Endpoint
+# ══════════════════════════════════════════════════════════════════════════════
+# Uses the shared runner (utils/bundle.py): bounded to 3 worker threads (2 vCPU
+# box, single-threaded Passenger workers), one request-scoped ERP connection
+# per worker, all released at the end. ?keys=a,b selects a subset so the
+# frontend can split "head" (KPIs/charts) and "tables" into two requests.
+
+from .utils.bundle import run_bundle
+
+_SALES_BUNDLE_REGISTRY = [
+    # head (above the fold)
+    ("summary", sales_analysis_summary_strip),
+    ("grand_total", sales_analysis_grand_total),
+    ("avg_rate_cards", sales_analysis_avg_rate_cards),
+    ("weekly_trend", sales_analysis_weekly_trend),
+    ("revenue_charts", sales_analysis_revenue_charts),
+    ("month_summary", sales_analysis_month_summary),
+    ("top_products", sales_analysis_top_products),
+    ("monthly_sales_trend", sales_analysis_monthly_sales_trend),
+    ("bill_type_revenue", sales_analysis_bill_type_revenue),
+    ("monthly_tax_trend", sales_analysis_monthly_tax_trend),
+    # tables (tier 3)
+    ("invoice_details", sales_analysis_invoice_details),
+    ("future_projections", sales_analysis_future_projections),
+    ("plan_vs_actual", sales_analysis_plan_vs_actual),
+    ("po_ledger", sales_analysis_po_ledger),
+    ("traceability", sales_analysis_traceability),
+]
+
+SALES_BUNDLE_HEAD_KEYS = [
+    "summary", "grand_total", "avg_rate_cards", "weekly_trend", "revenue_charts",
+    "month_summary", "top_products", "monthly_sales_trend", "bill_type_revenue", "monthly_tax_trend",
+]
+
+
+@api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="sales_analysis_bundle")
+def sales_analysis_bundle(request):
+    """
+    Consolidated endpoint for Sales Analysis.
+
+    Query Parameters:
+      - from / to: YYYY-MM-DD
+      - btype, customer, search: forwarded to every sub-view
+      - keys: comma-separated subset (default = head keys only, for backward
+        compatibility with the original 10-panel bundle)
+    """
+    if not (request.GET.get("keys") or "").strip():
+        q = request.GET.copy()
+        q["keys"] = ",".join(SALES_BUNDLE_HEAD_KEYS)
+        request._request.GET = q
+    return run_bundle(
+        request,
+        _SALES_BUNDLE_REGISTRY,
+        max_workers=3,
+        extra={
+            "from": (request.GET.get("from") or "").strip(),
+            "to": (request.GET.get("to") or "").strip(),
+        },
+    )

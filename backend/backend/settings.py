@@ -46,6 +46,7 @@ MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'accounts.middleware.AdminSessionGuardMiddleware',
+    'accounts.middleware.ErpConnectionReleaseMiddleware',
     'django.middleware.common.CommonMiddleware',          # ✅ only once — was duplicated
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
