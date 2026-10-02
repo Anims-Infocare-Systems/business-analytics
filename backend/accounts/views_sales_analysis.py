@@ -2131,6 +2131,15 @@ def sales_analysis_future_projections(request):
 
     try:
         cursor = conn.cursor()
+        is_br_currency = 0
+        try:
+            cursor.execute("SELECT TOP 1 ISNULL(IsBRCurrency, 0) FROM CompanySetting")
+            cs_row = cursor.fetchone()
+            if cs_row and cs_row[0] is not None:
+                is_br_currency = int(cs_row[0])
+        except Exception:
+            is_br_currency = 0
+
         use_alias = table_exists(cursor, "CustAliasMast")
         
         if use_alias:
@@ -2184,10 +2193,16 @@ def sales_analysis_future_projections(request):
                 curr_rate = 1
             po_qty = float(row[12] or 0) if len(row) > 12 else 0
 
-            if po_qty > 0 and amt > 0:
-                effective_rate = (amt * curr_rate) / po_qty
+            if is_br_currency == 1:
+                if po_qty > 0 and amt > 0:
+                    effective_rate = (amt * curr_rate) / po_qty
+                else:
+                    effective_rate = rate * curr_rate
             else:
-                effective_rate = rate * curr_rate
+                if po_qty > 0 and amt > 0:
+                    effective_rate = amt / po_qty
+                else:
+                    effective_rate = rate
 
             schedules.append({
                 "apono": row[0],
@@ -2371,7 +2386,8 @@ def sales_analysis_future_projections(request):
         })
 
     return Response({
-        "rows": rows
+        "rows": rows,
+        "isBrCurrency": is_br_currency
     })
 
 
@@ -2739,6 +2755,9 @@ ORDER BY
 @api_view(["GET"])
 @cache_analytics_response(timeout=300, key_prefix="sales_analysis_po_ledger")
 def sales_analysis_po_ledger(request):
+    from collections import defaultdict
+    from datetime import datetime
+
     try:
         conn, tenant = get_tenant_connection(request)
     except ValueError as e:
@@ -2752,6 +2771,15 @@ def sales_analysis_po_ledger(request):
     cursor = None
     try:
         cursor = conn.cursor()
+        is_br_currency = 0
+        try:
+            cursor.execute("SELECT TOP 1 ISNULL(IsBRCurrency, 0) FROM CompanySetting")
+            cs_row = cursor.fetchone()
+            if cs_row and cs_row[0] is not None:
+                is_br_currency = int(cs_row[0])
+        except Exception:
+            is_br_currency = 0
+
         use_alias = table_exists(cursor, "CustAliasMast")
 
         if use_alias:
@@ -2846,8 +2874,8 @@ def sales_analysis_po_ledger(request):
         customer_filter = (request.GET.get("customer") or "").strip()
         cust_cond, cust_params = _customer_cond(cust_name_expr, customer_filter)
         if cust_cond:
-            sql = sql.replace("WHERE PM.Deleted = 0 AND PD.Deleted = 0", f"WHERE PM.Deleted = 0 AND PD.Deleted = 0 {cust_cond}")
-        cursor.execute(sql, [start_date, end_date, start_date, end_date] + list(btype_p) + cust_params + search_params)
+            sql = sql.replace("{search_sql}", f"{cust_cond} {search_sql}")
+        cursor.execute(sql, [start_date, end_date] + list(btype_p) + [start_date, end_date] + cust_params + search_params)
         rows = []
         for row in cursor.fetchall() or []:
             po_type = str(row[0]) if row[0] else ""
@@ -2875,6 +2903,22 @@ def sales_analysis_po_ledger(request):
                 curr_rate = 1
             total_dc_qty = float(row[20] or 0) if len(row) > 20 else dc_qty
 
+            if is_br_currency == 1:
+                if qty > 0 and amt > 0:
+                    effective_rate = (amt * curr_rate) / qty
+                else:
+                    effective_rate = rate * curr_rate
+                value = (amt if amt > 0 else (qty * rate)) * curr_rate
+            else:
+                if qty > 0 and amt > 0:
+                    effective_rate = amt / qty
+                else:
+                    effective_rate = rate
+                value = amt if amt > 0 else (qty * rate)
+
+            pending_qty = max(0.0, qty - total_dc_qty - short_close_qty)
+            pending_value = pending_qty * effective_rate
+
             rows.append({
                 "type": po_type,
                 "apoNo": apono,
@@ -2891,6 +2935,11 @@ def sales_analysis_po_ledger(request):
                 "rate": rate,
                 "amt": amt,
                 "currRate": curr_rate,
+                "isBrCurrency": is_br_currency,
+                "effectiveRate": effective_rate,
+                "value": value,
+                "pendingQty": pending_qty,
+                "pendingValue": pending_value,
                 "dcNo": dc_no,
                 "dcDate": dc_date,
                 "dcQty": dc_qty,
@@ -2899,6 +2948,193 @@ def sales_analysis_po_ledger(request):
                 "invDate": inv_date,
                 "invNoDt": inv_no_dt
             })
+
+        # ── Schedule-wise data from In_PoDet_ShdQty (filtered by shddate) for Po Sch Wise view ──
+        sch_rows = []
+        try:
+            if table_exists(cursor, "In_PoDet_ShdQty"):
+                sch_cust_cond = ""
+                sch_cust_params = []
+                sch_cust_expr = f"COALESCE(NULLIF(LTRIM(RTRIM({cust_name_expr})), ''), CASE WHEN LTRIM(RTRIM(s.pono)) = 'STOCK' THEN 'STOCK' ELSE '—' END)"
+                if customer_filter:
+                    sch_cust_cond, sch_cust_params = _customer_cond(sch_cust_expr, customer_filter)
+
+                sch_search_cond = ""
+                sch_search_params = []
+                if search_q:
+                    sch_search_cond = " AND (s.itcode LIKE ? OR ISNULL(PD.itdesc, '') LIKE ?)"
+                    sch_search_params = [f"%{search_q}%", f"%{search_q}%"]
+
+                sch_sql = f"""
+                SELECT 
+                    s.Apono,
+                    s.pono,
+                    s.itcode AS partno,
+                    CAST(ISNULL(s.poslno, '') AS NVARCHAR(100)) AS poslno,
+                    s.reqdate,
+                    CAST(s.shddate AS DATE) AS shddate,
+                    ISNULL(s.shdQty, 0) AS shdQty,
+                    CAST(PM.podt AS DATE) AS podt,
+                    {sch_cust_expr} AS CustomerName,
+                    ISNULL(PD.itdesc, '') AS Description,
+                    ISNULL(PD.rate, 0) AS Rate,
+                    ISNULL(PD.amt, 0) AS Amt,
+                    CASE WHEN ISNULL(PD.CurrRate, 0) = 0 THEN 1 ELSE PD.CurrRate END AS CurrRate,
+                    ISNULL(PD.Qty, 0) AS PoQty
+                FROM In_PoDet_ShdQty s
+                LEFT JOIN In_PoMas PM ON (LTRIM(RTRIM(PM.Apono)) = LTRIM(RTRIM(s.Apono)) OR (ISNULL(s.Apono, '') = '' AND LTRIM(RTRIM(PM.pono)) = LTRIM(RTRIM(s.pono))))
+                {cust_join}
+                LEFT JOIN (
+                    SELECT LTRIM(RTRIM(Apono)) AS Apono, LTRIM(RTRIM(itcode)) AS itcode,
+                           MAX(itdesc) AS itdesc, MAX(rate) AS rate, SUM(amt) AS amt, MAX(CurrRate) AS CurrRate, SUM(Qty) AS Qty
+                    FROM In_PoDet
+                    WHERE Deleted = 0
+                    GROUP BY LTRIM(RTRIM(Apono)), LTRIM(RTRIM(itcode))
+                ) PD ON PD.Apono = LTRIM(RTRIM(s.Apono)) AND PD.itcode = LTRIM(RTRIM(s.itcode))
+                WHERE ISNULL(s.deleted, 0) = 0
+                  AND s.shddate IS NOT NULL
+                  AND s.shddate >= ? AND s.shddate < DATEADD(DAY, 1, ?)
+                  {sch_cust_cond}
+                  {sch_search_cond}
+                ORDER BY s.shddate ASC
+                """
+                cursor.execute(sch_sql, [start_date, end_date] + sch_cust_params + sch_search_params)
+                schedules_data = []
+                for s_row in cursor.fetchall() or []:
+                    po_qty = float(s_row[13] or 0)
+                    rate = float(s_row[10] or 0)
+                    amt = float(s_row[11] or 0)
+                    curr_rate = float(s_row[12] or 1)
+
+                    if is_br_currency == 1:
+                        if po_qty > 0 and amt > 0:
+                            effective_rate = (amt * curr_rate) / po_qty
+                        else:
+                            effective_rate = rate * curr_rate
+                    else:
+                        if po_qty > 0 and amt > 0:
+                            effective_rate = amt / po_qty
+                        else:
+                            effective_rate = rate
+
+                    schedules_data.append({
+                        "apono": str(s_row[0]).strip() if s_row[0] else "",
+                        "pono": str(s_row[1]).strip() if s_row[1] else "",
+                        "partno": str(s_row[2]).strip() if s_row[2] else "",
+                        "poslno": str(s_row[3]).strip() if s_row[3] else "",
+                        "reqdate": s_row[4],
+                        "shddate": str(s_row[5])[:10] if s_row[5] else "",
+                        "shdQty": float(s_row[6] or 0),
+                        "podt": str(s_row[7])[:10] if s_row[7] else "",
+                        "customer": str(s_row[8]).strip() if s_row[8] else "—",
+                        "description": str(s_row[9]).strip() if s_row[9] else "",
+                        "rate": rate,
+                        "amt": amt,
+                        "currRate": curr_rate,
+                        "poQty": po_qty,
+                        "effectiveRate": effective_rate,
+                    })
+
+                sch_aponos = list(set(s["apono"] for s in schedules_data if s["apono"]))
+                if sch_aponos:
+                    dispatches_by_key = defaultdict(float)
+                    batch_size = 900
+                    for i in range(0, len(sch_aponos), batch_size):
+                        batch = sch_aponos[i:i + batch_size]
+                        placeholders = ",".join("?" for _ in batch)
+                        dc_q = f"""
+                        SELECT LTRIM(RTRIM(d.Apono)) AS Apono, LTRIM(RTRIM(d.partno)) AS partno, SUM(ISNULL(d.okqty, 0)) AS TotalDcQty
+                        FROM (
+                            SELECT Apono, partno, okqty FROM DcInSubDet WHERE deleted = 0
+                            UNION ALL
+                            SELECT Apono, partno, okqty FROM DcInSubDetAssmPoDet WHERE deleted = 0
+                        ) d
+                        WHERE d.Apono IN ({placeholders})
+                        GROUP BY LTRIM(RTRIM(d.Apono)), LTRIM(RTRIM(d.partno))
+                        """
+                        cursor.execute(dc_q, batch)
+                        for d_row in cursor.fetchall() or []:
+                            d_key = (str(d_row[0]).strip(), str(d_row[1]).strip())
+                            dispatches_by_key[d_key] += float(d_row[2] or 0)
+
+                    all_schedules_by_key = defaultdict(list)
+                    for i in range(0, len(sch_aponos), batch_size):
+                        batch = sch_aponos[i:i + batch_size]
+                        placeholders = ",".join("?" for _ in batch)
+                        all_sch_q = f"""
+                        SELECT LTRIM(RTRIM(s.Apono)) AS Apono, LTRIM(RTRIM(s.itcode)) AS partno,
+                               s.shddate,
+                               ISNULL(s.shdQty, 0) AS shdQty,
+                               s.reqdate,
+                               CAST(ISNULL(s.poslno, '') AS NVARCHAR(100)) AS poslno
+                        FROM In_PoDet_ShdQty s
+                        WHERE ISNULL(s.deleted, 0) = 0 AND s.Apono IN ({placeholders})
+                        ORDER BY s.shddate ASC, s.reqdate ASC
+                        """
+                        cursor.execute(all_sch_q, batch)
+                        for row_s in cursor.fetchall() or []:
+                            s_key = (str(row_s[0]).strip(), str(row_s[1]).strip())
+                            all_schedules_by_key[s_key].append({
+                                "shddate": str(row_s[2])[:10] if row_s[2] else "",
+                                "shdQty": float(row_s[3] or 0),
+                                "poslno": str(row_s[5]).strip()
+                            })
+
+                    allocated_sch_map = {}
+                    for key, sch_list in all_schedules_by_key.items():
+                        total_dc = dispatches_by_key.get(key, 0.0)
+                        rem_dc = total_dc
+                        for idx, sch in enumerate(sch_list):
+                            allocated = min(sch["shdQty"], rem_dc)
+                            sch_disp = allocated
+                            sch_pend = max(0.0, sch["shdQty"] - allocated)
+                            rem_dc = max(0.0, rem_dc - allocated)
+
+                            map_key = (key[0], key[1], sch["poslno"], sch["shddate"], idx)
+                            allocated_sch_map[map_key] = {"dispQty": sch_disp, "pendQty": sch_pend}
+
+                    seen_occ = defaultdict(int)
+                    for s in schedules_data:
+                        base_k = (s["apono"], s["partno"], s["poslno"], s["shddate"])
+                        occ_idx = seen_occ[base_k]
+                        seen_occ[base_k] += 1
+
+                        map_k = (s["apono"], s["partno"], s["poslno"], s["shddate"], occ_idx)
+                        alloc = allocated_sch_map.get(map_k)
+                        if alloc:
+                            s["dispQty"] = alloc["dispQty"]
+                            s["pendQty"] = alloc["pendQty"]
+                        else:
+                            tot_dc = dispatches_by_key.get((s["apono"], s["partno"]), 0.0)
+                            s["dispQty"] = min(s["shdQty"], tot_dc)
+                            s["pendQty"] = max(0.0, s["shdQty"] - s["dispQty"])
+
+                for s in schedules_data:
+                    eff_r = s["effectiveRate"]
+                    sch_qty = s["shdQty"]
+                    disp_qty = s.get("dispQty", 0.0)
+                    pend_qty = s.get("pendQty", sch_qty)
+                    sch_rows.append({
+                        "customer": s["customer"],
+                        "partNo": s["partno"],
+                        "description": s["description"],
+                        "poQty": sch_qty,
+                        "salQty": disp_qty,
+                        "pendQty": pend_qty,
+                        "effectiveRate": eff_r,
+                        "schdVal": sch_qty * eff_r,
+                        "salVal": disp_qty * eff_r,
+                        "pendVal": pend_qty * eff_r,
+                        "poDate": s["podt"],
+                        "schDate": s["shddate"],
+                        "apoNo": s["apono"],
+                        "poNo": s["pono"],
+                        "poSlNo": s["poslno"],
+                    })
+        except Exception as ex:
+            import logging
+            logging.getLogger(__name__).exception("Error fetching schRows in sales_analysis_po_ledger: %s", ex)
+            sch_rows = []
 
     except Exception as e:
         if cursor: cursor.close()
@@ -2909,7 +3145,297 @@ def sales_analysis_po_ledger(request):
     conn.close()
 
     return Response({
-        "rows": rows
+        "rows": rows,
+        "schRows": sch_rows,
+        "isBrCurrency": is_br_currency
+    })
+
+
+@api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="sales_analysis_schedule_analysis")
+def sales_analysis_schedule_analysis(request):
+    """
+    Customer & Part-Wise Schedule Analysis endpoint.
+    Calculates scheduled quantity, scheduled value, sales/dispatch quantity, and sales value
+    per customer and part across schedule months, using the exact IsBRCurrency rate logic.
+    """
+    from collections import defaultdict
+    from datetime import datetime, date
+
+    try:
+        conn, tenant = get_tenant_connection(request)
+    except ValueError as e:
+        return Response({"error": str(e)}, status=401)
+
+    start_date, end_date = parse_date_range(request)
+    customer_filter = (request.GET.get("customer") or "").strip()
+    search_q = (request.GET.get("search") or request.GET.get("q") or "").strip()
+
+    cursor = None
+    try:
+        cursor = conn.cursor()
+        is_br_currency = 0
+        try:
+            cursor.execute("SELECT TOP 1 ISNULL(IsBRCurrency, 0) FROM CompanySetting")
+            cs_row = cursor.fetchone()
+            if cs_row and cs_row[0] is not None:
+                is_br_currency = int(cs_row[0])
+        except Exception:
+            is_br_currency = 0
+
+        use_alias = table_exists(cursor, "CustAliasMast")
+        if use_alias:
+            cust_name_expr = "LTRIM(RTRIM(ISNULL(NULLIF(LTRIM(RTRIM(ISNULL(CM.CName, N''))), N''), NULLIF(LTRIM(RTRIM(ISNULL(ca.CName, N''))), N''))))"
+            cust_join = """
+                LEFT JOIN CustMast CM ON PM.CId = CM.Id
+                LEFT JOIN CustAliasMast ca ON PM.CId = ca.Id
+            """
+        else:
+            cust_name_expr = "LTRIM(RTRIM(ISNULL(CM.CName, N'')))"
+            cust_join = "LEFT JOIN CustMast CM ON PM.CId = CM.Id"
+
+        sch_cust_expr = f"COALESCE(NULLIF(LTRIM(RTRIM({cust_name_expr})), ''), CASE WHEN LTRIM(RTRIM(s.pono)) = 'STOCK' THEN 'STOCK' ELSE '—' END)"
+        sch_cust_cond = ""
+        sch_cust_params = []
+        if customer_filter:
+            sch_cust_cond, sch_cust_params = _customer_cond(sch_cust_expr, customer_filter)
+
+        sch_search_cond = ""
+        sch_search_params = []
+        if search_q:
+            sch_search_cond = " AND (s.itcode LIKE ? OR ISNULL(PD.itdesc, '') LIKE ?)"
+            sch_search_params = [f"%{search_q}%", f"%{search_q}%"]
+
+        # Generate month list strictly for the filtered date range [start_date, end_date]
+        curr = date(start_date.year, start_date.month, 1)
+        target_end = date(end_date.year, end_date.month, 1)
+        months_meta = []
+        while curr <= target_end:
+            m_key = curr.strftime("%B-%y")
+            months_meta.append({
+                "key": m_key,
+                "label": m_key,
+                "year": curr.year,
+                "month": curr.month,
+            })
+            if curr.month == 12:
+                curr = date(curr.year + 1, 1, 1)
+            else:
+                curr = date(curr.year, curr.month + 1, 1)
+        month_keys_set = {m["key"] for m in months_meta}
+
+        sch_sql = f"""
+        SELECT 
+            s.Apono,
+            s.pono,
+            s.itcode AS partno,
+            CAST(ISNULL(s.poslno, '') AS NVARCHAR(100)) AS poslno,
+            s.reqdate,
+            CAST(s.shddate AS DATE) AS shddate,
+            ISNULL(s.shdQty, 0) AS shdQty,
+            CAST(PM.podt AS DATE) AS podt,
+            {sch_cust_expr} AS CustomerName,
+            COALESCE(PD.itdesc, '') AS Description,
+            COALESCE(PD.rate, 0) AS Rate,
+            COALESCE(PD.amt, 0) AS Amt,
+            CASE WHEN ISNULL(COALESCE(PD.CurrRate, 0), 0) = 0 THEN 1 ELSE COALESCE(PD.CurrRate, 1) END AS CurrRate,
+            COALESCE(PD.Qty, 0) AS PoQty
+        FROM In_PoDet_ShdQty s
+        LEFT JOIN In_PoMas PM ON (LTRIM(RTRIM(PM.Apono)) = LTRIM(RTRIM(s.Apono)) OR (ISNULL(s.Apono, '') = '' AND LTRIM(RTRIM(PM.pono)) = LTRIM(RTRIM(s.pono))))
+        {cust_join}
+        LEFT JOIN (
+            SELECT LTRIM(RTRIM(Apono)) AS Apono, LTRIM(RTRIM(itcode)) AS itcode,
+                   MAX(itdesc) AS itdesc, MAX(rate) AS rate, SUM(amt) AS amt,
+                   MAX(CASE WHEN ISNULL(CurrRate, 0) = 0 THEN 1 ELSE CurrRate END) AS CurrRate,
+                   SUM(Qty) AS Qty
+            FROM In_PoDet WHERE Deleted = 0
+            GROUP BY LTRIM(RTRIM(Apono)), LTRIM(RTRIM(itcode))
+        ) PD ON PD.Apono = LTRIM(RTRIM(s.Apono)) AND PD.itcode = LTRIM(RTRIM(s.itcode))
+        WHERE ISNULL(s.deleted, 0) = 0
+          AND s.shddate IS NOT NULL
+          AND s.shddate >= ? AND s.shddate < DATEADD(DAY, 1, ?)
+          {sch_cust_cond}
+          {sch_search_cond}
+        ORDER BY s.shddate ASC
+        """
+        cursor.execute(sch_sql, [start_date, end_date] + sch_cust_params + sch_search_params)
+        schedules_data = []
+        for s_row in cursor.fetchall() or []:
+            po_qty = float(s_row[13] or 0)
+            rate = float(s_row[10] or 0)
+            amt = float(s_row[11] or 0)
+            curr_rate = float(s_row[12] or 1)
+
+            if is_br_currency == 1:
+                if po_qty > 0 and amt > 0:
+                    effective_rate = (amt * curr_rate) / po_qty
+                else:
+                    effective_rate = rate * curr_rate
+            else:
+                if po_qty > 0 and amt > 0:
+                    effective_rate = amt / po_qty
+                else:
+                    effective_rate = rate
+
+            schedules_data.append({
+                "apono": str(s_row[0]).strip() if s_row[0] else "",
+                "pono": str(s_row[1]).strip() if s_row[1] else "",
+                "partno": str(s_row[2]).strip() if s_row[2] else "",
+                "poslno": str(s_row[3]).strip() if s_row[3] else "",
+                "reqdate": s_row[4],
+                "shddate": str(s_row[5])[:10] if s_row[5] else "",
+                "shdQty": float(s_row[6] or 0),
+                "podt": str(s_row[7])[:10] if s_row[7] else "",
+                "customer": str(s_row[8]).strip() if s_row[8] else "—",
+                "description": str(s_row[9]).strip() if s_row[9] else "",
+                "rate": rate,
+                "amt": amt,
+                "currRate": curr_rate,
+                "poQty": po_qty,
+                "effectiveRate": effective_rate,
+            })
+
+        sch_aponos = list(set(s["apono"] for s in schedules_data if s["apono"]))
+        if sch_aponos:
+            dispatches_by_key = defaultdict(float)
+            batch_size = 900
+            for i in range(0, len(sch_aponos), batch_size):
+                batch = sch_aponos[i:i + batch_size]
+                placeholders = ",".join("?" for _ in batch)
+                dc_q = f"""
+                SELECT LTRIM(RTRIM(d.Apono)) AS Apono, LTRIM(RTRIM(d.partno)) AS partno, SUM(ISNULL(d.okqty, 0)) AS TotalDcQty
+                FROM (
+                    SELECT Apono, partno, okqty FROM DcInSubDet WHERE deleted = 0
+                    UNION ALL
+                    SELECT Apono, partno, okqty FROM DcInSubDetAssmPoDet WHERE deleted = 0
+                ) d
+                WHERE d.Apono IN ({placeholders})
+                GROUP BY LTRIM(RTRIM(d.Apono)), LTRIM(RTRIM(d.partno))
+                """
+                cursor.execute(dc_q, batch)
+                for d_row in cursor.fetchall() or []:
+                    d_key = (str(d_row[0]).strip(), str(d_row[1]).strip())
+                    dispatches_by_key[d_key] += float(d_row[2] or 0)
+
+            all_schedules_by_key = defaultdict(list)
+            for i in range(0, len(sch_aponos), batch_size):
+                batch = sch_aponos[i:i + batch_size]
+                placeholders = ",".join("?" for _ in batch)
+                all_sch_q = f"""
+                SELECT LTRIM(RTRIM(s.Apono)) AS Apono, LTRIM(RTRIM(s.itcode)) AS partno,
+                       s.shddate,
+                       ISNULL(s.shdQty, 0) AS shdQty,
+                       s.reqdate,
+                       CAST(ISNULL(s.poslno, '') AS NVARCHAR(100)) AS poslno
+                FROM In_PoDet_ShdQty s
+                WHERE ISNULL(s.deleted, 0) = 0 AND s.Apono IN ({placeholders})
+                ORDER BY s.shddate ASC, s.reqdate ASC
+                """
+                cursor.execute(all_sch_q, batch)
+                for row_s in cursor.fetchall() or []:
+                    s_key = (str(row_s[0]).strip(), str(row_s[1]).strip())
+                    all_schedules_by_key[s_key].append({
+                        "shddate": str(row_s[2])[:10] if row_s[2] else "",
+                        "shdQty": float(row_s[3] or 0),
+                        "poslno": str(row_s[5]).strip()
+                    })
+
+            allocated_sch_map = {}
+            for key, sch_list in all_schedules_by_key.items():
+                total_dc = dispatches_by_key.get(key, 0.0)
+                rem_dc = total_dc
+                for idx, sch in enumerate(sch_list):
+                    allocated = min(sch["shdQty"], rem_dc)
+                    sch_disp = allocated
+                    sch_pend = max(0.0, sch["shdQty"] - allocated)
+                    rem_dc = max(0.0, rem_dc - allocated)
+
+                    map_key = (key[0], key[1], sch["poslno"], sch["shddate"], idx)
+                    allocated_sch_map[map_key] = {"dispQty": sch_disp, "pendQty": sch_pend}
+
+            seen_occ = defaultdict(int)
+            for s in schedules_data:
+                base_k = (s["apono"], s["partno"], s["poslno"], s["shddate"])
+                occ_idx = seen_occ[base_k]
+                seen_occ[base_k] += 1
+
+                map_k = (s["apono"], s["partno"], s["poslno"], s["shddate"], occ_idx)
+                alloc = allocated_sch_map.get(map_k)
+                if alloc:
+                    s["dispQty"] = alloc["dispQty"]
+                    s["pendQty"] = alloc["pendQty"]
+                else:
+                    tot_dc = dispatches_by_key.get((s["apono"], s["partno"]), 0.0)
+                    s["dispQty"] = min(s["shdQty"], tot_dc)
+                    s["pendQty"] = max(0.0, s["shdQty"] - s["dispQty"])
+
+                eff_r = s["effectiveRate"]
+                s["schdVal"] = s["shdQty"] * eff_r
+                s["salVal"] = s["dispQty"] * eff_r
+                s["pendVal"] = s["pendQty"] * eff_r
+
+        part_summary = {}
+        for s in schedules_data:
+            cust = s["customer"]
+            part = s["partno"]
+            desc = s["description"]
+            shd_date = s["shddate"]
+            if not shd_date:
+                continue
+            try:
+                dt = datetime.strptime(shd_date, "%Y-%m-%d")
+                m_key = dt.strftime("%B-%y")
+            except Exception:
+                continue
+
+            row_key = (cust, part)
+            if row_key not in part_summary:
+                part_summary[row_key] = {
+                    "key": f"{cust}___{part}",
+                    "customer": cust,
+                    "partNo": part,
+                    "description": desc,
+                    "months": {mk: {"schdQty": 0.0, "schdVal": 0.0, "salQty": 0.0, "salVal": 0.0} for mk in month_keys_set},
+                    "totalSchdQty": 0.0,
+                    "totalSchdVal": 0.0,
+                    "totalSalQty": 0.0,
+                    "totalSalVal": 0.0,
+                }
+
+            ps = part_summary[row_key]
+            if not ps["description"] and desc:
+                ps["description"] = desc
+
+            if m_key in ps["months"]:
+                ps["months"][m_key]["schdQty"] += s["shdQty"]
+                ps["months"][m_key]["schdVal"] += s.get("schdVal", 0.0)
+                ps["months"][m_key]["salQty"] += s.get("dispQty", 0.0)
+                ps["months"][m_key]["salVal"] += s.get("salVal", 0.0)
+
+            ps["totalSchdQty"] += s["shdQty"]
+            ps["totalSchdVal"] += s.get("schdVal", 0.0)
+            ps["totalSalQty"] += s.get("dispQty", 0.0)
+            ps["totalSalVal"] += s.get("salVal", 0.0)
+
+        rows = []
+        for p in part_summary.values():
+            if p["totalSchdQty"] > 0 or p["totalSalQty"] > 0:
+                rows.append(p)
+
+        rows.sort(key=lambda x: (x["totalSchdVal"], x["totalSalVal"]), reverse=True)
+
+    except Exception as e:
+        if cursor: cursor.close()
+        conn.close()
+        return Response({"error": f"Database error: {str(e)}"}, status=500)
+
+    if cursor: cursor.close()
+    conn.close()
+
+    return Response({
+        "rows": rows,
+        "months": months_meta,
+        "isBrCurrency": is_br_currency
     })
 
 
@@ -3500,6 +4026,7 @@ _SALES_BUNDLE_REGISTRY = [
     ("plan_vs_actual", sales_analysis_plan_vs_actual),
     ("po_ledger", sales_analysis_po_ledger),
     ("traceability", sales_analysis_traceability),
+    ("schedule_analysis", sales_analysis_schedule_analysis),
 ]
 
 SALES_BUNDLE_HEAD_KEYS = [

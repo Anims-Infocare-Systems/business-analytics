@@ -7,12 +7,34 @@ from datetime import date, datetime, timedelta
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
+from .utils.bundle import run_bundle
 from .utils.cache import cache_analytics_response
 from .views import get_tenant_connection, month_key_from_db, table_exists
 
 
 def rupees_to_lakhs(amount):
     return float(amount or 0) / 100_000
+
+
+def date_range_bounds(start_date, end_date):
+    """
+    Convert start and end (date or datetime) to SARGable [start_dt, end_next_day_dt).
+    Allows SQL Server index seeks without row-by-row CAST(... AS DATE) evaluations.
+    """
+    if isinstance(start_date, datetime):
+        s_dt = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
+    elif isinstance(start_date, date):
+        s_dt = datetime(start_date.year, start_date.month, start_date.day, 0, 0, 0)
+    else:
+        s_dt = datetime.strptime(str(start_date)[:10], "%Y-%m-%d")
+
+    if isinstance(end_date, datetime):
+        e_dt = (end_date + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    elif isinstance(end_date, date):
+        e_dt = datetime(end_date.year, end_date.month, end_date.day, 0, 0, 0) + timedelta(days=1)
+    else:
+        e_dt = datetime.strptime(str(end_date)[:10], "%Y-%m-%d") + timedelta(days=1)
+    return s_dt, e_dt
 
 
 def parse_dashboard1_period(request):
@@ -94,36 +116,51 @@ BILL_ADDL_CHRG_JOIN_SQL = """
     ) a ON b.invno = a.invno
 """
 
-SALES_ANALYSIS_BTYPE_SQL = f"""
-    SELECT
-        ISNULL(b.btype, '') AS btype,
-        SUM(ISNULL(b.tamt, 0) + ISNULL(a.tot_addl, 0)) AS total_amount
-    FROM Bill_Mas b
-    {BILL_ADDL_CHRG_JOIN_SQL}
-    WHERE ISNULL(b.deleted, 0) = 0
-      {EXCLUDED_SALES_BTYPES_SQL}
-      AND CAST(b.invdt AS DATE) BETWEEN ? AND ?
-    GROUP BY ISNULL(b.btype, '')
-"""
+def fetch_all_sales_analysis_buckets(cursor, buckets_dict):
+    """
+    Fetch all sales analysis buckets in a single batched SQL execution instead of 9 separate roundtrips.
+    """
+    results = {k: {"sales": 0.0, "lab": 0.0, "exp": 0.0, "total": 0.0} for k in buckets_dict}
+    if not buckets_dict:
+        return results
+
+    parts = []
+    params = []
+    for k, (s_date, e_date) in buckets_dict.items():
+        s_dt, e_dt = date_range_bounds(s_date, e_date)
+        parts.append(f"""
+            SELECT ? AS bucket, ISNULL(b.btype, '') AS btype, SUM(ISNULL(b.tamt, 0) + ISNULL(a.tot_addl, 0)) AS total_amount
+            FROM Bill_Mas b
+            {BILL_ADDL_CHRG_JOIN_SQL}
+            WHERE ISNULL(b.deleted, 0) = 0
+              {EXCLUDED_SALES_BTYPES_SQL}
+              AND b.invdt >= ? AND b.invdt < ?
+            GROUP BY ISNULL(b.btype, '')
+        """)
+        params.extend([k, s_dt, e_dt])
+
+    sql = " UNION ALL ".join(parts)
+    cursor.execute(sql, params)
+    for b_name, btype, total_amount in cursor.fetchall():
+        amount = float(total_amount or 0)
+        normalized_btype = (btype or "").strip().lower()
+        if b_name in results:
+            bucket = results[b_name]
+            bucket["total"] += amount
+            if normalized_btype == "labour charges":
+                bucket["lab"] += amount
+            elif normalized_btype == "export invoice":
+                bucket["exp"] += amount
+            else:
+                bucket["sales"] += amount
+
+    return results
 
 
 def fetch_sales_analysis_bucket(cursor, start_date, end_date):
-    cursor.execute(SALES_ANALYSIS_BTYPE_SQL, (start_date, end_date))
-    bucket = {"sales": 0.0, "lab": 0.0, "exp": 0.0, "total": 0.0}
-
-    for btype, total_amount in cursor.fetchall():
-        amount = float(total_amount or 0)
-        normalized_btype = (btype or "").strip().lower()
-        bucket["total"] += amount
-
-        if normalized_btype == "labour charges":
-            bucket["lab"] += amount
-        elif normalized_btype == "export invoice":
-            bucket["exp"] += amount
-        else:
-            bucket["sales"] += amount
-
-    return bucket
+    """Single bucket fallback wrapper."""
+    res = fetch_all_sales_analysis_buckets(cursor, {"b": (start_date, end_date)})
+    return res.get("b", {"sales": 0.0, "lab": 0.0, "exp": 0.0, "total": 0.0})
 
 
 @api_view(["GET"])
@@ -155,23 +192,25 @@ def dashboard1_sales_kpi(request):
     try:
         cursor = conn.cursor()
         
-        # ── Get Month-wise Sales for Current FY (for sparkline & current value) ──
+        # ── Get Month-wise Sales for Current FY (SARGable) ──
+        fy_s_dt, fy_e_dt = date_range_bounds(fy_start_date, fy_end_date)
         cursor.execute(f"""
             SELECT MONTH(b.invdt) AS mth, SUM(ISNULL(b.tamt, 0) + ISNULL(a.tot_addl, 0)) AS total 
             FROM Bill_Mas b
             {BILL_ADDL_CHRG_JOIN_SQL}
             WHERE ISNULL(b.deleted, 0) = 0
             {EXCLUDED_SALES_BTYPES_SQL}
-            AND CAST(b.invdt AS DATE) BETWEEN ? AND ?
+            AND b.invdt >= ? AND b.invdt < ?
             GROUP BY MONTH(b.invdt)
             ORDER BY mth
-        """, (fy_start_date, fy_end_date))
+        """, (fy_s_dt, fy_e_dt))
         
         fy_sales_rows = cursor.fetchall()
         
-        # ── Get Previous FY Sales for Delta Calculation ──
+        # ── Get Previous FY Sales for Delta Calculation (SARGable) ──
         prev_fy_start = datetime(fy_start_year - 1, 4, 1)
         prev_fy_end = datetime(fy_start_year, 3, 31)
+        prev_fy_s_dt, prev_fy_e_dt = date_range_bounds(prev_fy_start, prev_fy_end)
         
         cursor.execute(f"""
             SELECT SUM(ISNULL(b.tamt, 0) + ISNULL(a.tot_addl, 0)) AS total 
@@ -179,63 +218,42 @@ def dashboard1_sales_kpi(request):
             {BILL_ADDL_CHRG_JOIN_SQL}
             WHERE ISNULL(b.deleted, 0) = 0
             {EXCLUDED_SALES_BTYPES_SQL}
-            AND CAST(b.invdt AS DATE) BETWEEN ? AND ?
-        """, (prev_fy_start, prev_fy_end))
+            AND b.invdt >= ? AND b.invdt < ?
+        """, (prev_fy_s_dt, prev_fy_e_dt))
         
         prev_fy_row = cursor.fetchone()
         prev_fy_total = float(prev_fy_row[0] or 0) if prev_fy_row else 0
         
-        # ── Get Current Month Sales ──
+        # Current Month and Prev Month boundaries
         current_month_start = datetime(selected_year, selected_month, 1)
         if selected_month == 12:
             current_month_end = datetime(selected_year, 12, 31)
         else:
             current_month_end = datetime(selected_year, selected_month + 1, 1) - timedelta(days=1)
         
-        cursor.execute(f"""
-            SELECT SUM(ISNULL(b.tamt, 0) + ISNULL(a.tot_addl, 0)) AS total 
-            FROM Bill_Mas b
-            {BILL_ADDL_CHRG_JOIN_SQL}
-            WHERE ISNULL(b.deleted, 0) = 0
-            {EXCLUDED_SALES_BTYPES_SQL}
-            AND CAST(b.invdt AS DATE) BETWEEN ? AND ?
-        """, (current_month_start, current_month_end))
-        
-        current_month_row = cursor.fetchone()
-        current_month_total = float(current_month_row[0] or 0) if current_month_row else 0
-        
-        # ── Get Previous Month Sales for Delta ──
         prev_month_end = current_month_start - timedelta(days=1)
         prev_month_start = prev_month_end.replace(day=1)
         prev_prev_month_end = prev_month_start - timedelta(days=1)
         prev_prev_month_start = prev_prev_month_end.replace(day=1)
-        
-        cursor.execute(f"""
-            SELECT SUM(ISNULL(b.tamt, 0) + ISNULL(a.tot_addl, 0)) AS total 
-            FROM Bill_Mas b
-            {BILL_ADDL_CHRG_JOIN_SQL}
-            WHERE ISNULL(b.deleted, 0) = 0
-            {EXCLUDED_SALES_BTYPES_SQL}
-            AND CAST(b.invdt AS DATE) BETWEEN ? AND ?
-        """, (prev_month_start, prev_month_end))
-        
-        prev_month_row = cursor.fetchone()
-        prev_month_total = float(prev_month_row[0] or 0) if prev_month_row else 0
 
         day_before_yesterday_date = yesterday_date - timedelta(days=1)
         prev_quarter_start_date, prev_quarter_end_date = get_prev_quarter_dates(quarter_start_date)
 
-        sales_analysis = {
-            "today": fetch_sales_analysis_bucket(cursor, today_date, today_date),
-            "yesterday": fetch_sales_analysis_bucket(cursor, yesterday_date, yesterday_date),
-            "day_before_yesterday": fetch_sales_analysis_bucket(cursor, day_before_yesterday_date, day_before_yesterday_date),
-            "month": fetch_sales_analysis_bucket(cursor, current_month_start, current_month_end),
-            "prev_month": fetch_sales_analysis_bucket(cursor, prev_month_start, prev_month_end),
-            "prev_prev_month": fetch_sales_analysis_bucket(cursor, prev_prev_month_start, prev_prev_month_end),
-            "quarter": fetch_sales_analysis_bucket(cursor, quarter_start_date, quarter_end_date),
-            "prev_quarter": fetch_sales_analysis_bucket(cursor, prev_quarter_start_date, prev_quarter_end_date),
-            "financial_year": fetch_sales_analysis_bucket(cursor, fy_start_date, fy_end_date),
+        # Batch fetch all 9 analysis buckets in ONE single roundtrip
+        buckets_spec = {
+            "today": (today_date, today_date),
+            "yesterday": (yesterday_date, yesterday_date),
+            "day_before_yesterday": (day_before_yesterday_date, day_before_yesterday_date),
+            "month": (current_month_start, current_month_end),
+            "prev_month": (prev_month_start, prev_month_end),
+            "prev_prev_month": (prev_prev_month_start, prev_prev_month_end),
+            "quarter": (quarter_start_date, quarter_end_date),
+            "prev_quarter": (prev_quarter_start_date, prev_quarter_end_date),
+            "financial_year": (fy_start_date, fy_end_date),
         }
+        sales_analysis = fetch_all_sales_analysis_buckets(cursor, buckets_spec)
+        current_month_total = sales_analysis["month"]["total"]
+        prev_month_total = sales_analysis["prev_month"]["total"]
         
         cursor.close()
         conn.close()
@@ -312,7 +330,7 @@ PURCHASE_MONTHWISE_SQL = """
     INNER JOIN Grn_RateDet GRD ON GM.grnno = GRD.grnno
     WHERE GM.deleted = 0
       AND GRD.deleted = 0
-      AND CAST(GM.grndate AS DATE) BETWEEN ? AND ?
+      AND GM.grndate >= ? AND GM.grndate < ?
     GROUP BY MONTH(GM.grndate)
     ORDER BY month_num
 """
@@ -323,7 +341,7 @@ PURCHASE_TOTAL_SQL = """
     INNER JOIN Grn_RateDet GRD ON GM.grnno = GRD.grnno
     WHERE GM.deleted = 0
       AND GRD.deleted = 0
-      AND CAST(GM.grndate AS DATE) BETWEEN ? AND ?
+      AND GM.grndate >= ? AND GM.grndate < ?
 """
 
 PURCHASE_GRN_INVOICE_TOTAL_SQL = """
@@ -332,33 +350,25 @@ PURCHASE_GRN_INVOICE_TOTAL_SQL = """
     INNER JOIN Grn_RateDet GRD ON GM.grnno = GRD.grnno
     WHERE GM.deleted = 0
       AND GRD.deleted = 0
-      AND CAST(GM.RefDate AS DATE) BETWEEN ? AND ?
+      AND GM.RefDate >= ? AND GM.RefDate < ?
 """
 
 
 PURCHASE_ANALYSIS_PO_SQL = """
     SELECT SUM(ISNULL(amount, 0)) AS total_amount
-    FROM PODet
-    WHERE pono IN (
-        SELECT DISTINCT pono
-        FROM POMas
-        WHERE CAST(podate AS DATE) BETWEEN ? AND ?
-          AND deleted = 0
-          AND ISNULL(dtype, '') <> 'Job Order'
-    )
-      AND deleted = 0
+    FROM PODet PD
+    INNER JOIN POMas PM ON PD.pono = PM.pono
+    WHERE PM.podate >= ? AND PM.podate < ?
+      AND PM.deleted = 0 AND PD.deleted = 0
+      AND ISNULL(PM.dtype, '') <> 'Job Order'
 """
 
 PURCHASE_ANALYSIS_GRN_SQL = """
     SELECT SUM(ISNULL(Amount, 0)) AS total_amount
-    FROM Grn_RateDet
-    WHERE grnno IN (
-        SELECT grnno
-        FROM grn_mas
-        WHERE CAST(grndate AS DATE) BETWEEN ? AND ?
-          AND deleted = 0
-    )
-      AND deleted = 0
+    FROM Grn_RateDet GRD
+    INNER JOIN grn_mas GM ON GRD.grnno = GM.grnno
+    WHERE GM.grndate >= ? AND GM.grndate < ?
+      AND GM.deleted = 0 AND GRD.deleted = 0
 """
 
 
@@ -399,7 +409,8 @@ def build_dashboard1_kpi_payload(label, current_month_total, prev_month_total, m
 def fetch_month_totals(cursor, sql, start_date, end_date):
     month_order = [4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3]
     totals = {m: 0.0 for m in month_order}
-    cursor.execute(sql, (start_date, end_date))
+    s_dt, e_dt = date_range_bounds(start_date, end_date)
+    cursor.execute(sql, (s_dt, e_dt))
     for month_num, amount in cursor.fetchall():
         mk = month_key_from_db(month_num)
         if mk in totals:
@@ -408,18 +419,66 @@ def fetch_month_totals(cursor, sql, start_date, end_date):
 
 
 def fetch_period_total(cursor, sql, start_date, end_date):
-    cursor.execute(sql, (start_date, end_date))
+    s_dt, e_dt = date_range_bounds(start_date, end_date)
+    cursor.execute(sql, (s_dt, e_dt))
     row = cursor.fetchone()
     return float(row[0] or 0) if row else 0.0
 
 
+def fetch_all_purchase_analysis_buckets(cursor, buckets_dict):
+    """
+    Fetch all purchase PO & GRN analysis buckets in 2 batched executions instead of 18 sequential roundtrips.
+    """
+    results = {k: {"po": 0.0, "grn": 0.0} for k in buckets_dict}
+    if not buckets_dict:
+        return results
+
+    # 1. Batched PO query
+    po_parts = []
+    po_params = []
+    for k, (s_date, e_date) in buckets_dict.items():
+        s_dt, e_dt = date_range_bounds(s_date, e_date)
+        po_parts.append("""
+            SELECT ? AS bucket, SUM(ISNULL(PD.amount, 0)) AS total_amount
+            FROM PODet PD
+            INNER JOIN POMas PM ON PD.pono = PM.pono
+            WHERE PM.podate >= ? AND PM.podate < ?
+              AND PM.deleted = 0 AND PD.deleted = 0
+              AND ISNULL(PM.dtype, '') <> 'Job Order'
+        """)
+        po_params.extend([k, s_dt, e_dt])
+    
+    cursor.execute(" UNION ALL ".join(po_parts), po_params)
+    for b_name, total_amount in cursor.fetchall():
+        if b_name in results:
+            results[b_name]["po"] = float(total_amount or 0)
+
+    # 2. Batched GRN query
+    grn_parts = []
+    grn_params = []
+    for k, (s_date, e_date) in buckets_dict.items():
+        s_dt, e_dt = date_range_bounds(s_date, e_date)
+        grn_parts.append("""
+            SELECT ? AS bucket, SUM(ISNULL(GRD.Amount, 0)) AS total_amount
+            FROM Grn_RateDet GRD
+            INNER JOIN grn_mas GM ON GRD.grnno = GM.grnno
+            WHERE GM.grndate >= ? AND GM.grndate < ?
+              AND GM.deleted = 0 AND GRD.deleted = 0
+        """)
+        grn_params.extend([k, s_dt, e_dt])
+
+    cursor.execute(" UNION ALL ".join(grn_parts), grn_params)
+    for b_name, total_amount in cursor.fetchall():
+        if b_name in results:
+            results[b_name]["grn"] = float(total_amount or 0)
+
+    return results
+
+
 def fetch_purchase_analysis_bucket(cursor, start_date, end_date):
-    po_amount = fetch_period_total(cursor, PURCHASE_ANALYSIS_PO_SQL, start_date, end_date)
-    grn_amount = fetch_period_total(cursor, PURCHASE_ANALYSIS_GRN_SQL, start_date, end_date)
-    return {
-        "po": po_amount,
-        "grn": grn_amount,
-    }
+    """Single bucket fallback wrapper."""
+    res = fetch_all_purchase_analysis_buckets(cursor, {"b": (start_date, end_date)})
+    return res.get("b", {"po": 0.0, "grn": 0.0})
 
 
 @api_view(["GET"])
@@ -457,24 +516,43 @@ def dashboard1_purchase_kpi(request):
     try:
         cursor = conn.cursor()
         month_totals = fetch_month_totals(cursor, PURCHASE_MONTHWISE_SQL, fy_start_date, fy_end_date)
-        current_month_total = fetch_period_total(cursor, PURCHASE_TOTAL_SQL, current_month_start, current_month_end)
-        grn_invoice_current_month_total = fetch_period_total(cursor, PURCHASE_GRN_INVOICE_TOTAL_SQL, current_month_start, current_month_end)
-        prev_month_total = fetch_period_total(cursor, PURCHASE_TOTAL_SQL, prev_month_start, prev_month_end)
-        grn_invoice_prev_month_total = fetch_period_total(cursor, PURCHASE_GRN_INVOICE_TOTAL_SQL, prev_month_start, prev_month_end)
         day_before_yesterday_date = yesterday_date - timedelta(days=1)
         prev_quarter_start_date, prev_quarter_end_date = get_prev_quarter_dates(quarter_start_date)
 
-        purchase_analysis = {
-            "today": fetch_purchase_analysis_bucket(cursor, today_date, today_date),
-            "yesterday": fetch_purchase_analysis_bucket(cursor, yesterday_date, yesterday_date),
-            "day_before_yesterday": fetch_purchase_analysis_bucket(cursor, day_before_yesterday_date, day_before_yesterday_date),
-            "month": fetch_purchase_analysis_bucket(cursor, current_month_start, current_month_end),
-            "prev_month": fetch_purchase_analysis_bucket(cursor, prev_month_start, prev_month_end),
-            "prev_prev_month": fetch_purchase_analysis_bucket(cursor, prev_prev_month_start, prev_prev_month_end),
-            "quarter": fetch_purchase_analysis_bucket(cursor, quarter_start_date, quarter_end_date),
-            "prev_quarter": fetch_purchase_analysis_bucket(cursor, prev_quarter_start_date, prev_quarter_end_date),
-            "financial_year": fetch_purchase_analysis_bucket(cursor, fy_start_date, fy_end_date),
+        # Batch fetch all 9 PO & GRN buckets in 2 roundtrips
+        buckets_spec = {
+            "today": (today_date, today_date),
+            "yesterday": (yesterday_date, yesterday_date),
+            "day_before_yesterday": (day_before_yesterday_date, day_before_yesterday_date),
+            "month": (current_month_start, current_month_end),
+            "prev_month": (prev_month_start, prev_month_end),
+            "prev_prev_month": (prev_prev_month_start, prev_prev_month_end),
+            "quarter": (quarter_start_date, quarter_end_date),
+            "prev_quarter": (prev_quarter_start_date, prev_quarter_end_date),
+            "financial_year": (fy_start_date, fy_end_date),
         }
+        purchase_analysis = fetch_all_purchase_analysis_buckets(cursor, buckets_spec)
+        current_month_total = purchase_analysis["month"]["grn"]
+        prev_month_total = purchase_analysis["prev_month"]["grn"]
+
+        # Batched query for current and previous GRN invoice values
+        cur_inv_s, cur_inv_e = date_range_bounds(current_month_start, current_month_end)
+        prev_inv_s, prev_inv_e = date_range_bounds(prev_month_start, prev_month_end)
+        cursor.execute("""
+            SELECT 'cur' AS period, SUM(ISNULL(GRD.Amount, 0)) AS total_amount
+            FROM grn_mas GM
+            INNER JOIN Grn_RateDet GRD ON GM.grnno = GRD.grnno
+            WHERE GM.deleted = 0 AND GRD.deleted = 0 AND GM.RefDate >= ? AND GM.RefDate < ?
+            UNION ALL
+            SELECT 'prev' AS period, SUM(ISNULL(GRD.Amount, 0)) AS total_amount
+            FROM grn_mas GM
+            INNER JOIN Grn_RateDet GRD ON GM.grnno = GRD.grnno
+            WHERE GM.deleted = 0 AND GRD.deleted = 0 AND GM.RefDate >= ? AND GM.RefDate < ?
+        """, (cur_inv_s, cur_inv_e, prev_inv_s, prev_inv_e))
+        grn_inv_map = {p: float(amt or 0) for p, amt in cursor.fetchall()}
+        grn_invoice_current_month_total = grn_inv_map.get("cur", 0.0)
+        grn_invoice_prev_month_total = grn_inv_map.get("prev", 0.0)
+
         cursor.close()
         conn.close()
     except Exception as e:
@@ -528,7 +606,7 @@ def _build_production_value_query(cursor, group_by_month=False):
           AND ISNULL(CTM.deleted, 0) = 0 
           AND ISNULL(CTD.deleted, 0) = 0 
           AND ISNULL(CTD.ProdTaken, 0) = 0
-          AND CAST(CTM.proddate AS DATE) BETWEEN ? AND ?
+          AND CTM.proddate >= ? AND CTM.proddate < ?
     """ if has_touch_cnc else ""
 
     t_conv_val = """
@@ -544,7 +622,7 @@ def _build_production_value_query(cursor, group_by_month=False):
           AND ISNULL(VTM.deleted, 0) = 0 
           AND ISNULL(VTD.deleted, 0) = 0 
           AND ISNULL(VTD.ProdTaken, 0) = 0
-          AND CAST(VTM.proddate AS DATE) BETWEEN ? AND ?
+          AND VTM.proddate >= ? AND VTM.proddate < ?
     """ if has_touch_conv else ""
 
     t_rod_val = """
@@ -560,7 +638,7 @@ def _build_production_value_query(cursor, group_by_month=False):
           AND ISNULL(RTM.deleted, 0) = 0 
           AND ISNULL(RTD.deleted, 0) = 0 
           AND ISNULL(RTD.ProdTaken, 0) = 0
-          AND CAST(RTM.proddate AS DATE) BETWEEN ? AND ?
+          AND RTM.proddate >= ? AND RTM.proddate < ?
     """ if has_touch_rod else ""
 
     param_count = 3 + (1 if has_touch_cnc else 0) + (1 if has_touch_conv else 0) + (1 if has_touch_rod else 0)
@@ -587,10 +665,9 @@ def _build_production_value_query(cursor, group_by_month=False):
             END AS IdleTimeSecs
         FROM ProductionEntry PE 
         WHERE PE.macno IS NOT NULL AND ISNULL(PE.deleted, 0) = 0
-          AND CAST(PE.proddate AS DATE) BETWEEN ? AND ?
+          AND PE.proddate >= ? AND PE.proddate < ?
 
         UNION ALL 
-
         SELECT 
             CPE.macno, 
             CPE.entrydate, 
@@ -601,10 +678,9 @@ def _build_production_value_query(cursor, group_by_month=False):
             DATEDIFF(SECOND, 0, ISNULL(CPE.IdleTime, '1900-01-01 00:00:00')) AS IdleTimeSecs
         FROM ConvProductionEntry CPE 
         WHERE CPE.macno IS NOT NULL AND ISNULL(CPE.deleted, 0) = 0
-          AND CAST(CPE.entrydate AS DATE) BETWEEN ? AND ?
+          AND CPE.entrydate >= ? AND CPE.entrydate < ?
 
         UNION ALL 
-
         SELECT 
             CPR.macno, 
             CPR.entrydate, 
@@ -615,7 +691,7 @@ def _build_production_value_query(cursor, group_by_month=False):
             DATEDIFF(SECOND, 0, ISNULL(CPR.IdleTime, '1900-01-01 00:00:00')) AS IdleTimeSecs
         FROM ConvProductionEntryRod CPR 
         WHERE CPR.macno IS NOT NULL AND ISNULL(CPR.deleted, 0) = 0
-          AND CAST(CPR.entrydate AS DATE) BETWEEN ? AND ?
+          AND CPR.entrydate >= ? AND CPR.entrydate < ?
         {t_cnc_val}
         {t_conv_val}
         {t_rod_val}
@@ -632,7 +708,8 @@ def fetch_production_month_totals(cursor, start_date, end_date):
     month_order = [4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3]
     totals = {m: 0.0 for m in month_order}
     sql, param_count = _build_production_value_query(cursor, group_by_month=True)
-    params = [start_date, end_date] * param_count
+    s_dt, e_dt = date_range_bounds(start_date, end_date)
+    params = [s_dt, e_dt] * param_count
     cursor.execute(sql, params)
     for month_num, amount in cursor.fetchall():
         mk = month_key_from_db(month_num)
@@ -643,27 +720,29 @@ def fetch_production_month_totals(cursor, start_date, end_date):
 
 def fetch_production_period_total(cursor, start_date, end_date):
     sql, param_count = _build_production_value_query(cursor, group_by_month=False)
-    params = [start_date, end_date] * param_count
+    s_dt, e_dt = date_range_bounds(start_date, end_date)
+    params = [s_dt, e_dt] * param_count
     cursor.execute(sql, params)
     row = cursor.fetchone()
     return float(row[0] or 0) if row else 0.0
 
 
 def overall_efficiency_date_params(start_date, end_date):
-    return [start_date, end_date, start_date, end_date, start_date, end_date]
+    s_dt, e_dt = date_range_bounds(start_date, end_date)
+    return [s_dt, e_dt, s_dt, e_dt, s_dt, e_dt]
 
 
 OVERALL_EFFICIENCY_AVG_SQL = """
 SELECT AVG(CAST(OAEFF AS FLOAT)) AS Avg_OAEFF
 FROM (
     SELECT proddate AS dt, OAEFF FROM ProductionEntry
-    WHERE CAST(proddate AS DATE) BETWEEN ? AND ? AND deleted = 0 AND OAEFF IS NOT NULL
+    WHERE proddate >= ? AND proddate < ? AND deleted = 0 AND OAEFF IS NOT NULL
     UNION ALL
     SELECT entrydate AS dt, OAEFF FROM ConvProductionEntry
-    WHERE CAST(entrydate AS DATE) BETWEEN ? AND ? AND deleted = 0 AND OAEFF IS NOT NULL
+    WHERE entrydate >= ? AND entrydate < ? AND deleted = 0 AND OAEFF IS NOT NULL
     UNION ALL
     SELECT entrydate AS dt, OAEFF FROM ConvProductionEntryRod
-    WHERE CAST(entrydate AS DATE) BETWEEN ? AND ? AND deleted = 0 AND OAEFF IS NOT NULL
+    WHERE entrydate >= ? AND entrydate < ? AND deleted = 0 AND OAEFF IS NOT NULL
 ) AS X
 """
 
@@ -677,8 +756,45 @@ def fetch_overall_efficiency_avg(cursor, start_date, end_date):
     return round(float(row[0] or 0), 2)
 
 
+def fetch_all_production_analysis_buckets(cursor, buckets_dict):
+    """
+    Fetch all production OA efficiency analysis buckets in 1 batched execution instead of 9 separate roundtrips.
+    """
+    results = {k: {"oa_eff": 0.0} for k in buckets_dict}
+    if not buckets_dict:
+        return results
+
+    parts = []
+    params = []
+    for k, (s_date, e_date) in buckets_dict.items():
+        s_dt, e_dt = date_range_bounds(s_date, e_date)
+        parts.append(f"""
+            SELECT ? AS bucket, AVG(CAST(OAEFF AS FLOAT)) AS avg_eff
+            FROM (
+                SELECT proddate AS dt, OAEFF FROM ProductionEntry
+                WHERE proddate >= ? AND proddate < ? AND deleted = 0 AND OAEFF IS NOT NULL
+                UNION ALL
+                SELECT entrydate AS dt, OAEFF FROM ConvProductionEntry
+                WHERE entrydate >= ? AND entrydate < ? AND deleted = 0 AND OAEFF IS NOT NULL
+                UNION ALL
+                SELECT entrydate AS dt, OAEFF FROM ConvProductionEntryRod
+                WHERE entrydate >= ? AND entrydate < ? AND deleted = 0 AND OAEFF IS NOT NULL
+            ) AS X_{k}
+        """)
+        params.extend([k, s_dt, e_dt, s_dt, e_dt, s_dt, e_dt])
+
+    cursor.execute(" UNION ALL ".join(parts), params)
+    for b_name, avg_eff in cursor.fetchall():
+        if b_name in results and avg_eff is not None:
+            results[b_name]["oa_eff"] = round(float(avg_eff or 0), 2)
+
+    return results
+
+
 def fetch_production_analysis_bucket(cursor, start_date, end_date):
-    return {"oa_eff": fetch_overall_efficiency_avg(cursor, start_date, end_date)}
+    """Single bucket fallback wrapper."""
+    res = fetch_all_production_analysis_buckets(cursor, {"b": (start_date, end_date)})
+    return res.get("b", {"oa_eff": 0.0})
 
 
 @api_view(["GET"])
@@ -716,22 +832,29 @@ def dashboard1_production_kpi(request):
     try:
         cursor = conn.cursor()
         month_totals = fetch_production_month_totals(cursor, fy_start_date, fy_end_date)
-        current_month_total = fetch_production_period_total(cursor, current_month_start, current_month_end)
-        prev_month_total = fetch_production_period_total(cursor, prev_month_start, prev_month_end)
+        current_month_total = month_totals.get(selected_month, 0.0)
+
+        prev_month_idx = selected_month - 1 if selected_month > 1 else 12
+        if selected_month == 4:
+            prev_month_total = fetch_production_period_total(cursor, prev_month_start, prev_month_end)
+        else:
+            prev_month_total = month_totals.get(prev_month_idx, 0.0)
+
         day_before_yesterday_date = yesterday_date - timedelta(days=1)
         prev_quarter_start_date, prev_quarter_end_date = get_prev_quarter_dates(quarter_start_date)
 
-        production_analysis = {
-            "today": fetch_production_analysis_bucket(cursor, today_date, today_date),
-            "yesterday": fetch_production_analysis_bucket(cursor, yesterday_date, yesterday_date),
-            "day_before_yesterday": fetch_production_analysis_bucket(cursor, day_before_yesterday_date, day_before_yesterday_date),
-            "month": fetch_production_analysis_bucket(cursor, current_month_start, current_month_end),
-            "prev_month": fetch_production_analysis_bucket(cursor, prev_month_start, prev_month_end),
-            "prev_prev_month": fetch_production_analysis_bucket(cursor, prev_prev_month_start, prev_prev_month_end),
-            "quarter": fetch_production_analysis_bucket(cursor, quarter_start_date, quarter_end_date),
-            "prev_quarter": fetch_production_analysis_bucket(cursor, prev_quarter_start_date, prev_quarter_end_date),
-            "financial_year": fetch_production_analysis_bucket(cursor, fy_start_date, fy_end_date),
+        buckets_spec = {
+            "today": (today_date, today_date),
+            "yesterday": (yesterday_date, yesterday_date),
+            "day_before_yesterday": (day_before_yesterday_date, day_before_yesterday_date),
+            "month": (current_month_start, current_month_end),
+            "prev_month": (prev_month_start, prev_month_end),
+            "prev_prev_month": (prev_prev_month_start, prev_prev_month_end),
+            "quarter": (quarter_start_date, quarter_end_date),
+            "prev_quarter": (prev_quarter_start_date, prev_quarter_end_date),
+            "financial_year": (fy_start_date, fy_end_date),
         }
+        production_analysis = fetch_all_production_analysis_buckets(cursor, buckets_spec)
         cursor.close()
         conn.close()
     except Exception as e:
@@ -791,8 +914,7 @@ WITH CTE_Rejection AS
             OR ISNULL(D.macrej, 0) > 0
           )
       AND ISNULL(IM.dtype, '') <> 'Without Process'
-      AND CAST(IM.inspdate AS DATE)
-            BETWEEN ? AND ?
+      AND IM.inspdate >= ? AND IM.inspdate < ?
 
     UNION ALL
 
@@ -813,8 +935,7 @@ WITH CTE_Rejection AS
     WHERE ISNULL(F.deleted, 0) = 0
       AND ISNULL(FM.deleted, 0) = 0
       AND ISNULL(F.qty, 0) > 0
-      AND CAST(FM.finspdate AS DATE)
-            BETWEEN ? AND ?
+      AND FM.finspdate >= ? AND FM.finspdate < ?
 
     UNION ALL
 
@@ -835,8 +956,7 @@ WITH CTE_Rejection AS
     WHERE ISNULL(IR.deleted, 0) = 0
       AND ISNULL(IIM.deleted, 0) = 0
       AND ISNULL(IR.qty, 0) > 0
-      AND CAST(IIM.inter_inspdate AS DATE)
-            BETWEEN ? AND ?
+      AND IIM.inter_inspdate >= ? AND IIM.inter_inspdate < ?
 ),
 
 -- ================================================================
@@ -1234,7 +1354,8 @@ FROM CTE_Final
 def fetch_rejection_month_totals(cursor, start_date, end_date):
     month_order = [4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3]
     totals = {m: 0.0 for m in month_order}
-    params = [start_date, end_date] * 3
+    s_dt, e_dt = date_range_bounds(start_date, end_date)
+    params = [s_dt, e_dt] * 3
     cursor.execute(REJECTION_VALUE_MONTHWISE_SQL, params)
     for month_num, amount in cursor.fetchall():
         mk = month_key_from_db(month_num)
@@ -1244,7 +1365,8 @@ def fetch_rejection_month_totals(cursor, start_date, end_date):
 
 
 def fetch_rejection_period_total(cursor, start_date, end_date):
-    params = [start_date, end_date] * 3
+    s_dt, e_dt = date_range_bounds(start_date, end_date)
+    params = [s_dt, e_dt] * 3
     cursor.execute(REJECTION_VALUE_TOTAL_SQL, params)
     row = cursor.fetchone()
     return float(row[0] or 0) if row else 0.0
@@ -1276,8 +1398,14 @@ def dashboard1_quality_value_kpi(request):
     try:
         cursor = conn.cursor()
         month_totals = fetch_rejection_month_totals(cursor, fy_start_date, fy_end_date)
-        current_month_total = fetch_rejection_period_total(cursor, current_month_start, current_month_end)
-        prev_month_total = fetch_rejection_period_total(cursor, prev_month_start, prev_month_end)
+        current_month_total = month_totals.get(selected_month, 0.0)
+
+        prev_month_idx = selected_month - 1 if selected_month > 1 else 12
+        if selected_month == 4:
+            prev_month_total = fetch_rejection_period_total(cursor, prev_month_start, prev_month_end)
+        else:
+            prev_month_total = month_totals.get(prev_month_idx, 0.0)
+
         cursor.close()
         conn.close()
     except Exception as e:
@@ -1302,7 +1430,7 @@ SALES_PROJECTIONS_SALES_SQL = f"""
     {BILL_ADDL_CHRG_JOIN_SQL}
     WHERE ISNULL(b.deleted, 0) = 0
       {EXCLUDED_SALES_BTYPES_SQL}
-      AND CAST(b.invdt AS DATE) BETWEEN ? AND ?
+      AND b.invdt >= ? AND b.invdt < ?
 """
 
 SALES_PROJECTIONS_PO_CURR_SQL = """
@@ -1311,7 +1439,7 @@ SALES_PROJECTIONS_PO_CURR_SQL = """
     INNER JOIN In_PoDet AS PD ON PM.pono = PD.pono
     WHERE (ISNULL(PM.deleted, 0) = 0)
       AND (ISNULL(PD.deleted, 0) = 0)
-      AND (CAST(PM.podt AS DATE) BETWEEN ? AND ?)
+      AND PM.podt >= ? AND PM.podt < ?
 """
 
 SALES_PROJECTIONS_PO_BASE_SQL = """
@@ -1319,8 +1447,8 @@ SALES_PROJECTIONS_PO_BASE_SQL = """
     FROM In_PoDet
     WHERE (Apono IN
             (SELECT DISTINCT Apono
-             FROM In_PoMas
-             WHERE (CAST(podt AS DATE) BETWEEN ? AND ?) AND (ISNULL(deleted, 0) = 0)))
+             FROM In_PoMas AS PM
+             WHERE PM.podt >= ? AND PM.podt < ? AND (ISNULL(PM.deleted, 0) = 0)))
       AND (ISNULL(deleted, 0) = 0)
 """
 
@@ -1486,58 +1614,58 @@ def _build_oa_efficiency_queries(cursor):
 
     t_cnc = """
         UNION ALL
-        SELECT CAST(CTM.proddate AS DATE) AS dt,
+        SELECT CTM.proddate AS dt,
                CASE WHEN CTD.OAEFF IS NOT NULL AND CTD.QFNEW IS NOT NULL THEN (CTD.OAEFF * CTD.QFNEW) ELSE COALESCE(CTD.OEENEW, CTD.OAEFF, 0) END AS OEE
         FROM CncProd_TouchDet CTD
         INNER JOIN CncProd_TouchMas CTM ON CTD.TchEntryNo = CTM.TchEntryNo
         WHERE ISNULL(CTD.deleted, 0) = 0 AND ISNULL(CTM.deleted, 0) = 0 AND ISNULL(CTD.ProdTaken, 0) = 0
-          AND CAST(CTM.proddate AS DATE) BETWEEN ? AND ?
+          AND CTM.proddate >= ? AND CTM.proddate < ?
           AND (CTD.OAEFF IS NOT NULL OR CTD.OEENEW IS NOT NULL OR CTD.QFNEW IS NOT NULL)
     """ if has_cnc else ""
 
     t_conv = """
         UNION ALL
-        SELECT CAST(VTM.proddate AS DATE) AS dt,
+        SELECT VTM.proddate AS dt,
                COALESCE(VTD.OAEFF, VTD.OEENEW, 0) AS OEE
         FROM ConvProd_TouchDet VTD
         INNER JOIN ConvProd_TouchMas VTM ON VTD.TchEntryNo = VTM.TchEntryNo
         WHERE ISNULL(VTD.deleted, 0) = 0 AND ISNULL(VTM.deleted, 0) = 0 AND ISNULL(VTD.ProdTaken, 0) = 0
-          AND CAST(VTM.proddate AS DATE) BETWEEN ? AND ?
+          AND VTM.proddate >= ? AND VTM.proddate < ?
           AND (VTD.OAEFF IS NOT NULL OR VTD.OEENEW IS NOT NULL)
     """ if has_conv else ""
 
     t_rod = """
         UNION ALL
-        SELECT CAST(RTM.proddate AS DATE) AS dt,
+        SELECT RTM.proddate AS dt,
                COALESCE(RTD.OAEFF, RTD.OEENEW, 0) AS OEE
         FROM ConvRodProd_TouchDet RTD
         INNER JOIN ConvRodProd_TouchMas RTM ON RTD.TchEntryNo = RTM.TchEntryNo
         WHERE ISNULL(RTD.deleted, 0) = 0 AND ISNULL(RTM.deleted, 0) = 0 AND ISNULL(RTD.ProdTaken, 0) = 0
-          AND CAST(RTM.proddate AS DATE) BETWEEN ? AND ?
+          AND RTM.proddate >= ? AND RTM.proddate < ?
           AND (RTD.OAEFF IS NOT NULL OR RTD.OEENEW IS NOT NULL)
     """ if has_rod else ""
 
     base_inner = f"""
-        SELECT CAST(proddate AS DATE) AS dt,
+        SELECT proddate AS dt,
                CASE WHEN OAEFF IS NOT NULL AND QFNEW IS NOT NULL THEN (OAEFF * QFNEW) ELSE COALESCE(OEENEW, OAEFF, 0) END AS OEE
         FROM ProductionEntry
-        WHERE ISNULL(deleted, 0) = 0 AND CAST(proddate AS DATE) BETWEEN ? AND ?
+        WHERE ISNULL(deleted, 0) = 0 AND proddate >= ? AND proddate < ?
           AND (OAEFF IS NOT NULL OR OEENEW IS NOT NULL OR QFNEW IS NOT NULL)
 
         UNION ALL
 
-        SELECT CAST(entrydate AS DATE) AS dt,
+        SELECT entrydate AS dt,
                COALESCE(OAEFF, OEENEW, 0) AS OEE
         FROM ConvProductionEntry
-        WHERE ISNULL(deleted, 0) = 0 AND CAST(entrydate AS DATE) BETWEEN ? AND ?
+        WHERE ISNULL(deleted, 0) = 0 AND entrydate >= ? AND entrydate < ?
           AND (OAEFF IS NOT NULL OR OEENEW IS NOT NULL)
 
         UNION ALL
 
-        SELECT CAST(entrydate AS DATE) AS dt,
+        SELECT entrydate AS dt,
                COALESCE(OAEFF, OEENEW, 0) AS OEE
         FROM ConvProductionEntryRod
-        WHERE ISNULL(deleted, 0) = 0 AND CAST(entrydate AS DATE) BETWEEN ? AND ?
+        WHERE ISNULL(deleted, 0) = 0 AND entrydate >= ? AND entrydate < ?
           AND (OAEFF IS NOT NULL OR OEENEW IS NOT NULL)
         {t_cnc}
         {t_conv}
@@ -1599,7 +1727,8 @@ def dashboard1_oa_efficiency_weekly(request):
     try:
         cursor = conn.cursor()
         weekly_sql, overall_sql, num_unions = _build_oa_efficiency_queries(cursor)
-        params = [start_date, end_date] * num_unions
+        s_dt, e_dt = date_range_bounds(start_date, end_date)
+        params = [s_dt, e_dt] * num_unions
 
         cursor.execute(weekly_sql, params)
         rows = cursor.fetchall()
@@ -1650,7 +1779,7 @@ QUALITY_REJECTIONS_WEEKLY_SQL = """
         INNER JOIN InJob_Mas M
             ON D.inspno = M.inspno
         WHERE
-            CAST(M.inspdate AS DATE) BETWEEN ? AND ?
+            M.inspdate >= ? AND M.inspdate < ?
             AND ISNULL(M.deleted, 0) = 0
             AND ISNULL(D.deleted, 0) = 0
             AND (ISNULL(D.macrej, 0) > 0 OR ISNULL(D.matrej, 0) > 0)
@@ -1679,7 +1808,7 @@ QUALITY_REJECTIONS_WEEKLY_SQL = """
         INNER JOIN Rejection REJ
             ON R.rejection = REJ.rejection
         WHERE
-            CAST(I.inter_inspdate AS DATE) BETWEEN ? AND ?
+            I.inter_inspdate >= ? AND I.inter_inspdate < ?
             AND ISNULL(I.deleted, 0) = 0
             AND ISNULL(R.deleted, 0) = 0
             AND ISNULL(REJ.deleted, 0) = 0
@@ -1709,7 +1838,7 @@ QUALITY_REJECTIONS_WEEKLY_SQL = """
         INNER JOIN Rejection REJ
             ON F.rejection = REJ.rejection
         WHERE
-            CAST(FI.finspdate AS DATE) BETWEEN ? AND ?
+            FI.finspdate >= ? AND FI.finspdate < ?
             AND ISNULL(FI.deleted, 0) = 0
             AND ISNULL(F.deleted, 0) = 0
             AND ISNULL(REJ.deleted, 0) = 0
@@ -1722,8 +1851,8 @@ QUALITY_REJECTIONS_WEEKLY_SQL = """
 
 QUALITY_REJECTIONS_PERIOD_SUM_SQL = """
 SELECT
-    SUM(MaterialQty) AS MaterialQty,
-    SUM(MachineQty) AS MachineQty
+    ISNULL(SUM(MaterialQty), 0) AS MaterialQty,
+    ISNULL(SUM(MachineQty), 0) AS MachineQty
 FROM (
     SELECT
         CAST(ISNULL(D.matrej, 0) AS FLOAT) AS MaterialQty,
@@ -1732,7 +1861,7 @@ FROM (
     INNER JOIN InJob_Mas M
         ON D.inspno = M.inspno
     WHERE
-        CAST(M.inspdate AS DATE) BETWEEN ? AND ?
+        M.inspdate >= ? AND M.inspdate < ?
         AND ISNULL(M.deleted, 0) = 0
         AND ISNULL(D.deleted, 0) = 0
         AND (ISNULL(D.macrej, 0) > 0 OR ISNULL(D.matrej, 0) > 0)
@@ -1754,7 +1883,7 @@ FROM (
     INNER JOIN Rejection REJ
         ON R.rejection = REJ.rejection
     WHERE
-        CAST(I.inter_inspdate AS DATE) BETWEEN ? AND ?
+        I.inter_inspdate >= ? AND I.inter_inspdate < ?
         AND ISNULL(I.deleted, 0) = 0
         AND ISNULL(R.deleted, 0) = 0
         AND ISNULL(REJ.deleted, 0) = 0
@@ -1777,7 +1906,7 @@ FROM (
     INNER JOIN Rejection REJ
         ON F.rejection = REJ.rejection
     WHERE
-        CAST(FI.finspdate AS DATE) BETWEEN ? AND ?
+        FI.finspdate >= ? AND FI.finspdate < ?
         AND ISNULL(FI.deleted, 0) = 0
         AND ISNULL(F.deleted, 0) = 0
         AND ISNULL(REJ.deleted, 0) = 0
@@ -1786,10 +1915,78 @@ FROM (
 """
 
 
+def fetch_all_quality_rejection_buckets(cursor, buckets_dict):
+    """
+    Fetch all quality rejection analysis buckets in 1 single batched execution instead of 9 separate roundtrips.
+    """
+    results = {k: {"material": 0.0, "machine": 0.0} for k in buckets_dict}
+    if not buckets_dict:
+        return results
+
+    parts = []
+    params = []
+    for k, (s_date, e_date) in buckets_dict.items():
+        s_dt, e_dt = date_range_bounds(s_date, e_date)
+        parts.append(f"""
+            SELECT ? AS bucket,
+                   ISNULL(SUM(MaterialQty), 0) AS MaterialQty,
+                   ISNULL(SUM(MachineQty), 0) AS MachineQty
+            FROM (
+                SELECT
+                    CAST(ISNULL(D.matrej, 0) AS FLOAT) AS MaterialQty,
+                    CAST(ISNULL(D.macrej, 0) AS FLOAT) AS MachineQty
+                FROM InJob_Det D
+                INNER JOIN InJob_Mas M ON D.inspno = M.inspno
+                WHERE M.inspdate >= ? AND M.inspdate < ?
+                  AND ISNULL(M.deleted, 0) = 0
+                  AND ISNULL(D.deleted, 0) = 0
+                  AND (ISNULL(D.macrej, 0) > 0 OR ISNULL(D.matrej, 0) > 0)
+
+                UNION ALL
+
+                SELECT
+                    CASE WHEN ISNULL(REJ.matrej, 0) = 1 THEN CAST(ISNULL(R.qty, 0) AS FLOAT) ELSE CAST(0 AS FLOAT) END AS MaterialQty,
+                    CASE WHEN ISNULL(REJ.matrej, 0) = 1 THEN CAST(0 AS FLOAT) ELSE CAST(ISNULL(R.qty, 0) AS FLOAT) END AS MachineQty
+                FROM Insp_RejectionEntry R
+                INNER JOIN InterInspectionEntry I ON R.inter_inspno = I.inter_inspno
+                INNER JOIN Rejection REJ ON R.rejection = REJ.rejection
+                WHERE I.inter_inspdate >= ? AND I.inter_inspdate < ?
+                  AND ISNULL(I.deleted, 0) = 0
+                  AND ISNULL(R.deleted, 0) = 0
+                  AND ISNULL(REJ.deleted, 0) = 0
+                  AND ISNULL(R.qty, 0) > 0
+
+                UNION ALL
+
+                SELECT
+                    CASE WHEN ISNULL(REJ.matrej, 0) = 1 THEN CAST(ISNULL(F.qty, 0) AS FLOAT) ELSE CAST(0 AS FLOAT) END AS MaterialQty,
+                    CASE WHEN ISNULL(REJ.matrej, 0) = 1 THEN CAST(0 AS FLOAT) ELSE CAST(ISNULL(F.qty, 0) AS FLOAT) END AS MachineQty
+                FROM FinalInspRejectionEntryOrg F
+                INNER JOIN FinalInspectionEntry FI ON F.finspno = FI.finspno
+                INNER JOIN Rejection REJ ON F.rejection = REJ.rejection
+                WHERE FI.finspdate >= ? AND FI.finspdate < ?
+                  AND ISNULL(FI.deleted, 0) = 0
+                  AND ISNULL(F.deleted, 0) = 0
+                  AND ISNULL(REJ.deleted, 0) = 0
+                  AND ISNULL(F.qty, 0) > 0
+            ) AS R_{k}
+        """)
+        params.extend([k, s_dt, e_dt, s_dt, e_dt, s_dt, e_dt])
+
+    cursor.execute(" UNION ALL ".join(parts), params)
+    for b_name, mat_qty, mac_qty in cursor.fetchall():
+        if b_name in results:
+            results[b_name]["material"] = round(float(mat_qty or 0), 2)
+            results[b_name]["machine"] = round(float(mac_qty or 0), 2)
+
+    return results
+
+
 def fetch_quality_rejection_period_totals(cursor, start_date, end_date):
+    s_dt, e_dt = date_range_bounds(start_date, end_date)
     cursor.execute(
         QUALITY_REJECTIONS_PERIOD_SUM_SQL,
-        [start_date, end_date, start_date, end_date, start_date, end_date],
+        [s_dt, e_dt, s_dt, e_dt, s_dt, e_dt],
     )
     row = cursor.fetchone()
     if not row:
@@ -1836,7 +2033,8 @@ def dashboard1_quality_rejections_weekly(request):
 
     try:
         cursor = conn.cursor()
-        params = [start_date, end_date, start_date, end_date, start_date, end_date]
+        s_dt, e_dt = date_range_bounds(start_date, end_date)
+        params = [s_dt, e_dt, s_dt, e_dt, s_dt, e_dt]
         cursor.execute(QUALITY_REJECTIONS_WEEKLY_SQL, params)
         rows = cursor.fetchall()
 
@@ -1847,17 +2045,18 @@ def dashboard1_quality_rejections_weekly(request):
         prev_prev_month_end = prev_month_start - timedelta(days=1)
         prev_prev_month_start = prev_prev_month_end.replace(day=1)
 
-        analysis = {
-            "today": fetch_quality_rejection_period_totals(cursor, today_date, today_date),
-            "yesterday": fetch_quality_rejection_period_totals(cursor, yesterday_date, yesterday_date),
-            "day_before_yesterday": fetch_quality_rejection_period_totals(cursor, day_before_yesterday_date, day_before_yesterday_date),
-            "month": fetch_quality_rejection_period_totals(cursor, current_month_start, current_month_end),
-            "prev_month": fetch_quality_rejection_period_totals(cursor, prev_month_start, prev_month_end),
-            "prev_prev_month": fetch_quality_rejection_period_totals(cursor, prev_prev_month_start, prev_prev_month_end),
-            "quarter": fetch_quality_rejection_period_totals(cursor, quarter_start_date, quarter_end_date),
-            "prev_quarter": fetch_quality_rejection_period_totals(cursor, prev_quarter_start_date, prev_quarter_end_date),
-            "financial_year": fetch_quality_rejection_period_totals(cursor, fy_start_date, fy_end_date),
+        buckets_spec = {
+            "today": (today_date, today_date),
+            "yesterday": (yesterday_date, yesterday_date),
+            "day_before_yesterday": (day_before_yesterday_date, day_before_yesterday_date),
+            "month": (current_month_start, current_month_end),
+            "prev_month": (prev_month_start, prev_month_end),
+            "prev_prev_month": (prev_prev_month_start, prev_prev_month_end),
+            "quarter": (quarter_start_date, quarter_end_date),
+            "prev_quarter": (prev_quarter_start_date, prev_quarter_end_date),
+            "financial_year": (fy_start_date, fy_end_date),
         }
+        analysis = fetch_all_quality_rejection_buckets(cursor, buckets_spec)
 
         cursor.close()
         conn.close()
@@ -1882,4 +2081,45 @@ def dashboard1_quality_rejections_weekly(request):
             "month": selected_month,
         },
     })
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Dashboard 1 Bundle Endpoint
+# ═══════════════════════════════════════════════════════════════════════
+
+_DASHBOARD1_BUNDLE_REGISTRY = [
+    ("sales_kpi", dashboard1_sales_kpi),
+    ("purchase_kpi", dashboard1_purchase_kpi),
+    ("production_kpi", dashboard1_production_kpi),
+    ("quality_value_kpi", dashboard1_quality_value_kpi),
+    ("sales_projections", dashboard1_sales_projections),
+    ("purchase_projections", dashboard1_purchase_projections),
+    ("oa_efficiency_weekly", dashboard1_oa_efficiency_weekly),
+    ("quality_rejections_weekly", dashboard1_quality_rejections_weekly),
+]
+
+DASHBOARD1_BUNDLE_KEYS = [k for k, _ in _DASHBOARD1_BUNDLE_REGISTRY]
+
+
+@api_view(["GET"])
+@cache_analytics_response(timeout=300, key_prefix="dash1_bundle")
+def dashboard1_bundle(request):
+    """
+    Consolidated endpoint for Dashboard 1 (Top Management Dashboard).
+    Fetches all 4 KPIs, 4 weekly charts, and analysis tables in a single batched HTTP call.
+    """
+    if not (request.GET.get("keys") or "").strip():
+        q = request.GET.copy()
+        q["keys"] = ",".join(DASHBOARD1_BUNDLE_KEYS)
+        request._request.GET = q
+    return run_bundle(
+        request,
+        _DASHBOARD1_BUNDLE_REGISTRY,
+        max_workers=3,
+        extra={
+            "year": request.GET.get("year", ""),
+            "month": request.GET.get("month", ""),
+        },
+    )
+
 

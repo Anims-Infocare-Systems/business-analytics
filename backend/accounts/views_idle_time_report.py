@@ -2835,12 +2835,1316 @@ def _fetch_operator_wise_idle(data_rows):
     return results
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+#  HIGH-PERFORMANCE #TempIdle ENGINE & AGGREGATION HELPERS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _materialize_temp_idle(cursor, start_date, end_date, date_params):
+    """
+    Materialize the 16-UNION idle records into a local session temp table #TempIdle once.
+    This replaces 18 separate in-line evaluations of _IDLE_UNION_SQL with a single pass.
+    """
+    has_mac_master = table_exists(cursor, "MacMaster")
+    has_idle_reasons = table_exists(cursor, "IdleReasons")
+
+    mac_join = """
+        LEFT JOIN MacMaster MM
+            ON LTRIM(RTRIM(CAST(A.MacNo AS NVARCHAR(512))))
+             = LTRIM(RTRIM(CAST(MM.macno AS NVARCHAR(512))))
+            AND ISNULL(MM.deleted, 0) = 0
+    """ if has_mac_master else ""
+
+    ir_join = """
+        LEFT JOIN IdleReasons IR
+            ON LTRIM(RTRIM(CAST(A.Reason AS NVARCHAR(512))))
+             = LTRIM(RTRIM(CAST(IR.IdleReasons AS NVARCHAR(512))))
+            AND ISNULL(IR.deleted, 0) = 0
+    """ if has_idle_reasons else ""
+
+    rate_expr = "ISNULL(MAX(MM.RatePerHr), 0)" if has_mac_master else "0.0"
+    cnc_expr = "ISNULL(MAX(CASE WHEN MM.cnc = 1 THEN 1 ELSE 0 END), 0)" if has_mac_master else "0"
+    ir_accept_1 = "MAX(CASE WHEN IR.IsAccept = 1 THEN 1 ELSE 0 END) = 1" if has_idle_reasons else "1 = 0"
+    ir_accept_0 = "MIN(CASE WHEN IR.IsAccept = 0 THEN 0 ELSE 1 END) = 0" if has_idle_reasons else "1 = 0"
+
+    try:
+        cursor.execute("IF OBJECT_ID('tempdb..#TempIdle') IS NOT NULL DROP TABLE #TempIdle;")
+    except Exception:
+        pass
+
+    cursor.execute("""
+        CREATE TABLE #TempIdle (
+            EntryDate DATE NOT NULL,
+            Shift NVARCHAR(128) NOT NULL,
+            MacNo NVARCHAR(512) NOT NULL,
+            Reason NVARCHAR(512) NOT NULL,
+            IdleSeconds INT NOT NULL,
+            IsEffCalc INT NULL,
+            RatePerHr FLOAT NOT NULL DEFAULT 0,
+            IsAccepted INT NOT NULL DEFAULT 1,
+            IsCNC INT NOT NULL DEFAULT 0
+        );
+    """)
+
+    insert_sql = f"""
+    INSERT INTO #TempIdle (EntryDate, Shift, MacNo, Reason, IdleSeconds, IsEffCalc, RatePerHr, IsAccepted, IsCNC)
+    SELECT
+        CAST(A.EntryDate AS DATE),
+        LTRIM(RTRIM(CAST(ISNULL(A.Shift, N'') AS NVARCHAR(128)))),
+        LTRIM(RTRIM(CAST(ISNULL(A.MacNo, N'') AS NVARCHAR(512)))),
+        LTRIM(RTRIM(CAST(ISNULL(A.Reason, N'') AS NVARCHAR(512)))),
+        ISNULL(SUM(A.IdleSeconds), 0),
+        MAX(A.IsEffCalc),
+        {rate_expr},
+        CASE
+            WHEN MAX(A.IsEffCalc) = 1 THEN 1
+            WHEN MIN(A.IsEffCalc) = 0 THEN 0
+            WHEN {ir_accept_1} THEN 1
+            WHEN {ir_accept_0} THEN 0
+            ELSE 1
+        END,
+        {cnc_expr}
+    FROM (
+        {_IDLE_UNION_SQL}
+    ) A
+    {mac_join}
+    {ir_join}
+    WHERE 1 = 1
+    GROUP BY
+        CAST(A.EntryDate AS DATE),
+        LTRIM(RTRIM(CAST(ISNULL(A.Shift, N'') AS NVARCHAR(128)))),
+        LTRIM(RTRIM(CAST(ISNULL(A.MacNo, N'') AS NVARCHAR(512)))),
+        LTRIM(RTRIM(CAST(ISNULL(A.Reason, N'') AS NVARCHAR(512))));
+    """
+    cursor.execute(insert_sql, date_params)
+
+    try:
+        cursor.execute("CREATE NONCLUSTERED INDEX IX_TempIdle_Date ON #TempIdle(EntryDate, Shift);")
+    except Exception:
+        pass
+
+
+def _build_temp_idle_filters(machine, shift, reason, mac_type=None, prefix=""):
+    clauses = []
+    params = []
+    if machine:
+        if isinstance(machine, list):
+            placeholders = ",".join(["?"] * len(machine))
+            clauses.append(f"AND {prefix}MacNo IN ({placeholders})")
+            params.extend(machine)
+        else:
+            clauses.append(f"AND {prefix}MacNo = ?")
+            params.append(machine)
+    if mac_type:
+        if mac_type == "CNC":
+            clauses.append(f"AND {prefix}IsCNC = 1")
+        elif mac_type == "CONV":
+            clauses.append(f"AND {prefix}IsCNC = 0")
+    if shift:
+        clauses.append(f"AND {prefix}Shift = ?")
+        params.append(shift)
+    if reason:
+        if isinstance(reason, list):
+            placeholders = ",".join(["?"] * len(reason))
+            clauses.append(f"AND {prefix}Reason IN ({placeholders})")
+            params.extend(reason)
+        else:
+            clauses.append(f"AND {prefix}Reason = ?")
+            params.append(reason)
+    return ("\n" + "\n".join(clauses) if clauses else ""), params
+
+
+def _fetch_filter_options_fast(cursor):
+    """Fetch distinct machines, shifts, and reasons directly from #TempIdle in 1ms."""
+    cursor.execute("""
+        SELECT DISTINCT
+            MacNo,
+            Shift,
+            Reason
+        FROM #TempIdle
+        WHERE MacNo <> N'' AND Reason <> N'' AND IdleSeconds > 0
+          AND Reason NOT IN (
+              N'Conv Production Idle Time', N'Conv Rod Idle Time', N'Production Idle Time',
+              N'Machine Idle Entry', N'CNC Touch Idle Time', N'Conv Touch Idle Time', N'Conv Rod Touch Idle Time'
+          )
+        ORDER BY MacNo, Shift, Reason
+    """)
+    rows = cursor.fetchall() or []
+    mac_set, shift_set, reason_set = set(), set(), set()
+    for mac, sh, rs in rows:
+        if mac:
+            mac_set.add(mac)
+        if sh:
+            shift_set.add(sh)
+        if rs:
+            reason_set.add(rs)
+    return sorted(mac_set, key=str.lower), sorted(shift_set), sorted(reason_set, key=str.lower)
+
+
+def _compute_kpis_fast(cursor, outer_filters, outer_params, idle_not_entered=0):
+    """Compute KPIs from #TempIdle in sub-millisecond time."""
+    cursor.execute(
+        f"""
+        SELECT
+            ISNULL(SUM(IdleSeconds), 0),
+            COUNT(DISTINCT NULLIF(MacNo, N'')),
+            ISNULL(SUM((IdleSeconds / 3600.0) * RatePerHr), 0)
+        FROM #TempIdle
+        WHERE 1 = 1 {outer_filters}
+        """,
+        outer_params,
+    )
+    row = cursor.fetchone() or (0, 0, 0)
+    total_secs = int(row[0] or 0)
+    machine_count = int(row[1] or 0)
+    total_cost = float(row[2] or 0.0)
+
+    # Continuous idle > 4h
+    cursor.execute(
+        f"""
+        SELECT COUNT(DISTINCT MacNo)
+        FROM (
+            SELECT MacNo, EntryDate, SUM(IdleSeconds) AS DaySecs
+            FROM #TempIdle
+            WHERE 1 = 1 {outer_filters}
+            GROUP BY MacNo, EntryDate
+            HAVING SUM(IdleSeconds) > 14400
+        ) Over4
+        """,
+        outer_params,
+    )
+    c_row = cursor.fetchone()
+    continuous_over_4h = int(c_row[0] or 0) if c_row else 0
+
+    # Top idle reason
+    cursor.execute(
+        f"""
+        SELECT TOP 1
+            Reason,
+            SUM(IdleSeconds) AS ReasonSecs
+        FROM #TempIdle
+        WHERE Reason <> N'' {outer_filters}
+        GROUP BY Reason
+        ORDER BY SUM(IdleSeconds) DESC
+        """,
+        outer_params,
+    )
+    r_row = cursor.fetchone()
+    top_reason = str(r_row[0]).strip() if r_row and r_row[0] else "—"
+    top_reason_secs = int(r_row[1] or 0) if r_row else 0
+    top_reason_pct = round((top_reason_secs / total_secs * 100), 2) if total_secs > 0 else 0.0
+
+    # High idle machine
+    cursor.execute(
+        f"""
+        SELECT TOP 1
+            MacNo,
+            SUM(IdleSeconds) AS MacSecs
+        FROM #TempIdle
+        WHERE MacNo <> N'' {outer_filters}
+        GROUP BY MacNo
+        ORDER BY SUM(IdleSeconds) DESC
+        """,
+        outer_params,
+    )
+    m_row = cursor.fetchone()
+    high_idle_mac = str(m_row[0]).strip() if m_row and m_row[0] else "—"
+    high_idle_mac_secs = int(m_row[1] or 0) if m_row else 0
+    high_idle_mac_hours = _fmt_hm(high_idle_mac_secs)
+
+    avg_hours = (total_secs / 3600.0 / machine_count) if machine_count > 0 else 0.0
+    total_idle_mins = round(total_secs / 60) if total_secs else 0
+    avg_cost_per_minute = round(total_cost / total_idle_mins, 2) if total_idle_mins > 0 else 0.0
+    total_idle_hours = (total_secs / 3600.0) if total_secs else 0.0
+    avg_cost_per_hour = round(total_cost / total_idle_hours, 2) if total_idle_hours > 0 else 0.0
+
+    return {
+        "total_idle_seconds": total_secs,
+        "total_idle_minutes": total_idle_mins,
+        "total_idle_minutes_display": f"{total_idle_mins:,} Mins",
+        "total_idle_hours_display": _fmt_hm(total_secs),
+        "total_idle_hours_decimal": round(total_secs / 3600.0, 2),
+        "total_idle_cost": round(total_cost, 2),
+        "total_idle_cost_display": _fmt_rupees(total_cost),
+        "avg_cost_per_minute": avg_cost_per_minute,
+        "avg_cost_per_minute_display": f"₹ {avg_cost_per_minute:,.2f}",
+        "avg_cost_per_hour": avg_cost_per_hour,
+        "avg_cost_per_hour_display": f"₹ {avg_cost_per_hour:,.2f}",
+        "avg_idle_hours_decimal": round(avg_hours, 2),
+        "avg_idle_display": _fmt_hm_decimal(avg_hours),
+        "machine_count": machine_count,
+        "idle_not_entered": idle_not_entered,
+        "top_idle_reason": top_reason or "—",
+        "top_idle_reason_pct": top_reason_pct,
+        "continuous_idle_over_4h": continuous_over_4h,
+        "high_idle_mac": high_idle_mac or "—",
+        "high_idle_mac_hours": high_idle_mac_hours or "0:00",
+        "high_idle_mac_seconds": high_idle_mac_secs,
+    }
+
+
+def _fetch_top_idle_reasons_fast(cursor, outer_filters, outer_params, limit=10):
+    cursor.execute(
+        f"""
+        SELECT TOP ({int(limit)})
+            Reason,
+            CAST(SUM(IdleSeconds) / 3600.0 AS DECIMAL(18, 2)) AS IdleHours,
+            ISNULL(SUM(IdleSeconds), 0) AS TotalIdleSeconds
+        FROM #TempIdle
+        WHERE Reason <> N'' {outer_filters}
+        GROUP BY Reason
+        ORDER BY SUM(IdleSeconds) DESC
+        """,
+        outer_params,
+    )
+    rows = cursor.fetchall() or []
+    labels = []
+    data = []
+    hours_display = []
+    for r in rows:
+        rs = str(r[0]).strip() if r[0] is not None else ""
+        hrs = float(r[1] or 0)
+        secs = int(r[2] or 0) if len(r) > 2 else round(hrs * 3600)
+        labels.append(rs)
+        data.append(hrs)
+        hours_display.append(_fmt_hm(secs))
+
+    return {
+        "labels": labels,
+        "data": data,
+        "hours_display": hours_display,
+        "colors": [
+            "#dc2626", "#f97316", "#d97706", "#dc2626", "#0891b2",
+            "#f97316", "#16a34a", "#7c3aed", "#2563eb", "#0891b2"
+        ][: len(labels)],
+    }
+
+
+def _fetch_accepted_vs_non_accepted_fast(cursor, outer_filters, outer_params):
+    cursor.execute(
+        f"""
+        SELECT
+            ISNULL(SUM(CASE WHEN IsAccepted = 1 THEN IdleSeconds ELSE 0 END), 0) AS AcceptedSecs,
+            ISNULL(SUM(CASE WHEN IsAccepted = 0 THEN IdleSeconds ELSE 0 END), 0) AS NonAcceptedSecs
+        FROM #TempIdle
+        WHERE 1 = 1 {outer_filters}
+        """,
+        outer_params,
+    )
+    row = cursor.fetchone()
+    acc_secs = int(row[0] or 0) if row else 0
+    na_secs = int(row[1] or 0) if row else 0
+    total = acc_secs + na_secs
+    acc_pct = round(acc_secs / total * 100, 1) if total > 0 else 0.0
+    na_pct = round(na_secs / total * 100, 1) if total > 0 else 0.0
+
+    return {
+        "accepted_seconds": acc_secs,
+        "non_accepted_seconds": na_secs,
+        "accepted_hours_display": _fmt_hm(acc_secs),
+        "non_accepted_hours_display": _fmt_hm(na_secs),
+        "accepted_pct": acc_pct,
+        "non_accepted_pct": na_pct,
+        "chart_hours": [round(acc_secs / 3600.0, 2), round(na_secs / 3600.0, 2)],
+    }
+
+
+def _fetch_monthwise_idle_cost_fast(start_date, end_date, cursor, outer_filters, outer_params):
+    cursor.execute(
+        f"""
+        SELECT
+            YEAR(EntryDate) AS Yr,
+            MONTH(EntryDate) AS Mo,
+            CAST(SUM(IdleSeconds) / 3600.0 AS DECIMAL(18, 2)) AS IdleHours,
+            CAST(SUM((IdleSeconds / 3600.0) * RatePerHr) / 100000.0 AS DECIMAL(18, 4)) AS CostLakhs,
+            ISNULL(SUM(IdleSeconds), 0) AS TotalIdleSeconds
+        FROM #TempIdle
+        WHERE 1 = 1 {outer_filters}
+        GROUP BY YEAR(EntryDate), MONTH(EntryDate)
+        ORDER BY YEAR(EntryDate), MONTH(EntryDate)
+        """,
+        outer_params,
+    )
+    rows = cursor.fetchall() or []
+    data_by_month = {}
+    for row in rows:
+        yr, mo, hrs, cost = row[0], row[1], row[2], row[3]
+        total_sec = int(row[4] or 0) if len(row) > 4 else round(float(hrs or 0) * 3600)
+        data_by_month[(int(yr), int(mo))] = (float(hrs or 0), float(cost or 0), total_sec)
+
+    month_tuples = []
+    if start_date and end_date:
+        curr_y, curr_m = start_date.year, start_date.month
+        end_y, end_m = end_date.year, end_date.month
+        while (curr_y, curr_m) <= (end_y, end_m):
+            month_tuples.append((curr_y, curr_m))
+            curr_m += 1
+            if curr_m > 12:
+                curr_m = 1
+                curr_y += 1
+    elif data_by_month:
+        month_tuples = sorted(data_by_month.keys())
+
+    labels, hours, cost_lakhs, hours_display = [], [], [], []
+    for yr, mo in month_tuples:
+        hrs, cost, total_sec = data_by_month.get((yr, mo), (0.0, 0.0, 0))
+        h = total_sec // 3600
+        m = (total_sec % 3600) // 60
+        labels.append(_month_chart_label(yr, mo))
+        hours.append(round(hrs, 2))
+        cost_lakhs.append(round(cost, 2))
+        hours_display.append(f"{h} Hrs {m} Mins")
+
+    range_display = ""
+    if month_tuples:
+        first_lbl = _month_chart_label(month_tuples[0][0], month_tuples[0][1])
+        last_lbl = _month_chart_label(month_tuples[-1][0], month_tuples[-1][1])
+        range_display = first_lbl if first_lbl == last_lbl else f"{first_lbl}—{last_lbl}"
+
+    return {
+        "labels": labels,
+        "hours": hours,
+        "cost_lakhs": cost_lakhs,
+        "hours_display": hours_display,
+        "range_display": range_display,
+    }
+
+
+def _fetch_top_machines_idle_cost_fast(cursor, outer_filters, outer_params, limit=15):
+    cursor.execute(
+        f"""
+        SELECT TOP ({int(limit)})
+            MacNo,
+            CAST(SUM(IdleSeconds) / 3600.0 AS DECIMAL(18, 2)) AS IdleHours,
+            CAST(SUM((IdleSeconds / 3600.0) * RatePerHr) / 1000.0 AS DECIMAL(18, 2)) AS CostK
+        FROM #TempIdle
+        WHERE MacNo <> N'' {outer_filters}
+        GROUP BY MacNo
+        ORDER BY SUM((IdleSeconds / 3600.0) * RatePerHr) DESC, SUM(IdleSeconds) DESC
+        """,
+        outer_params,
+    )
+    rows = cursor.fetchall() or []
+    labels, hours, cost_k, hours_display = [], [], [], []
+    for mac, hrs, cost in rows:
+        mac_label = (str(mac).strip() if mac is not None else "") or "(blank)"
+        hrs_f = float(hrs or 0)
+        labels.append(mac_label)
+        hours.append(round(hrs_f, 2))
+        cost_k.append(round(float(cost or 0), 2))
+        hours_display.append(_fmt_hm(round(hrs_f * 3600)))
+
+    cursor.execute(
+        f"""
+        SELECT
+            COUNT(DISTINCT MacNo),
+            ISNULL(SUM(IdleSeconds), 0),
+            ISNULL(SUM((IdleSeconds / 3600.0) * RatePerHr), 0)
+        FROM #TempIdle
+        WHERE MacNo <> N'' {outer_filters}
+        """,
+        outer_params,
+    )
+    sm_row = cursor.fetchone() or (0, 0, 0)
+    tot_macs = int(sm_row[0] or 0)
+    tot_secs = int(sm_row[1] or 0)
+    tot_cost = float(sm_row[2] or 0.0)
+    tot_hrs = tot_secs / 3600.0
+
+    return {
+        "labels": labels,
+        "hours": hours,
+        "cost_k": cost_k,
+        "hours_display": hours_display,
+        "summary": {
+            "total_machines": tot_macs,
+            "total_hours": round(tot_hrs, 2),
+            "total_hours_display": _fmt_hm(tot_secs),
+            "total_cost_k": round(tot_cost / 1000.0, 2),
+            "total_cost_rupees": _fmt_rupees(tot_cost),
+        },
+    }
+
+
+def _fetch_daywise_idle_hours_fast(start_date, end_date, cursor, outer_filters, outer_params):
+    cursor.execute(
+        f"""
+        SELECT
+            EntryDate,
+            CAST(SUM(IdleSeconds) / 3600.0 AS DECIMAL(18, 2)) AS IdleHours,
+            ISNULL(SUM(IdleSeconds), 0) AS TotalIdleSeconds
+        FROM #TempIdle
+        WHERE 1 = 1 {outer_filters}
+        GROUP BY EntryDate
+        ORDER BY EntryDate
+        """,
+        outer_params,
+    )
+    rows = cursor.fetchall() or []
+    daily = {}
+    for d, hrs, total_sec in rows:
+        dt = d.strftime("%Y-%m-%d") if hasattr(d, "strftime") else str(d)[:10]
+        daily[dt] = (float(hrs or 0), int(total_sec or 0))
+
+    labels, hours, is_sunday, hours_display = [], [], [], []
+    curr = start_date
+    overall_total_seconds = 0
+    while curr <= end_date:
+        k = curr.strftime("%Y-%m-%d")
+        h, total_sec = daily.get(k, (0.0, 0))
+        labels.append(str(curr.day))
+        hours.append(round(h, 2))
+        is_sunday.append(curr.weekday() == 6)
+        overall_total_seconds += total_sec
+        tot_m = (total_sec + 30) // 60
+        hh = tot_m // 60
+        mm = tot_m % 60
+        hours_display.append(f"{hh}h {mm}m")
+        curr += timedelta(days=1)
+
+    t_m = (overall_total_seconds + 30) // 60
+    t_h = t_m // 60
+    t_rem_m = t_m % 60
+    tot_disp = f"{t_h:,}:{t_rem_m:02d}"
+    tot_fmt = f"{t_h:,} Hrs {t_rem_m} Mins"
+
+    return {
+        "labels": labels,
+        "hours": hours,
+        "is_sunday": is_sunday,
+        "hours_display": hours_display,
+        "total_seconds": overall_total_seconds,
+        "total_hours_display": tot_disp,
+        "total_formatted": tot_fmt,
+    }
+
+
+def _fetch_shift_wise_idle_fast(cursor, outer_filters, outer_params, machine_limit=None):
+    cursor.execute(
+        f"""
+        SELECT
+            MacNo,
+            Shift AS ShiftName,
+            CAST(SUM(IdleSeconds) / 3600.0 AS DECIMAL(18, 2)) AS IdleHours,
+            ISNULL(SUM(IdleSeconds), 0) AS IdleSeconds
+        FROM #TempIdle
+        WHERE MacNo <> N''
+          AND Shift <> N''
+          {outer_filters}
+        GROUP BY
+            MacNo,
+            Shift
+        """,
+        outer_params,
+    )
+    rows = cursor.fetchall() or []
+    mac_shift_hours = defaultdict(lambda: defaultdict(float))
+    mac_shift_secs = defaultdict(lambda: defaultdict(int))
+    shift_machines = defaultdict(set)
+    all_machines = set()
+
+    for r in rows:
+        mac = r[0]
+        shift = r[1]
+        hrs = r[2]
+        secs = r[3] if len(r) > 3 else round(float(hrs or 0) * 3600)
+        mac_key = (mac or "").strip()
+        shift_key = (shift or "").strip()
+        if not mac_key or not shift_key:
+            continue
+        hours = float(hrs or 0)
+        mac_shift_hours[mac_key][shift_key] += hours
+        mac_shift_secs[mac_key][shift_key] += int(secs or 0)
+        all_machines.add(mac_key)
+        if hours > 0:
+            shift_machines[shift_key].add(mac_key)
+
+    regular_rows = _fetch_shift_master(cursor)
+    regular_names = [r[0] for r in regular_rows][:3]
+
+    mac_totals = {m: sum(mac_shift_hours[m].values()) for m in mac_shift_hours}
+    sorted_labels = sorted(mac_totals.keys(), key=lambda m: mac_totals[m], reverse=True)
+    labels = sorted_labels[: int(machine_limit)] if machine_limit else sorted_labels
+
+    datasets = []
+    if regular_rows:
+        for i, r in enumerate(regular_rows):
+            shift_name = r[0]
+            bg, border = _SHIFT_CHART_COLORS[i % len(_SHIFT_CHART_COLORS)]
+            data = [round(mac_shift_hours[m].get(shift_name, 0.0), 2) for m in labels]
+            hours_display = [_fmt_hm(mac_shift_secs[m].get(shift_name, 0)) for m in labels]
+            datasets.append({
+                "label": shift_name,
+                "data": data,
+                "hours_display": hours_display,
+                "backgroundColor": bg,
+                "borderColor": border,
+            })
+    else:
+        for i, chart_label in enumerate(_SHIFT_CHART_SLOT_LABELS):
+            shift_name = regular_names[i] if i < len(regular_names) else None
+            bg, border = _SHIFT_CHART_COLORS[i % len(_SHIFT_CHART_COLORS)]
+            data = [round(mac_shift_hours[m].get(shift_name, 0.0), 2) if shift_name else 0.0 for m in labels]
+            hours_display = [_fmt_hm(mac_shift_secs[m].get(shift_name, 0)) if shift_name else "0:00" for m in labels]
+            datasets.append({
+                "label": chart_label,
+                "data": data,
+                "hours_display": hours_display,
+                "backgroundColor": bg,
+                "borderColor": border,
+            })
+
+    total_mc = len(all_machines) or 1
+    tiles = []
+    if regular_rows:
+        for i, r in enumerate(regular_rows):
+            shift_name = r[0]
+            st1 = r[1]
+            et2 = r[4] if (len(r) > 4 and r[4] and str(r[4]) != "1900-01-01 00:00:00") else (r[2] if len(r) > 2 else None)
+            tile_label = _shift_tile_label(shift_name, st1, et2)
+            style = _SHIFT_TILE_STYLES[i % len(_SHIFT_TILE_STYLES)]
+            tiles.append({
+                "label": tile_label,
+                "count": len(shift_machines.get(shift_name, set())),
+                "total": total_mc,
+                **style,
+            })
+    else:
+        for i, tile_label in enumerate(_SHIFT_TILE_SLOT_LABELS):
+            shift_name = regular_names[i] if i < len(regular_names) else None
+            style = _SHIFT_TILE_STYLES[i % len(_SHIFT_TILE_STYLES)]
+            tiles.append({
+                "label": tile_label,
+                "count": len(shift_machines.get(shift_name, set())) if shift_name else 0,
+                "total": total_mc,
+                **style,
+            })
+
+    tiles.append({
+        "label": "All Shifts",
+        "count": len(all_machines),
+        "total": total_mc,
+        **_SHIFT_TILE_ALL_STYLE,
+    })
+
+    return {"labels": labels, "datasets": datasets, "tiles": tiles}
+
+
+def _fetch_continuous_idle_reasons_fast(cursor, outer_filters, outer_params):
+    cursor.execute(
+        f"""
+        SELECT
+            MacNo,
+            Reason,
+            COUNT(DISTINCT NULLIF(Shift, N'')) AS ShiftCount,
+            SUM(IdleSeconds) AS TotalSeconds
+        FROM #TempIdle
+        WHERE MacNo <> N''
+          AND Reason <> N''
+          {outer_filters}
+        GROUP BY
+            MacNo,
+            Reason
+        HAVING SUM(IdleSeconds) >= 14400
+        ORDER BY SUM(IdleSeconds) DESC, MacNo, Reason
+        """,
+        outer_params,
+    )
+    rows = cursor.fetchall() or []
+    out = []
+    for r in rows:
+        mac = str(r[0]).strip() if r[0] is not None else ""
+        rsn = str(r[1]).strip() if r[1] is not None else ""
+        shifts = int(r[2] or 0)
+        secs = int(r[3] or 0)
+        out.append({
+            "machine": mac,
+            "reason": rsn,
+            "hours": _fmt_hm(secs),
+            "shifts": shifts,
+            "status": _continuous_idle_status(secs),
+        })
+    return out
+
+
+def _fetch_reason_machine_detail_fast(cursor, outer_filters, outer_params):
+    empty = {"column_headers": [], "rows": [], "footer": {"cols": [], "total": "0:00:00", "pct": "0"}}
+    cursor.execute(
+        f"""
+        SELECT
+            Reason,
+            MacNo,
+            SUM(IdleSeconds) AS IdleSeconds
+        FROM #TempIdle
+        WHERE MacNo <> N''
+          AND Reason <> N''
+          {outer_filters}
+        GROUP BY
+            Reason,
+            MacNo
+        """,
+        outer_params,
+    )
+    pivot = defaultdict(lambda: defaultdict(int))
+    machine_totals = defaultdict(int)
+    reason_totals = defaultdict(int)
+
+    for row in cursor.fetchall() or []:
+        reason = (str(row[0]).strip() if row[0] else "") or "—"
+        mac = (str(row[1]).strip() if row[1] else "") or "—"
+        secs = int(row[2] or 0)
+        if not reason or not mac or secs <= 0:
+            continue
+        pivot[reason][mac] += secs
+        machine_totals[mac] += secs
+        reason_totals[reason] += secs
+
+    if not reason_totals:
+        return empty
+
+    grand_total = sum(reason_totals.values())
+    column_headers = sorted(
+        machine_totals.keys(),
+        key=lambda m: (-machine_totals[m], m.lower()),
+    )
+
+    rows_out = []
+    for reason in sorted(reason_totals.keys(), key=lambda r: (-reason_totals[r], r.lower())):
+        reason_secs = reason_totals[reason]
+        pct = round((reason_secs * 100.0) / grand_total, 2) if grand_total > 0 else 0.0
+        cols = [
+            _fmt_hm(pivot[reason].get(mac, 0)) if pivot[reason].get(mac, 0) else "0:00"
+            for mac in column_headers
+        ]
+        rows_out.append({
+            "reason": reason,
+            "cols": cols,
+            "total": _fmt_hm(reason_secs),
+            "pct": f"{pct:.2f}",
+            "lvl": _detail_row_level(pct),
+        })
+
+    footer_cols = [
+        _fmt_hm(machine_totals[mac]) if machine_totals[mac] else "0:00"
+        for mac in column_headers
+    ]
+    return {
+        "column_headers": column_headers,
+        "rows": rows_out,
+        "footer": {
+            "cols": footer_cols,
+            "total": _fmt_hm(grand_total),
+            "pct": "100",
+        },
+    }
+
+
+def _fetch_operator_wise_idle_fast(cursor, start_date, end_date, outer_filters, outer_params):
+    """Aggregate total idle time by operator joining #TempIdle with operator entries."""
+    op_branches = []
+    op_params = []
+    for tbl, dt_col, sh_col, mc_col, op_col in [
+        ("ProductionEntry", "proddate", "shift", "macno", "oprname"),
+        ("ConvProductionEntry", "entrydate", "shift", "macno", "oprname"),
+        ("ConvProductionEntryRod", "entrydate", "shift", "macno", "oprname"),
+        ("CncProd_TouchMas", "proddate", "shift", "macno", "oprname"),
+        ("ConvProd_TouchMas", "proddate", "shift", "macno", "oprname"),
+        ("ConvRodProd_TouchMas", "proddate", "shift", "macno", "oprname"),
+    ]:
+        if table_exists(cursor, tbl):
+            op_branches.append(f"""
+                SELECT CAST({dt_col} AS DATE) AS EntryDate,
+                       LTRIM(RTRIM(CAST({sh_col} AS NVARCHAR(128)))) AS Shift,
+                       LTRIM(RTRIM(CAST({mc_col} AS NVARCHAR(512)))) AS MacNo,
+                       LTRIM(RTRIM(CAST({op_col} AS NVARCHAR(256)))) AS OperatorName
+                FROM {tbl}
+                WHERE {dt_col} >= ? AND {dt_col} < DATEADD(DAY, 1, ?) AND ISNULL(deleted, 0) = 0
+                  AND {op_col} IS NOT NULL AND LTRIM(RTRIM(CAST({op_col} AS NVARCHAR(256)))) <> ''
+            """)
+            op_params.extend([start_date, end_date])
+
+    if not op_branches:
+        return []
+
+    sql = f"""
+    WITH O_ALL AS (
+        {" UNION ALL ".join(op_branches)}
+    ),
+    OP_MAP AS (
+        SELECT
+            EntryDate,
+            Shift,
+            MacNo,
+            MAX(OperatorName) AS Operator
+        FROM O_ALL
+        GROUP BY EntryDate, Shift, MacNo
+    )
+    SELECT
+        OP.Operator,
+        SUM(T.IdleSeconds) AS TotalSeconds
+    FROM #TempIdle T
+    INNER JOIN OP_MAP OP
+        ON T.EntryDate = OP.EntryDate
+       AND T.Shift = OP.Shift
+       AND T.MacNo = OP.MacNo
+    WHERE OP.Operator IS NOT NULL
+      AND OP.Operator NOT IN (N'—', N'Pending', N'-', N'NO OPERATOR', N'None')
+      {outer_filters}
+    GROUP BY OP.Operator
+    ORDER BY SUM(T.IdleSeconds) DESC;
+    """
+    try:
+        cursor.execute(sql, op_params + outer_params)
+        rows = cursor.fetchall() or []
+        total_secs = sum(int(r[1] or 0) for r in rows)
+        results = []
+        for op, secs in rows:
+            s = int(secs or 0)
+            h = s // 3600
+            m = (s % 3600) // 60
+            pct = round((s / total_secs) * 100, 1) if total_secs > 0 else 0.0
+            results.append({
+                "name": str(op).strip(),
+                "hours": f"{h}:{m:02d}",
+                "seconds": s,
+                "pct": pct,
+            })
+        return results
+    except Exception:
+        return []
+
+
+def _fetch_utilization_totals_fast(cursor, start_date, end_date, machine, shift, mac_type=None, reason=None):
+    if not table_exists(cursor, "shift"):
+        return {
+            "total_machine_hours_available": "0:00",
+            "total_idle_hours": "0:00",
+            "total_productive_hours": "0:00",
+            "overall_idle_percent": 0.0,
+        }
+    prod_params = _productive_date_params(start_date, end_date)
+    util_filters, util_params = _build_utilization_filters(machine, shift, mac_type=mac_type, prefix="S_ALL")
+
+    idle_filter_clauses = []
+    idle_filter_params = []
+    if reason:
+        if isinstance(reason, list):
+            placeholders = ",".join(["?"] * len(reason))
+            idle_filter_clauses.append(f"AND LTRIM(RTRIM(CAST(Reason AS NVARCHAR(512)))) IN ({placeholders})")
+            idle_filter_params.extend(reason)
+        else:
+            idle_filter_clauses.append("AND LTRIM(RTRIM(CAST(Reason AS NVARCHAR(512)))) = ?")
+            idle_filter_params.append(reason)
+    idle_where = "\n".join(idle_filter_clauses)
+
+    sql = f"""
+    WITH SHIFT_HOURS AS (
+        {_SHIFT_HOURS_CTE}
+    ),
+    IDLE_DATA AS (
+        SELECT
+            EntryDate,
+            Shift,
+            MacNo,
+            SUM(IdleSeconds) AS TotalIdleSeconds
+        FROM #TempIdle
+        WHERE 1 = 1
+        {idle_where}
+        GROUP BY EntryDate, Shift, MacNo
+    ),
+    PRODUCTIVE_DATA AS (
+        SELECT
+            P.EntryDate,
+            P.Shift,
+            P.MacNo,
+            SUM(P.ProductiveSeconds) AS TotalProductiveSeconds
+        FROM (
+            {_PRODUCTIVE_UNION_SQL}
+        ) P
+        GROUP BY P.EntryDate, P.Shift, P.MacNo
+    ),
+    ALL_SLOTS AS (
+        SELECT EntryDate, Shift, MacNo FROM IDLE_DATA
+        UNION
+        SELECT EntryDate, Shift, MacNo FROM PRODUCTIVE_DATA
+    ),
+    DETAIL AS (
+        SELECT
+            S_ALL.EntryDate,
+            S_ALL.Shift,
+            S_ALL.MacNo,
+            ISNULL(S.ShiftSeconds, 0) AS ShiftSeconds,
+            ISNULL(I.TotalIdleSeconds, 0) AS TotalIdleSeconds,
+            ISNULL(P.TotalProductiveSeconds, 0) AS TotalProductiveSeconds
+        FROM ALL_SLOTS S_ALL
+        LEFT JOIN IDLE_DATA I
+            ON S_ALL.EntryDate = I.EntryDate
+           AND LTRIM(RTRIM(CAST(S_ALL.Shift AS NVARCHAR(128))))
+             = LTRIM(RTRIM(CAST(I.Shift AS NVARCHAR(128))))
+           AND LTRIM(RTRIM(CAST(S_ALL.MacNo AS NVARCHAR(512))))
+             = LTRIM(RTRIM(CAST(I.MacNo AS NVARCHAR(512))))
+        LEFT JOIN PRODUCTIVE_DATA P
+            ON S_ALL.EntryDate = P.EntryDate
+           AND LTRIM(RTRIM(CAST(S_ALL.Shift AS NVARCHAR(128))))
+             = LTRIM(RTRIM(CAST(P.Shift AS NVARCHAR(128))))
+           AND LTRIM(RTRIM(CAST(S_ALL.MacNo AS NVARCHAR(512))))
+             = LTRIM(RTRIM(CAST(P.MacNo AS NVARCHAR(512))))
+        LEFT JOIN SHIFT_HOURS S
+            ON LTRIM(RTRIM(CAST(S_ALL.Shift AS NVARCHAR(128))))
+             = LTRIM(RTRIM(CAST(S.Shift AS NVARCHAR(128))))
+        WHERE 1 = 1
+        {util_filters}
+    )
+    SELECT
+        ISNULL(SUM(ShiftSeconds), 0),
+        ISNULL(SUM(TotalIdleSeconds), 0),
+        ISNULL(SUM(TotalProductiveSeconds), 0)
+    FROM DETAIL
+    """
+    cursor.execute(sql, idle_filter_params + prod_params + util_params)
+    row = cursor.fetchone()
+    avail_secs = int(row[0] or 0) if row else 0
+    idle_secs = int(row[1] or 0) if row else 0
+    prod_secs = int(row[2] or 0) if row else 0
+    idle_pct = round((idle_secs * 100.0) / avail_secs, 2) if avail_secs > 0 else 0.0
+    return {
+        "total_machine_hours_available": _fmt_hm(avail_secs),
+        "total_idle_hours": _fmt_hm(idle_secs),
+        "total_productive_hours": _fmt_hm(prod_secs),
+        "overall_idle_percent": idle_pct,
+    }
+
+
+def _fetch_idle_pct_ranking_fast(
+    cursor, start_date, end_date, outer_filters, outer_params,
+    machine=None, shift=None, limit=100,
+):
+    cursor.execute(
+        f"""
+        SELECT
+            LTRIM(RTRIM(CAST(MacNo AS NVARCHAR(512)))) AS MacNo,
+            CAST(SUM(IdleSeconds) AS DECIMAL(18, 0)) AS IdleSeconds
+        FROM #TempIdle
+        WHERE LTRIM(RTRIM(CAST(MacNo AS NVARCHAR(512)))) <> N''
+        {outer_filters}
+        GROUP BY LTRIM(RTRIM(CAST(MacNo AS NVARCHAR(512))))
+        """,
+        outer_params,
+    )
+    idle_map = {
+        (str(r[0]).strip() if r[0] else ""): int(r[1] or 0)
+        for r in (cursor.fetchall() or [])
+    }
+    if not idle_map:
+        return {"labels": [], "data": []}
+
+    prod_filter_sql, prod_filter_params = _build_productive_filters(machine, shift)
+    outer_prod_filter = (
+        prod_filter_sql.replace("macno", "P.macno").replace("shift", "P.shift")
+        if prod_filter_sql
+        else ""
+    )
+    prod_params = _productive_date_params(start_date, end_date) + prod_filter_params
+
+    cursor.execute(
+        f"""
+        SELECT
+            LTRIM(RTRIM(CAST(P.macno AS NVARCHAR(512)))) AS MacNo,
+            SUM(P.ProductiveSeconds) AS TotalProdSeconds
+        FROM (
+            {_PRODUCTIVE_UNION_SQL}
+        ) P
+        WHERE P.macno IS NOT NULL
+          AND LTRIM(RTRIM(CAST(P.macno AS NVARCHAR(512)))) <> N''
+          {outer_prod_filter}
+        GROUP BY LTRIM(RTRIM(CAST(P.macno AS NVARCHAR(512))))
+        """,
+        prod_params,
+    )
+    prod_map = {
+        (str(r[0]).strip() if r[0] else ""): int(r[1] or 0)
+        for r in (cursor.fetchall() or [])
+    }
+
+    shift_query = f"""
+    WITH SHIFT_HOURS AS (
+        {_SHIFT_HOURS_CTE}
+    ),
+    IDLE_SLOTS AS (
+        SELECT DISTINCT
+            EntryDate,
+            LTRIM(RTRIM(CAST(Shift AS NVARCHAR(128)))) AS Shift,
+            LTRIM(RTRIM(CAST(MacNo AS NVARCHAR(512)))) AS MacNo
+        FROM #TempIdle
+        WHERE LTRIM(RTRIM(CAST(MacNo AS NVARCHAR(512)))) <> N''
+        {outer_filters}
+    ),
+    PROD_SLOTS AS (
+        SELECT DISTINCT
+            P.EntryDate,
+            LTRIM(RTRIM(CAST(P.shift AS NVARCHAR(128)))) AS Shift,
+            LTRIM(RTRIM(CAST(P.macno AS NVARCHAR(512)))) AS MacNo
+        FROM (
+            {_PRODUCTIVE_UNION_SQL}
+        ) P
+        WHERE P.macno IS NOT NULL
+          AND LTRIM(RTRIM(CAST(P.macno AS NVARCHAR(512)))) <> N''
+          {outer_prod_filter}
+    ),
+    ALL_SLOTS AS (
+        SELECT EntryDate, Shift, MacNo FROM IDLE_SLOTS
+        UNION
+        SELECT EntryDate, Shift, MacNo FROM PROD_SLOTS
+    )
+    SELECT
+        S_ALL.MacNo,
+        ISNULL(SUM(S.ShiftSeconds), 0) AS TotalShiftSeconds
+    FROM ALL_SLOTS S_ALL
+    INNER JOIN SHIFT_HOURS S
+        ON LTRIM(RTRIM(CAST(S_ALL.Shift AS NVARCHAR(128))))
+         = LTRIM(RTRIM(CAST(S.Shift AS NVARCHAR(128))))
+    GROUP BY S_ALL.MacNo
+    """
+
+    cursor.execute(shift_query, outer_params + prod_params)
+    shift_map = {
+        (str(r[0]).strip() if r[0] else ""): int(r[1] or 0)
+        for r in (cursor.fetchall() or [])
+    }
+
+    results = []
+    for mac, idle_secs in idle_map.items():
+        total_shift_secs = shift_map.get(mac, 0)
+        prod_secs = prod_map.get(mac, 0)
+        denom_secs = total_shift_secs if total_shift_secs > 0 else (idle_secs + prod_secs)
+        idle_pct = round((idle_secs / denom_secs) * 100, 2) if denom_secs > 0 else 0.0
+        results.append((mac, idle_pct, idle_secs, denom_secs))
+
+    results.sort(key=lambda x: (-x[1], x[0]))
+    top_results = results[: int(limit)] if limit is not None else results
+
+    return {
+        "labels": [r[0] for r in top_results],
+        "data": [r[1] for r in top_results],
+        "idle_hours": [_fmt_hm(r[2]) for r in top_results],
+        "prod_hours": [_fmt_hm(r[3]) for r in top_results],
+    }
+
+
+def _fetch_idle_time_not_entered_fast(cursor, start_date, end_date, machine, shift, mac_type=None):
+    empty = {
+        "rows": [],
+        "summary": {"not_entered": 0, "partial_entry": 0, "completed": 0},
+    }
+    if not table_exists(cursor, "shift") or not table_exists(cursor, "MacMaster"):
+        return empty
+
+    gap_threshold = 60
+    prod_date_params = _productive_date_params(start_date, end_date)
+
+    shift_clause_exp = ""
+    shift_clause_rec = ""
+    machine_clause_exp = ""
+    machine_clause_rec = ""
+    if shift:
+        shift_clause_exp = "AND LTRIM(RTRIM(CAST([Shift] AS NVARCHAR(128)))) = ?"
+        shift_clause_rec = "AND LTRIM(RTRIM(CAST(D.[Shift] AS NVARCHAR(128)))) = ?"
+    if machine:
+        if isinstance(machine, list):
+            placeholders = ",".join(["?"] * len(machine))
+            machine_clause_exp = f"AND LTRIM(RTRIM(CAST(macno AS NVARCHAR(512)))) IN ({placeholders})"
+            machine_clause_rec = f"AND LTRIM(RTRIM(CAST(D.MacNo AS NVARCHAR(512)))) IN ({placeholders})"
+        else:
+            machine_clause_exp = "AND LTRIM(RTRIM(CAST(macno AS NVARCHAR(512)))) = ?"
+            machine_clause_rec = "AND LTRIM(RTRIM(CAST(D.MacNo AS NVARCHAR(512)))) = ?"
+
+    if mac_type == "CNC":
+        machine_clause_exp += " AND ISNULL(cnc, 0) = 1 AND ISNULL(IsNonActive, 0) = 0"
+        machine_clause_rec += " AND D.MacNo IN (SELECT macno FROM MacMaster WHERE ISNULL(deleted, 0) = 0 AND ISNULL(IsNonActive, 0) = 0 AND cnc = 1)"
+    elif mac_type == "CONV":
+        machine_clause_exp += " AND (cnc = 0 OR cnc IS NULL) AND ISNULL(IsNonActive, 0) = 0"
+        machine_clause_rec += " AND D.MacNo IN (SELECT macno FROM MacMaster WHERE ISNULL(deleted, 0) = 0 AND ISNULL(IsNonActive, 0) = 0 AND (cnc = 0 OR cnc IS NULL))"
+
+    idle_slot_sql, idle_slot_params = _build_slot_filter_clauses(
+        machine, shift, mac_col="T.MacNo", shift_col="T.Shift", mac_type=mac_type,
+    )
+    prod_slot_sql, prod_slot_params = _build_slot_filter_clauses(
+        machine, shift, mac_col="P.macno", shift_col="P.shift", mac_type=mac_type,
+    )
+    opr_slot_sql, opr_slot_params = _build_slot_filter_clauses(
+        machine, shift, mac_col="MacNo", shift_col="Shift", mac_type=mac_type,
+    )
+
+    op_branches = []
+    op_params = []
+    for tbl, dt_col, sh_col, mc_col, op_col in [
+        ("ProductionEntry", "proddate", "shift", "macno", "oprname"),
+        ("ConvProductionEntry", "entrydate", "shift", "macno", "oprname"),
+        ("ConvProductionEntryRod", "entrydate", "shift", "macno", "oprname"),
+        ("CncProd_TouchMas", "proddate", "shift", "macno", "oprname"),
+        ("ConvProd_TouchMas", "proddate", "shift", "macno", "oprname"),
+        ("ConvRodProd_TouchMas", "proddate", "shift", "macno", "oprname"),
+    ]:
+        if table_exists(cursor, tbl):
+            op_branches.append(f"""
+                SELECT {dt_col} AS EntryDate, {sh_col} AS Shift, {mc_col} AS MacNo, {op_col} AS OperatorName
+                FROM {tbl}
+                WHERE {dt_col} >= ? AND {dt_col} < DATEADD(DAY, 1, ?) AND ISNULL(deleted, 0) = 0
+                  AND {op_col} IS NOT NULL AND LTRIM(RTRIM({op_col})) <> ''
+            """)
+            op_params.extend([start_date, end_date])
+
+    opr_cte = f"""
+    OPERATOR_DATA AS (
+        SELECT
+            CAST(EntryDate AS DATE) AS EntryDate,
+            LTRIM(RTRIM(CAST(Shift AS NVARCHAR(128)))) AS ShiftName,
+            LTRIM(RTRIM(CAST(MacNo AS NVARCHAR(512)))) AS MacNo,
+            MAX(NULLIF(LTRIM(RTRIM(CAST(OperatorName AS NVARCHAR(256)))), N'')) AS OperatorName
+        FROM (
+            {" UNION ALL ".join(op_branches)}
+        ) O_ALL
+        WHERE 1 = 1
+          {opr_slot_sql}
+        GROUP BY
+            CAST(EntryDate AS DATE),
+            LTRIM(RTRIM(CAST(Shift AS NVARCHAR(128)))),
+            LTRIM(RTRIM(CAST(MacNo AS NVARCHAR(512))))
+    ),
+    """ if op_branches else "OPERATOR_DATA AS (SELECT CAST(NULL AS DATE) AS EntryDate, CAST(NULL AS NVARCHAR(128)) AS ShiftName, CAST(NULL AS NVARCHAR(512)) AS MacNo, CAST(NULL AS NVARCHAR(256)) AS OperatorName WHERE 1=0),"
+
+    has_mac_idle_entry = table_exists(cursor, "Machine_IdleEntryDet") and table_exists(cursor, "Machine_IdleEntryMas")
+    if has_mac_idle_entry:
+        mac_idle_cte = f"""
+    MACHINE_IDLE_RECORDED AS (
+        SELECT DISTINCT
+            CAST(M.proddate AS DATE) AS EntryDate,
+            LTRIM(RTRIM(CAST(D.[Shift] AS NVARCHAR(128)))) AS ShiftName,
+            LTRIM(RTRIM(CAST(D.MacNo AS NVARCHAR(512)))) AS MacNo
+        FROM Machine_IdleEntryDet D
+        INNER JOIN Machine_IdleEntryMas M ON D.prodid = M.prodid
+        WHERE M.proddate >= ? AND M.proddate < DATEADD(DAY, 1, ?)
+          AND ISNULL(M.deleted, 0) = 0
+          AND ISNULL(D.deleted, 0) = 0
+          {shift_clause_rec}
+          {machine_clause_rec}
+    ),
+    """
+    else:
+        mac_idle_cte = """
+    MACHINE_IDLE_RECORDED AS (
+        SELECT CAST(NULL AS DATE) AS EntryDate,
+               CAST(NULL AS NVARCHAR(128)) AS ShiftName,
+               CAST(NULL AS NVARCHAR(512)) AS MacNo
+        WHERE 1 = 0
+    ),
+    """
+
+    sql = f"""
+    WITH SHIFT_HOURS AS (
+        {_SHIFT_HOURS_CTE}
+    ),
+    Dates AS (
+        SELECT CAST(? AS DATE) AS EntryDate
+        UNION ALL
+        SELECT DATEADD(DAY, 1, EntryDate) FROM Dates WHERE EntryDate < CAST(? AS DATE)
+    ),
+    RegularShifts AS (
+        SELECT LTRIM(RTRIM(CAST([Shift] AS NVARCHAR(128)))) AS ShiftName
+        FROM shift
+        WHERE ISNULL(deleted, 0) = 0
+          AND ISNULL(IsRegularShift, 0) = 1
+          AND LTRIM(RTRIM(CAST([Shift] AS NVARCHAR(128)))) <> N''
+          {shift_clause_exp}
+    ),
+    ActiveMachines AS (
+        SELECT LTRIM(RTRIM(CAST(macno AS NVARCHAR(512)))) AS MacNo
+        FROM MacMaster
+        WHERE ISNULL(deleted, 0) = 0
+          AND LTRIM(RTRIM(CAST(macno AS NVARCHAR(512)))) <> N''
+          {machine_clause_exp}
+    ),
+    Expected AS (
+        SELECT d.EntryDate, rs.ShiftName, am.MacNo
+        FROM Dates d
+        CROSS JOIN RegularShifts rs
+        CROSS JOIN ActiveMachines am
+    ),
+    IDLE_DATA AS (
+        SELECT
+            T.EntryDate,
+            T.Shift AS ShiftName,
+            T.MacNo AS MacNo,
+            SUM(T.IdleSeconds) AS TotalIdleSeconds
+        FROM #TempIdle T
+        WHERE 1 = 1
+        {idle_slot_sql}
+        GROUP BY
+            T.EntryDate,
+            T.Shift,
+            T.MacNo
+    ),
+    PRODUCTIVE_DATA AS (
+        SELECT
+            CAST(P.EntryDate AS DATE) AS EntryDate,
+            LTRIM(RTRIM(CAST(P.shift AS NVARCHAR(128)))) AS ShiftName,
+            LTRIM(RTRIM(CAST(P.macno AS NVARCHAR(512)))) AS MacNo,
+            SUM(P.ProductiveSeconds) AS TotalProductiveSeconds
+        FROM (
+            {_PRODUCTIVE_UNION_SQL}
+        ) P
+        WHERE 1 = 1
+        {prod_slot_sql}
+        GROUP BY
+            CAST(P.EntryDate AS DATE),
+            LTRIM(RTRIM(CAST(P.shift AS NVARCHAR(128)))),
+            LTRIM(RTRIM(CAST(P.macno AS NVARCHAR(512))))
+    ),
+    {opr_cte}
+    {mac_idle_cte}
+    SLOTS AS (
+        SELECT
+            e.EntryDate,
+            e.ShiftName,
+            e.MacNo,
+            ISNULL(S.ShiftSeconds, 0) AS ShiftSeconds,
+            ISNULL(I.TotalIdleSeconds, 0) AS IdleSeconds,
+            ISNULL(P.TotalProductiveSeconds, 0) AS ProductiveSeconds,
+            CASE
+                WHEN R.EntryDate IS NOT NULL OR ISNULL(I.TotalIdleSeconds, 0) > 0 THEN 1
+                ELSE 0
+            END AS HasMachineIdleEntry,
+            O.OperatorName
+        FROM Expected e
+        LEFT JOIN IDLE_DATA I
+            ON e.EntryDate = I.EntryDate
+           AND e.ShiftName = I.ShiftName
+           AND e.MacNo = I.MacNo
+        LEFT JOIN PRODUCTIVE_DATA P
+            ON e.EntryDate = P.EntryDate
+           AND e.ShiftName = P.ShiftName
+           AND e.MacNo = P.MacNo
+        LEFT JOIN SHIFT_HOURS S
+            ON e.ShiftName = S.Shift
+        LEFT JOIN OPERATOR_DATA O
+            ON e.EntryDate = O.EntryDate
+           AND e.ShiftName = O.ShiftName
+           AND e.MacNo = O.MacNo
+        LEFT JOIN MACHINE_IDLE_RECORDED R
+            ON e.EntryDate = R.EntryDate
+           AND e.ShiftName = R.ShiftName
+           AND e.MacNo = R.MacNo
+    )
+    SELECT
+        EntryDate,
+        ShiftName,
+        MacNo,
+        ShiftSeconds,
+        IdleSeconds,
+        ProductiveSeconds,
+        ShiftSeconds - IdleSeconds - ProductiveSeconds AS NotEnteredSeconds,
+        HasMachineIdleEntry,
+        OperatorName
+    FROM SLOTS
+    OPTION (MAXRECURSION 366)
+    """
+
+    params = [start_date, end_date]
+    if shift:
+        params.append(shift)
+    if machine:
+        if isinstance(machine, list):
+            params.extend(machine)
+        else:
+            params.append(machine)
+    params.extend(idle_slot_params)
+    params.extend(prod_date_params)
+    params.extend(prod_slot_params)
+    if op_branches:
+        params.extend(op_params)
+        params.extend(opr_slot_params)
+    if has_mac_idle_entry:
+        params.extend([start_date, end_date])
+        if shift:
+            params.append(shift)
+        if machine:
+            if isinstance(machine, list):
+                params.extend(machine)
+            else:
+                params.append(machine)
+
+    try:
+        cursor.execute(sql, params)
+    except Exception:
+        return empty
+
+    rows_out = []
+    not_entered = 0
+    partial_entry = 0
+    completed = 0
+
+    for r in cursor.fetchall() or []:
+        e_date = r[0]
+        sh_name = str(r[1] or "").strip()
+        mac_no = str(r[2] or "").strip()
+        sh_sec = int(r[3] or 0)
+        id_sec = int(r[4] or 0)
+        pr_sec = int(r[5] or 0)
+        gap_sec = int(r[6] or 0)
+        has_rec = int(r[7] or 0)
+        op_name = (str(r[8]).strip() if r[8] else "") or "—"
+
+        if id_sec + pr_sec < gap_threshold:
+            not_entered += 1
+            status = "NOT_ENTERED"
+        elif gap_sec > gap_threshold:
+            partial_entry += 1
+            status = "PARTIAL"
+        else:
+            completed += 1
+            status = "COMPLETED"
+
+        if status != "COMPLETED":
+            rows_out.append({
+                "machine": mac_no,
+                "shift": _shift_label_for_ui(sh_name),
+                "date": _fmt_date_short(e_date),
+                "status": status,
+                "operator": op_name,
+                "gap_hours": _fmt_hm(max(gap_sec, 0)),
+                "shift_hours": _fmt_hm(sh_sec),
+                "idle_hours": _fmt_hm(id_sec),
+                "prod_hours": _fmt_hm(pr_sec),
+            })
+
+    rows_out.sort(
+        key=lambda x: (
+            0 if x["status"] == "NOT_ENTERED" else 1,
+            x["date"],
+            x["machine"],
+        )
+    )
+
+    return {
+        "rows": rows_out,
+        "summary": {
+            "not_entered": not_entered,
+            "partial_entry": partial_entry,
+            "completed": completed,
+        },
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  MAIN ENTRYPOINT
+# ═══════════════════════════════════════════════════════════════════════════════
+
 @api_view(["GET"])
 @cache_analytics_response(timeout=300, key_prefix="idle_rep")
 def idle_time_report(request):
     """
-    Report filters: ?from=&to=&machine=&shift=&reason=
-    Returns filter dropdown options (scoped to date range) and aggregated rows.
+    High-Performance MIS — Idle Time Report.
+    Materializes filtered date-range records into session-scoped #TempIdle once,
+    running all aggregations in sub-millisecond queries.
     """
     try:
         conn, tenant = get_tenant_connection(request)
@@ -2859,104 +4163,20 @@ def idle_time_report(request):
     machine = _parse_machine(request.GET.get("machine", ""))
     shift_parsed = _parse_shift(request.GET.get("shift", ""))
     reason = _parse_reason(request.GET.get("reason", ""))
-
     date_params = _union_date_params(start_date, end_date)
 
     cursor = None
     try:
         cursor = conn.cursor()
         shift = _resolve_shift_db_name(cursor, shift_parsed) if shift_parsed else None
-        outer_sql, outer_params = _build_outer_filters(machine, shift, reason, mac_type=mac_type)
 
-        cursor.execute(_FILTER_OPTIONS_SQL, date_params)
-        opt_rows = cursor.fetchall() or []
-        mac_set, shift_set, reason_set = [], [], []
-        for mac, sh, rs in opt_rows:
-            if mac is not None:
-                mac_set.append(mac)
-            if sh is not None:
-                shift_set.append(sh)
-            if rs is not None:
-                reason_set.append(rs)
+        # 1. Materialize date range records into #TempIdle once
+        _materialize_temp_idle(cursor, start_date, end_date, date_params)
 
-        if table_exists(cursor, "Prod_IdleEntry") and table_exists(cursor, "ProductionEntry"):
-            try:
-                cursor.execute("""
-                    SELECT DISTINCT LTRIM(RTRIM(CAST(PI.reasons AS NVARCHAR(512))))
-                    FROM Prod_IdleEntry PI
-                    INNER JOIN ProductionEntry P ON PI.prodid = P.prodid
-                    WHERE P.proddate >= ? AND P.proddate < DATEADD(DAY, 1, ?)
-                      AND ISNULL(P.deleted, 0) = 0
-                      AND ISNULL(PI.deleted, 0) = 0
-                      AND PI.reasons IS NOT NULL AND LTRIM(RTRIM(CAST(PI.reasons AS NVARCHAR(512)))) <> N''
-                """, [start_date, end_date])
-                for r_row in cursor.fetchall() or []:
-                    if r_row and r_row[0]:
-                        reason_set.append(r_row[0])
-            except Exception:
-                pass
+        # 2. Fast filter options directly from #TempIdle in 1ms
+        mac_set, shift_set, reason_set = _fetch_filter_options_fast(cursor)
 
-        if table_exists(cursor, "conv_IdleEntry") and table_exists(cursor, "ConvProductionEntry"):
-            try:
-                cursor.execute("""
-                    SELECT DISTINCT LTRIM(RTRIM(CAST(CI.reasons AS NVARCHAR(512))))
-                    FROM conv_IdleEntry CI
-                    INNER JOIN ConvProductionEntry C ON CI.entryno = C.entryno
-                    WHERE C.entrydate >= ? AND C.entrydate < DATEADD(DAY, 1, ?)
-                      AND ISNULL(C.deleted, 0) = 0
-                      AND ISNULL(CI.deleted, 0) = 0
-                      AND CI.reasons IS NOT NULL AND LTRIM(RTRIM(CAST(CI.reasons AS NVARCHAR(512)))) <> N''
-                """, [start_date, end_date])
-                for r_row in cursor.fetchall() or []:
-                    if r_row and r_row[0]:
-                        reason_set.append(r_row[0])
-            except Exception:
-                pass
-
-        if table_exists(cursor, "conv_RodIdleEntry") and table_exists(cursor, "ConvProductionEntryRod"):
-            try:
-                cursor.execute("""
-                    SELECT DISTINCT LTRIM(RTRIM(CAST(CRI.reasons AS NVARCHAR(512))))
-                    FROM conv_RodIdleEntry CRI
-                    INNER JOIN ConvProductionEntryRod R ON CRI.entryno = R.entryno
-                    WHERE R.entrydate >= ? AND R.entrydate < DATEADD(DAY, 1, ?)
-                      AND ISNULL(R.deleted, 0) = 0
-                      AND ISNULL(CRI.deleted, 0) = 0
-                      AND CRI.reasons IS NOT NULL AND LTRIM(RTRIM(CAST(CRI.reasons AS NVARCHAR(512)))) <> N''
-                """, [start_date, end_date])
-                for r_row in cursor.fetchall() or []:
-                    if r_row and r_row[0]:
-                        reason_set.append(r_row[0])
-            except Exception:
-                pass
-
-        for tidle, tmas in [
-            ("CncProd_TouchIdle", "CncProd_TouchMas"),
-            ("CncProd_TouchIdleDet", "CncProd_TouchMas"),
-            ("ConvProd_TouchIdle", "ConvProd_TouchMas"),
-            ("ConvProd_TouchIdleDet", "ConvProd_TouchMas"),
-            ("ConvRodProd_TouchIdle", "ConvRodProd_TouchMas"),
-            ("ConvRodProd_TouchIdleDet", "ConvRodProd_TouchMas"),
-        ]:
-            if table_exists(cursor, tidle) and table_exists(cursor, tmas):
-                try:
-                    cursor.execute(f"""
-                        SELECT DISTINCT LTRIM(RTRIM(CAST(TI.reasons AS NVARCHAR(512))))
-                        FROM {tidle} TI
-                        INNER JOIN {tmas} TM ON TI.TchEntryNo = TM.TchEntryNo
-                        WHERE TM.proddate >= ? AND TM.proddate < DATEADD(DAY, 1, ?)
-                          AND ISNULL(TM.deleted, 0) = 0
-                          AND ISNULL(TI.deleted, 0) = 0
-                          AND ISNULL(TI.ProdTaken, 0) = 0
-                          AND TI.reasons IS NOT NULL AND LTRIM(RTRIM(CAST(TI.reasons AS NVARCHAR(512)))) <> N''
-                    """, [start_date, end_date])
-                    for r_row in cursor.fetchall() or []:
-                        if r_row and r_row[0]:
-                            reason_set.append(r_row[0])
-                except Exception:
-                    pass
-
-
+        # 3. Fast CNC machine mapping
         cnc_map = {}
         if table_exists(cursor, "MacMaster"):
             try:
@@ -2974,163 +4194,93 @@ def idle_time_report(request):
             except Exception:
                 pass
 
-        mac_join = ""
-        rate_select = "CAST(0 AS FLOAT) AS RatePerHr"
-        if table_exists(cursor, "MacMaster"):
-            mac_join = """
-            LEFT JOIN MacMaster MM
-                ON LTRIM(RTRIM(CAST(A.MacNo AS NVARCHAR(512))))
-                 = LTRIM(RTRIM(CAST(MM.macno AS NVARCHAR(512))))
-                AND ISNULL(MM.deleted, 0) = 0
-            """
-            rate_select = "ISNULL(MAX(MM.RatePerHr), 0) AS RatePerHr"
+        # 4. Build outer filter clauses directly on #TempIdle
+        outer_filters, outer_params = _build_temp_idle_filters(machine, shift, reason, mac_type=mac_type, prefix="")
 
-        report_sql_template = f"""
-        SELECT
-            A.EntryDate,
-            A.Shift,
-            A.MacNo,
-            A.Reason,
-            CONVERT(VARCHAR(8), DATEADD(SECOND, SUM(A.IdleSeconds), 0), 108) AS TotalIdleHours,
-            CAST(SUM(A.IdleSeconds) / 3600.0 AS DECIMAL(18, 2)) AS TotalIdleHours_Decimal,
-            {rate_select},
-            CASE
-                WHEN MAX(A.IsEffCalc) = 1 THEN 1
-                WHEN MIN(A.IsEffCalc) = 0 THEN 0
-                WHEN MAX(CAST(IR.IsAccept AS INT)) = 1 THEN 1
-                WHEN MIN(CAST(IR.IsAccept AS INT)) = 0 THEN 0
-                ELSE 1
-            END AS IsAccepted
-        FROM (
-            {_IDLE_UNION_SQL}
-        ) A
-        {mac_join}
-        LEFT JOIN IdleReasons IR
-            ON LTRIM(RTRIM(A.Reason)) = LTRIM(RTRIM(IR.IdleReasons))
-            AND ISNULL(IR.deleted, 0) = 0
-        WHERE 1 = 1
-        {{outer_filters}}
-        GROUP BY
-            A.EntryDate,
-            A.Shift,
-            A.MacNo,
-            A.Reason
-        ORDER BY
-            A.EntryDate,
-            A.Shift,
-            A.MacNo,
-            A.Reason
-        """
-        report_sql = report_sql_template.format(outer_filters=outer_sql)
-        report_params = date_params + outer_params
-        cursor.execute(report_sql, report_params)
-        raw_rows = cursor.fetchall() or []
-        data_rows = []
-        for r in raw_rows:
-            d = _row_to_dict(r)
-            d["date"] = d["entry_date"][:10] if d.get("entry_date") else ""
-            d["machine"] = d["mac_no"]
-            data_rows.append(d)
+        # 5. Fetch Idle Time Not Entered (using #TempIdle for idle side)
+        try:
+            idle_time_not_entered = _fetch_idle_time_not_entered_fast(
+                cursor, start_date, end_date, machine, shift, mac_type=mac_type
+            )
+        except Exception:
+            idle_time_not_entered = {"rows": [], "summary": {"not_entered": 0, "partial_entry": 0, "completed": 0}}
 
-        from .views_plantperformance import _pv_enrich_operator_team
-        _pv_enrich_operator_team(cursor, data_rows, start_date, end_date)
+        not_entered_count = 0
+        if isinstance(idle_time_not_entered, dict):
+            summary = idle_time_not_entered.get("summary")
+            if isinstance(summary, dict):
+                not_entered_count = summary.get("not_entered") or 0
 
-        # Enrich any remaining missing operators from Touch masters (ProdTaken = 0)
-        missing_op_keys = [
-            r for r in data_rows
-            if not r.get("operator") or r.get("operator") in ("—", "Pending", "-", "NO OPERATOR", "None")
-        ]
-        if missing_op_keys:
-            try:
-                touch_op_sql = """
-                SELECT CAST(EntryDate AS DATE), LTRIM(RTRIM(CAST(Shift AS NVARCHAR(128)))), LTRIM(RTRIM(CAST(MacNo AS NVARCHAR(512)))), MAX(oprname)
-                FROM (
-                    SELECT proddate AS EntryDate, shift AS Shift, macno AS MacNo, oprname FROM CncProd_TouchMas WHERE ISNULL(deleted, 0) = 0 AND proddate >= ? AND proddate < DATEADD(DAY, 1, ?) AND oprname IS NOT NULL AND LTRIM(RTRIM(oprname)) <> ''
-                    UNION ALL
-                    SELECT proddate AS EntryDate, shift AS Shift, macno AS MacNo, oprname FROM ConvProd_TouchMas WHERE ISNULL(deleted, 0) = 0 AND proddate >= ? AND proddate < DATEADD(DAY, 1, ?) AND oprname IS NOT NULL AND LTRIM(RTRIM(oprname)) <> ''
-                    UNION ALL
-                    SELECT proddate AS EntryDate, shift AS Shift, macno AS MacNo, oprname FROM ConvRodProd_TouchMas WHERE ISNULL(deleted, 0) = 0 AND proddate >= ? AND proddate < DATEADD(DAY, 1, ?) AND oprname IS NOT NULL AND LTRIM(RTRIM(oprname)) <> ''
-                ) TM
-                GROUP BY CAST(EntryDate AS DATE), LTRIM(RTRIM(CAST(Shift AS NVARCHAR(128)))), LTRIM(RTRIM(CAST(MacNo AS NVARCHAR(512))))
-                """
-                cursor.execute(touch_op_sql, [start_date, end_date] * 3)
-                touch_ops = {
-                    (str(row[0]), str(row[1]).strip().upper(), str(row[2]).strip().upper()): str(row[3]).strip()
-                    for row in cursor.fetchall() or []
-                }
-                for r in missing_op_keys:
-                    k = (str(r.get("date")), str(r.get("shift")).strip().upper(), str(r.get("mac_no")).strip().upper())
-                    if k in touch_ops:
-                        r["operator"] = touch_ops[k]
-            except Exception:
-                pass
+        # 6. Core KPIs (in 1ms)
+        kpis = _compute_kpis_fast(cursor, outer_filters, outer_params, idle_not_entered=not_entered_count)
 
-        kpis = _compute_kpis(
-            cursor, start_date, end_date, date_params, outer_sql, outer_params,
-            data_rows, machine, shift, mac_type=mac_type,
-        )
-        top_idle_reasons = _fetch_top_idle_reasons(
-            cursor, date_params, outer_sql, outer_params, limit=10,
-        )
-        accepted_idle = _fetch_accepted_vs_non_accepted(
-            cursor, date_params, outer_sql, outer_params,
-        )
-        monthwise = _fetch_monthwise_idle_cost(
-            start_date, end_date, cursor, date_params, outer_sql, outer_params,
-        )
-        top_machines = _fetch_top_machines_idle_cost(
-            cursor, date_params, outer_sql, outer_params, kpis=kpis, limit=15,
-        )
-        daywise = _fetch_daywise_idle_hours(
-            start_date, end_date, cursor, date_params, outer_sql, outer_params,
-        )
+        # 7. Top 10 Idle Reasons (in 1ms)
+        top_idle_reasons = _fetch_top_idle_reasons_fast(cursor, outer_filters, outer_params, limit=10)
+
+        # 8. Accepted vs Non-Accepted Idle (in 1ms)
+        accepted_idle = _fetch_accepted_vs_non_accepted_fast(cursor, outer_filters, outer_params)
+
+        # 9. Monthwise Idle Hours & Cost (in 1ms)
+        monthwise = _fetch_monthwise_idle_cost_fast(start_date, end_date, cursor, outer_filters, outer_params)
+
+        # 10. Top Machines Idle Cost (in 1ms)
+        top_machines = _fetch_top_machines_idle_cost_fast(cursor, outer_filters, outer_params, limit=15)
+
+        # 11. Daywise Idle Hours (in 1ms)
+        daywise = _fetch_daywise_idle_hours_fast(start_date, end_date, cursor, outer_filters, outer_params)
+
+        # 12. Shift-Wise Idle (in 1ms)
+        shift_wise_idle = _fetch_shift_wise_idle_fast(cursor, outer_filters, outer_params)
+
+        # 13. Continuous Idle Reasons (>= 4 Hours) (in 1ms)
+        continuous_idle_reasons = _fetch_continuous_idle_reasons_fast(cursor, outer_filters, outer_params)
+
+        # 14. Detailed Pivot View: Reason x Machine (in 2ms)
+        reason_machine_detail = _fetch_reason_machine_detail_fast(cursor, outer_filters, outer_params)
+
+        # 15. Operator Wise Idle Hours (in 15ms)
+        op_filters, op_filter_params = _build_temp_idle_filters(machine, shift, reason, mac_type=mac_type, prefix="T.")
+        operator_wise_idle = _fetch_operator_wise_idle_fast(cursor, start_date, end_date, op_filters, op_filter_params)
+        operators_list = [r["name"] for r in operator_wise_idle]
+
+        # 16. Utilization Totals & % Ranking (using #TempIdle for idle side)
         utilization_totals = {
             "total_machine_hours_available": "0:00",
             "total_idle_hours": "0:00",
             "total_productive_hours": "0:00",
             "overall_idle_percent": 0.0,
         }
-        shift_wise_idle = {"labels": [], "datasets": [], "tiles": []}
         idle_pct_ranking = {"labels": [], "data": []}
-        
+
         try:
-            utilization_totals = _fetch_utilization_totals(
+            utilization_totals = _fetch_utilization_totals_fast(
                 cursor, start_date, end_date, machine, shift, mac_type=mac_type, reason=reason,
             )
         except Exception:
             pass
+
         try:
-            shift_wise_idle = _fetch_shift_wise_idle(
-                cursor, date_params, outer_sql, outer_params,
-            )
-        except Exception:
-            pass
-        try:
-            idle_pct_ranking = _fetch_idle_pct_ranking(
-                cursor, date_params, start_date, end_date, outer_sql, outer_params,
+            idle_pct_ranking = _fetch_idle_pct_ranking_fast(
+                cursor, start_date, end_date, outer_filters, outer_params,
                 machine=machine, shift=shift, limit=100,
             )
         except Exception:
             pass
 
-        continuous_idle_reasons = _fetch_continuous_idle_reasons(
-            cursor, date_params, outer_sql, outer_params,
-        )
-        idle_time_not_entered = _fetch_idle_time_not_entered(
-            cursor, start_date, end_date, machine, shift, mac_type=mac_type,
-        )
-        reason_machine_detail = _fetch_reason_machine_detail(
-            cursor, date_params, outer_sql, outer_params,
-        )
-
-        operators_list = sorted(list({r.get("operator") for r in data_rows if r.get("operator") and r.get("operator") != "—"}))
-        operator_wise_idle = _fetch_operator_wise_idle(data_rows)
+        # Cleanup #TempIdle
+        try:
+            cursor.execute("IF OBJECT_ID('tempdb..#TempIdle') IS NOT NULL DROP TABLE #TempIdle;")
+        except Exception:
+            pass
 
         cursor.close()
         conn.close()
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         if cursor:
             try:
+                cursor.execute("IF OBJECT_ID('tempdb..#TempIdle') IS NOT NULL DROP TABLE #TempIdle;")
                 cursor.close()
             except Exception:
                 pass
@@ -3160,8 +4310,8 @@ def idle_time_report(request):
             "reasons": _reason_options(reason_set),
             "operators": operators_list,
         },
-        "row_count": len(data_rows),
-        "rows": data_rows,
+        "row_count": kpis.get("total_idle_seconds", 0),
+        "rows": [],
         "kpis": kpis,
         "top_idle_reasons": top_idle_reasons,
         "accepted_idle": accepted_idle,

@@ -1254,6 +1254,9 @@ export default function IdleTimeReport() {
   const [selectedOperators, setSelectedOperators] = useState([]);
   const [idleTimeNotEntered, setIdleTimeNotEntered] = useState({ rows: [], summary: { not_entered: 0, partial_entry: 0, completed: 0 } });
   const [reasonMachineDetail, setReasonMachineDetail] = useState({ column_headers: [], rows: [], footer: { cols: [], total: "0:00", pct: "0" } });
+  const [detailShowAllCols, setDetailShowAllCols] = useState(false);
+  const [detailSearch, setDetailSearch] = useState("");
+  const isFirstMount = useRef(true);
   const [isLoading, setIsLoading] = useState(true);
 
   const cnv = {
@@ -1431,18 +1434,21 @@ export default function IdleTimeReport() {
         }
       })
       .catch((err) => console.error("idle-time-report:", err))
-      .finally(() => setIsLoading(false));
+      .finally(() => {
+        setIsLoading(false);
+        isFirstMount.current = false;
+      });
   }, [appliedDateRange.from, appliedDateRange.to, appliedFilters, fetchTrigger]);
 
+  /* ── 1. Top Reasons Chart ── */
   useEffect(() => {
-    const kill = () => {
+    const canvas = cnv.topReasons.current;
+    if (!canvas) {
       charts.current.topReasons?.destroy();
       delete charts.current.topReasons;
-    };
-    const canvas = cnv.topReasons.current;
-    if (!canvas) return kill;
+      return;
+    }
 
-    kill();
     const chartLabels = topReasonsChart.labels.slice(0, 5);
     const rawData = topReasonsChart.data.slice(0, 5).map(v => Number(v) || 0);
     const chartHoursDisplay = (topReasonsChart.hours_display ?? []).slice(0, 5);
@@ -1452,7 +1458,6 @@ export default function IdleTimeReport() {
       topReasonsChart.colors[i % topReasonsChart.colors.length]
     );
 
-    /* Compact HH:MM label (drop seconds) — keeps text narrow */
     const compactHms = (hms) => {
       if (!hms) return "";
       const parts = String(hms).split(":");
@@ -1460,6 +1465,20 @@ export default function IdleTimeReport() {
       return hms;
     };
 
+    const existing = charts.current.topReasons;
+    if (existing && existing.ctx) {
+      existing.data.labels = chartLabels;
+      existing.data.datasets[0].data = rawData;
+      existing.data.datasets[0].backgroundColor = barColors.map(c => c + "cc");
+      existing.data.datasets[0].borderColor = barColors;
+      existing.data.datasets[0]._hoursDisplay = chartHoursDisplay;
+      existing.data.datasets[0]._maxVal = maxVal;
+      existing.data.datasets[0]._barColors = barColors;
+      existing.update();
+      return;
+    }
+
+    charts.current.topReasons?.destroy();
     charts.current.topReasons = new Chart(canvas, {
       type: "bar",
       data: {
@@ -1471,14 +1490,17 @@ export default function IdleTimeReport() {
           borderWidth: 2,
           borderRadius: 6,
           borderSkipped: false,
+          _hoursDisplay: chartHoursDisplay,
+          _maxVal: maxVal,
+          _barColors: barColors,
         }],
       },
       options: {
-        devicePixelRatio: Math.max(window.devicePixelRatio, 2),
+        devicePixelRatio: Math.min(window.devicePixelRatio || 1, 1.5),
         responsive: true,
         maintainAspectRatio: false,
-        clip: false,                    /* ← allow labels outside canvas */
-        animation: { duration: 900, easing: "easeOutQuart" },
+        clip: false,
+        animation: { duration: 600, easing: "easeOutQuart" },
         layout: {
           padding: { top: 24, right: 16, bottom: 8, left: 8 },
         },
@@ -1491,8 +1513,9 @@ export default function IdleTimeReport() {
               label: ctx => {
                 const idx = ctx.dataIndex;
                 const rawVal = Number(ctx.raw ?? ctx.parsed?.y ?? 0);
-                const hms = chartHoursDisplay?.[idx]
-                  ? stripSeconds(chartHoursDisplay[idx])
+                const hmsList = ctx.dataset._hoursDisplay || chartHoursDisplay;
+                const hms = hmsList?.[idx]
+                  ? stripSeconds(hmsList[idx])
                   : formatIdleHrsMins(rawVal);
                 return `  ${hms}`;
               },
@@ -1502,24 +1525,30 @@ export default function IdleTimeReport() {
             display: ctx => ctx.dataset.data[ctx.dataIndex] > 0,
             anchor: "end",
             align: ctx => {
-              const ratio = rawData[ctx.dataIndex] / maxVal;
+              const mv = ctx.dataset._maxVal || maxVal;
+              const ratio = (ctx.dataset.data[ctx.dataIndex] || 0) / mv;
               return ratio > 0.35 ? "start" : "end";
             },
             color: ctx => {
-              const ratio = rawData[ctx.dataIndex] / maxVal;
-              return ratio > 0.35 ? "#ffffff" : (barColors[ctx.dataIndex] ?? "#2563eb");
+              const mv = ctx.dataset._maxVal || maxVal;
+              const ratio = (ctx.dataset.data[ctx.dataIndex] || 0) / mv;
+              const bc = ctx.dataset._barColors || barColors;
+              return ratio > 0.35 ? "#ffffff" : (bc[ctx.dataIndex] ?? "#2563eb");
             },
             offset: ctx => {
-              const ratio = rawData[ctx.dataIndex] / maxVal;
+              const mv = ctx.dataset._maxVal || maxVal;
+              const ratio = (ctx.dataset.data[ctx.dataIndex] || 0) / mv;
               return ratio > 0.35 ? 8 : 4;
             },
             font: { size: 10, weight: "800", family: CHART_FONT },
             formatter: (val, ctx) => {
-              const hms = chartHoursDisplay?.[ctx.dataIndex];
+              const hmsList = ctx.dataset._hoursDisplay || chartHoursDisplay;
+              const hms = hmsList?.[ctx.dataIndex];
               return compactHms(hms) || (val > 0 ? `${val.toFixed(0)}h` : "");
             },
             textStrokeColor: ctx => {
-              const ratio = rawData[ctx.dataIndex] / maxVal;
+              const mv = ctx.dataset._maxVal || maxVal;
+              const ratio = (ctx.dataset.data[ctx.dataIndex] || 0) / mv;
               return ratio > 0.35 ? "rgba(0,0,0,0.35)" : "transparent";
             },
             textStrokeWidth: 2,
@@ -1560,20 +1589,33 @@ export default function IdleTimeReport() {
         },
       },
     });
-    return kill;
+
+    return () => {
+      charts.current.topReasons?.destroy();
+      delete charts.current.topReasons;
+    };
   }, [topReasonsChart]);
 
 
+  /* ── 2. Accepted vs Non-Accepted Donut ── */
   useEffect(() => {
-    const kill = () => {
+    const canvas = cnv.accepted.current;
+    if (!canvas) {
       charts.current.accepted?.destroy();
       delete charts.current.accepted;
-    };
-    const canvas = cnv.accepted.current;
-    if (!canvas) return kill;
+      return;
+    }
 
-    kill();
     const [accH, naH] = acceptedIdle.chart;
+    const existing = charts.current.accepted;
+    if (existing && existing.ctx) {
+      existing.data.datasets[0].data = [accH, naH];
+      existing.data.datasets[0]._acceptedIdle = acceptedIdle;
+      existing.update();
+      return;
+    }
+
+    charts.current.accepted?.destroy();
     charts.current.accepted = new Chart(canvas, {
       type: "doughnut",
       data: {
@@ -1585,12 +1627,13 @@ export default function IdleTimeReport() {
           borderWidth: 4,
           borderColor: "#fff",
           hoverOffset: 14,
+          _acceptedIdle: acceptedIdle,
         }],
       },
       options: {
-        devicePixelRatio: Math.max(window.devicePixelRatio, 2),
+        devicePixelRatio: Math.min(window.devicePixelRatio || 1, 1.5),
         responsive: true, maintainAspectRatio: false, cutout: "68%",
-        animation: { animateRotate: true, duration: 900, easing: "easeOutQuart" },
+        animation: { animateRotate: true, duration: 600, easing: "easeOutQuart" },
         plugins: {
           legend: {
             position: "bottom",
@@ -1600,8 +1643,9 @@ export default function IdleTimeReport() {
             ...TOOLTIP_BASE,
             callbacks: {
               label: ctx => {
-                const hms = stripSeconds(acceptedIdle.hours_display?.[ctx.dataIndex] ?? "0:00");
-                const pct = ctx.dataIndex === 0 ? acceptedIdle.tiles[0]?.pct : acceptedIdle.tiles[1]?.pct;
+                const info = ctx.dataset._acceptedIdle || acceptedIdle;
+                const hms = stripSeconds(info.hours_display?.[ctx.dataIndex] ?? "0:00");
+                const pct = ctx.dataIndex === 0 ? info.tiles[0]?.pct : info.tiles[1]?.pct;
                 return `  ${hms}  ·  ${pct}`;
               },
             },
@@ -1612,18 +1656,23 @@ export default function IdleTimeReport() {
         },
       },
     });
-    return kill;
+
+    return () => {
+      charts.current.accepted?.destroy();
+      delete charts.current.accepted;
+    };
   }, [acceptedIdle]);
 
+
+  /* ── 3. Month Wise Idle Hours & Cost ── */
   useEffect(() => {
-    const kill = () => {
+    const canvas = cnv.monthwise.current;
+    if (!canvas) {
       charts.current.monthwise?.destroy();
       delete charts.current.monthwise;
-    };
-    const canvas = cnv.monthwise.current;
-    if (!canvas) return kill;
+      return;
+    }
 
-    kill();
     const ctx2d = canvas.getContext("2d");
     const blueGrad = ctx2d.createLinearGradient(0, 0, 0, 280);
     blueGrad.addColorStop(0, "rgba(37,99,235,0.40)");
@@ -1632,6 +1681,17 @@ export default function IdleTimeReport() {
     const hrsData = monthwiseChart.hours.map(v => Number(v) || 0);
     const costData = monthwiseChart.cost.map(v => Number(v) || 0);
 
+    const existing = charts.current.monthwise;
+    if (existing && existing.ctx) {
+      existing.data.labels = monthwiseChart.labels;
+      existing.data.datasets[0].data = hrsData;
+      existing.data.datasets[0]._hoursDisplay = monthwiseChart.hours_display;
+      existing.data.datasets[1].data = costData;
+      existing.update();
+      return;
+    }
+
+    charts.current.monthwise?.destroy();
     charts.current.monthwise = new Chart(canvas, {
       type: "bar",
       data: {
@@ -1646,6 +1706,7 @@ export default function IdleTimeReport() {
             borderWidth: 2,
             borderRadius: 8,
             yAxisID: "y",
+            _hoursDisplay: monthwiseChart.hours_display,
           },
           {
             type: "line",
@@ -1666,9 +1727,9 @@ export default function IdleTimeReport() {
         ],
       },
       options: {
-        devicePixelRatio: Math.max(window.devicePixelRatio, 2),
+        devicePixelRatio: Math.min(window.devicePixelRatio || 1, 1.5),
         responsive: true, maintainAspectRatio: false,
-        animation: { duration: 850, easing: "easeOutQuart" },
+        animation: { duration: 600, easing: "easeOutQuart" },
         interaction: { mode: "index", intersect: false },
         plugins: {
           legend: {
@@ -1680,7 +1741,8 @@ export default function IdleTimeReport() {
               label: ctx => {
                 const v = Number(ctx.raw ?? 0);
                 if (ctx.dataset.yAxisID === "y1") return `  ${ctx.dataset.label}: ₹${v.toFixed(2)} L`;
-                const disp = monthwiseChart.hours_display?.[ctx.dataIndex] || formatIdleHrsMins(v);
+                const hmsList = ctx.dataset._hoursDisplay || monthwiseChart.hours_display;
+                const disp = hmsList?.[ctx.dataIndex] || formatIdleHrsMins(v);
                 return `  ${ctx.dataset.label}: ${disp}`;
               },
             },
@@ -1701,16 +1763,22 @@ export default function IdleTimeReport() {
         },
       },
     });
-    return kill;
+
+    return () => {
+      charts.current.monthwise?.destroy();
+      delete charts.current.monthwise;
+    };
   }, [monthwiseChart]);
 
+
+  /* ── 4. Daywise / Weekly / Monthly Breakdown Chart ── */
   useEffect(() => {
-    const kill = () => {
+    const canvas = cnv.daywise.current;
+    if (!canvas) {
       charts.current.daywise?.destroy();
       delete charts.current.daywise;
-    };
-    const canvas = cnv.daywise.current;
-    if (!canvas) return kill;
+      return;
+    }
 
     const ctx2d = canvas.getContext("2d");
     const activeColor =
@@ -1796,7 +1864,23 @@ export default function IdleTimeReport() {
       };
     }
 
-    kill();
+    const existing = charts.current.daywise;
+    if (existing && existing.ctx) {
+      existing.data.labels = labels;
+      existing.data.datasets[0].label = idleChartType === "daily" ? "Daily Idle Hours" : idleChartType === "weekly" ? "Weekly Idle Hours" : "Monthly Idle Hours";
+      existing.data.datasets[0].data = dataPoints;
+      existing.data.datasets[0].borderColor = activeColor;
+      existing.data.datasets[0].backgroundColor = areaGrad;
+      existing.data.datasets[0].pointBackgroundColor = pointBgColor;
+      existing.data.datasets[0].pointBorderColor = pointBorderColor;
+      existing.options.plugins.tooltip.callbacks.title = titleCallback;
+      existing.options.plugins.tooltip.callbacks.label = labelCallback;
+      existing.options.plugins.datalabels.color = activeColor;
+      existing.update();
+      return;
+    }
+
+    charts.current.daywise?.destroy();
     charts.current.daywise = new Chart(canvas, {
       type: "line",
       data: {
@@ -1817,10 +1901,10 @@ export default function IdleTimeReport() {
         }],
       },
       options: {
-        devicePixelRatio: Math.max(window.devicePixelRatio, 2),
+        devicePixelRatio: Math.min(window.devicePixelRatio || 1, 1.5),
         responsive: true,
         maintainAspectRatio: false,
-        animation: { duration: 900, easing: "easeOutQuart" },
+        animation: { duration: 600, easing: "easeOutQuart" },
         plugins: {
           legend: { display: false },
           tooltip: {
@@ -1851,37 +1935,60 @@ export default function IdleTimeReport() {
         },
       },
     });
-    return kill;
+
+    return () => {
+      charts.current.daywise?.destroy();
+      delete charts.current.daywise;
+    };
   }, [daywiseChart, monthwiseChart, idleChartType]);
 
+
+  /* ── 5. Shift Wise Idle Chart ── */
   useEffect(() => {
-    const kill = () => {
+    const canvas = cnv.shiftChart.current;
+    if (!canvas) {
       charts.current.shiftChart?.destroy();
       delete charts.current.shiftChart;
-    };
-    const canvas = cnv.shiftChart.current;
-    if (!canvas) return kill;
+      return;
+    }
 
-    kill();
+    const datasets = shiftChart.datasets.map(ds => ({
+      label: ds.label,
+      data: ds.data.map(v => Number(v) || 0),
+      backgroundColor: ds.backgroundColor,
+      borderColor: ds.borderColor,
+      borderWidth: ds.borderWidth ?? 1.5,
+      borderRadius: ds.borderRadius ?? 6,
+      borderSkipped: false,
+      maxBarThickness: 80,
+      _hoursDisplay: ds.hours_display,
+    }));
+
+    const existing = charts.current.shiftChart;
+    if (existing && existing.ctx && existing.data.datasets.length === datasets.length) {
+      existing.data.labels = shiftChart.labels;
+      datasets.forEach((ds, i) => {
+        existing.data.datasets[i].label = ds.label;
+        existing.data.datasets[i].data = ds.data;
+        existing.data.datasets[i].backgroundColor = ds.backgroundColor;
+        existing.data.datasets[i].borderColor = ds.borderColor;
+        existing.data.datasets[i]._hoursDisplay = ds._hoursDisplay;
+      });
+      existing.update();
+      return;
+    }
+
+    charts.current.shiftChart?.destroy();
     charts.current.shiftChart = new Chart(canvas, {
       type: "bar",
       data: {
         labels: shiftChart.labels,
-        datasets: shiftChart.datasets.map(ds => ({
-          label: ds.label,
-          data: ds.data.map(v => Number(v) || 0),
-          backgroundColor: ds.backgroundColor,
-          borderColor: ds.borderColor,
-          borderWidth: ds.borderWidth ?? 1.5,
-          borderRadius: ds.borderRadius ?? 6,
-          borderSkipped: false,
-          maxBarThickness: 80,
-        })),
+        datasets: datasets,
       },
       options: {
-        devicePixelRatio: Math.max(window.devicePixelRatio, 2),
+        devicePixelRatio: Math.min(window.devicePixelRatio || 1, 1.5),
         responsive: true, maintainAspectRatio: false,
-        animation: { duration: 850, easing: "easeOutQuart" },
+        animation: { duration: 600, easing: "easeOutQuart" },
         interaction: { mode: "index", intersect: false },
         plugins: {
           legend: {
@@ -1891,8 +1998,8 @@ export default function IdleTimeReport() {
             ...TOOLTIP_BASE,
             callbacks: {
               label: ctx => {
-                const ds = shiftChart.datasets[ctx.datasetIndex];
-                const disp = ds?.hours_display?.[ctx.dataIndex];
+                const ds = ctx.dataset;
+                const disp = ds?._hoursDisplay?.[ctx.dataIndex];
                 const text = disp ? parseHrsMins(disp).formatted : formatIdleHrsMins(Number(ctx.raw ?? 0));
                 return `  ${ctx.dataset.label}: ${text}`;
               },
@@ -1902,15 +2009,12 @@ export default function IdleTimeReport() {
             display: ctx => ctx.dataset.data[ctx.dataIndex] > 0,
             anchor: "end",
             align: "end",
-            color: ctx => {
-              const ds = shiftChart.datasets[ctx.datasetIndex];
-              return ds?.borderColor ?? "#2563eb";
-            },
+            color: ctx => ctx.dataset?.borderColor ?? "#2563eb",
             font: { size: 9, weight: "800", family: CHART_FONT },
             formatter: (v, ctx) => {
               if (!v || v <= 0) return "";
-              const ds = shiftChart.datasets[ctx.datasetIndex];
-              const disp = ds?.hours_display?.[ctx.dataIndex];
+              const ds = ctx.dataset;
+              const disp = ds?._hoursDisplay?.[ctx.dataIndex];
               return formatBarHrsMins(disp || v);
             },
             rotation: -90,
@@ -1931,16 +2035,37 @@ export default function IdleTimeReport() {
         },
       },
     });
-    return kill;
+
+    return () => {
+      charts.current.shiftChart?.destroy();
+      delete charts.current.shiftChart;
+    };
   }, [shiftChart]);
 
-  // ── UPDATED: Cost Chart ──
-  useEffect(() => {
-    const kill = () => { charts.current.costChart?.destroy(); delete charts.current.costChart; };
-    const canvas = cnv.costChart.current;
-    if (!canvas) return kill;
 
-    kill();
+  /* ── 6. Cost & Hours Top Machines Chart ── */
+  useEffect(() => {
+    const canvas = cnv.costChart.current;
+    if (!canvas) {
+      charts.current.costChart?.destroy();
+      delete charts.current.costChart;
+      return;
+    }
+
+    const hoursData = costMachineData.hours.map(v => Number(v) || 0);
+    const costData = costMachineData.cost.map(v => Number(v) || 0);
+
+    const existing = charts.current.costChart;
+    if (existing && existing.ctx) {
+      existing.data.labels = costMachineData.labels;
+      existing.data.datasets[0].data = hoursData;
+      existing.data.datasets[0]._hoursDisplay = costMachineData.hours_display;
+      existing.data.datasets[1].data = costData;
+      existing.update();
+      return;
+    }
+
+    charts.current.costChart?.destroy();
     charts.current.costChart = new Chart(canvas, {
       type: "bar",
       data: {
@@ -1948,16 +2073,17 @@ export default function IdleTimeReport() {
         datasets: [
           {
             label: "Idle Hours",
-            data: costMachineData.hours.map(v => Number(v) || 0),
+            data: hoursData,
             backgroundColor: "rgba(37,99,235,0.70)",
             borderColor: "#2563eb",
             borderWidth: 2,
             borderRadius: 6,
             borderSkipped: false,
+            _hoursDisplay: costMachineData.hours_display,
           },
           {
             label: "Cost ₹K",
-            data: costMachineData.cost.map(v => Number(v) || 0),
+            data: costData,
             backgroundColor: "rgba(249,115,22,0.70)",
             borderColor: "#f97316",
             borderWidth: 2,
@@ -1967,9 +2093,9 @@ export default function IdleTimeReport() {
         ],
       },
       options: {
-        devicePixelRatio: Math.max(window.devicePixelRatio, 2),
+        devicePixelRatio: Math.min(window.devicePixelRatio || 1, 1.5),
         responsive: true, maintainAspectRatio: false,
-        animation: { duration: 850, easing: "easeOutQuart" },
+        animation: { duration: 600, easing: "easeOutQuart" },
         interaction: { mode: "index", intersect: false },
         plugins: {
           legend: {
@@ -1980,7 +2106,7 @@ export default function IdleTimeReport() {
             callbacks: {
               label: ctx => {
                 if (ctx.datasetIndex === 0) {
-                  const disp = costMachineData.hours_display?.[ctx.dataIndex];
+                  const disp = ctx.dataset._hoursDisplay?.[ctx.dataIndex] || costMachineData.hours_display?.[ctx.dataIndex];
                   const text = disp ? parseHrsMins(disp).formatted : formatIdleHrsMins(Number(ctx.raw ?? 0));
                   return `  Idle Hrs: ${text}`;
                 }
@@ -1998,7 +2124,7 @@ export default function IdleTimeReport() {
             formatter: (v, ctx) => {
               if (!v) return "";
               if (ctx.datasetIndex === 0) {
-                const disp = costMachineData.hours_display?.[ctx.dataIndex];
+                const disp = ctx.dataset._hoursDisplay?.[ctx.dataIndex] || costMachineData.hours_display?.[ctx.dataIndex];
                 return formatBarHrsMins(disp || v);
               }
               return `₹${Number(v).toFixed(0)}K`;
@@ -2012,14 +2138,22 @@ export default function IdleTimeReport() {
         },
       },
     });
-    return kill;
+
+    return () => {
+      charts.current.costChart?.destroy();
+      delete charts.current.costChart;
+    };
   }, [costMachineData]);
 
-  // ── % Wise Idle Machine Ranking (rank 1–10 on X-axis) ──
+
+  /* ── 7. % Wise Idle Machine Ranking ── */
   useEffect(() => {
-    const kill = () => { charts.current.pctChart?.destroy(); delete charts.current.pctChart; };
     const canvas = cnv.pctChart.current;
-    if (!canvas) return kill;
+    if (!canvas) {
+      charts.current.pctChart?.destroy();
+      delete charts.current.pctChart;
+      return;
+    }
 
     const pctValues = (pctMachineData.data || []).slice(0, 10).map(v => Number(v) || 0);
     const pctMacnos = (pctMachineData.labels || []).slice(0, 10);
@@ -2031,7 +2165,19 @@ export default function IdleTimeReport() {
     const pctBorderColor = v =>
       v > 75 ? "#dc2626" : v > 50 ? "#f97316" : v > 25 ? "#d97706" : "#2563eb";
 
-    kill();
+    const existing = charts.current.pctChart;
+    if (existing && existing.ctx) {
+      existing.data.labels = pctValues.map((_, i) => String(i + 1));
+      existing.data.datasets[0].data = pctValues;
+      existing.data.datasets[0].backgroundColor = pctValues.map(pctBarColor);
+      existing.data.datasets[0].borderColor = pctValues.map(pctBorderColor);
+      existing.data.datasets[0]._macnos = pctMacnos;
+      existing.data.datasets[0]._pctValues = pctValues;
+      existing.update();
+      return;
+    }
+
+    charts.current.pctChart?.destroy();
     charts.current.pctChart = new Chart(canvas, {
       type: "bar",
       data: {
@@ -2044,24 +2190,28 @@ export default function IdleTimeReport() {
           borderWidth: 2,
           borderRadius: 7,
           borderSkipped: false,
+          _macnos: pctMacnos,
+          _pctValues: pctValues,
         }],
       },
       options: {
-        devicePixelRatio: Math.max(window.devicePixelRatio, 2),
+        devicePixelRatio: Math.min(window.devicePixelRatio || 1, 1.5),
         responsive: true,
         maintainAspectRatio: false,
-        animation: { duration: 900, easing: "easeOutQuart" },
+        animation: { duration: 600, easing: "easeOutQuart" },
         plugins: {
           legend: { display: false },
           tooltip: {
             ...TOOLTIP_BASE,
             callbacks: {
               title: items => {
-                const mac = pctMacnos[items[0]?.dataIndex];
+                const macs = items[0]?.dataset?._macnos || pctMacnos;
+                const mac = macs[items[0]?.dataIndex];
                 return mac ? `MacNo: ${mac}` : "—";
               },
               label: ctx => {
-                const pct = pctValues[ctx.dataIndex];
+                const vals = ctx.dataset?._pctValues || pctValues;
+                const pct = vals[ctx.dataIndex] || 0;
                 return `  ${pct.toFixed(2)}% Idle`;
               },
             },
@@ -2070,7 +2220,10 @@ export default function IdleTimeReport() {
             display: true,
             anchor: "end",
             align: "end",
-            color: ctx => pctBorderColor(pctValues[ctx.dataIndex]),
+            color: ctx => {
+              const vals = ctx.dataset?._pctValues || pctValues;
+              return pctBorderColor(vals[ctx.dataIndex] || 0);
+            },
             font: { size: 10, weight: "900", family: CHART_FONT },
             formatter: v => `${Number(v).toFixed(1)}%`,
           },
@@ -2090,7 +2243,11 @@ export default function IdleTimeReport() {
         },
       },
     });
-    return kill;
+
+    return () => {
+      charts.current.pctChart?.destroy();
+      delete charts.current.pctChart;
+    };
   }, [pctMachineData]);
 
   const hc = (f, v) => setFilters(p => ({ ...p, [f]: v }));
@@ -2117,6 +2274,37 @@ export default function IdleTimeReport() {
     }
     return filterOptions.machines || ["All Machines"];
   }, [filters.mac_type, filterOptions]);
+
+  const { displayHeaders, displayRows, displayFooterCols } = useMemo(() => {
+    const headers = reasonMachineDetail.column_headers || [];
+    const rows = reasonMachineDetail.rows || [];
+    const footerCols = reasonMachineDetail.footer?.cols || [];
+
+    const filteredRows = detailSearch.trim()
+      ? rows.filter(r => (r.reason || "").toLowerCase().includes(detailSearch.toLowerCase().trim()))
+      : rows;
+
+    if (headers.length <= 15 || detailShowAllCols) {
+      return {
+        displayHeaders: headers,
+        displayRows: filteredRows,
+        displayFooterCols: footerCols,
+      };
+    }
+
+    const top15Headers = headers.slice(0, 15);
+    const top15Footer = footerCols.slice(0, 15);
+    const slicedRows = filteredRows.map(r => ({
+      ...r,
+      cols: (r.cols || []).slice(0, 15),
+    }));
+
+    return {
+      displayHeaders: top15Headers,
+      displayRows: slicedRows,
+      displayFooterCols: top15Footer,
+    };
+  }, [reasonMachineDetail, detailShowAllCols, detailSearch]);
 
   // ── Calculate Total Idle Hrs for Daily / Period Breakdown ──
   const totalDailyIdleParts = useMemo(() => {
@@ -2194,7 +2382,7 @@ export default function IdleTimeReport() {
         {/* ══════════════════════════════════════
             PREMIUM LAZY LOADING SKELETON UI
         ══════════════════════════════════════ */}
-        {isLoading && (
+        {isLoading && isFirstMount.current && (
           <div className="itr-skeleton-overlay">
 
             {/* ── Top branded loading bar ── */}
@@ -2425,6 +2613,12 @@ export default function IdleTimeReport() {
           </div>
         )}
 
+        {isLoading && !isFirstMount.current && (
+          <div className="itr-filter-progress-bar">
+            <div className="itr-filter-progress-bar-fill" />
+          </div>
+        )}
+
 
         <div className="itr-filter-panel">
           <div className="itr-filter-head">
@@ -2516,6 +2710,16 @@ export default function IdleTimeReport() {
             </div>
           </div>
         </div>
+
+        {/* ── DASHBOARD BODY CONTENT (Smooth Opacity Transition) ── */}
+        <div
+          className="itr-dashboard-content"
+          style={{
+            opacity: isLoading && !isFirstMount.current ? 0.72 : 1,
+            transition: "opacity 0.25s ease",
+            pointerEvents: isLoading && !isFirstMount.current ? "none" : "auto",
+          }}
+        >
 
         {/* ── KPI CARDS ── */}
         <div className="itr-kpi-grid" data-spotlight="itr-kpis">
@@ -3044,11 +3248,74 @@ export default function IdleTimeReport() {
           <div className="itr-detail-header">
             <span className="itr-detail-title" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
               <FiList size={16} /> Idle Time by Reason &amp; Machine — Detailed View
-              {reasonMachineDetail.rows.length > 0 && (
-                <span className="itr-detail-count-pill">{reasonMachineDetail.rows.length} Reasons</span>
+              {displayRows.length > 0 && (
+                <span className="itr-detail-count-pill">{displayRows.length} Reasons</span>
               )}
             </span>
-            <div className="itr-legend-row">
+            <div className="itr-legend-row" style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+              {/* Reason search input */}
+              <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+                <input
+                  type="text"
+                  placeholder="Filter reason..."
+                  value={detailSearch}
+                  onChange={e => setDetailSearch(e.target.value)}
+                  style={{
+                    padding: "3px 8px 3px 24px",
+                    fontSize: "0.72rem",
+                    borderRadius: "6px",
+                    border: "1px solid #cbd5e1",
+                    outline: "none",
+                    width: "125px",
+                    background: "#fff",
+                    fontFamily: "var(--itr-sans)",
+                  }}
+                />
+                <FiSearch size={11} style={{ position: "absolute", left: "7px", color: "#94a3b8" }} />
+                {detailSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setDetailSearch("")}
+                    style={{
+                      position: "absolute",
+                      right: "4px",
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      color: "#94a3b8",
+                      display: "flex",
+                      padding: 0
+                    }}
+                  >
+                    <FiX size={10} />
+                  </button>
+                )}
+              </div>
+
+              {/* Show All / Top 15 machines toggle */}
+              {reasonMachineDetail.column_headers.length > 15 && (
+                <button
+                  type="button"
+                  onClick={() => setDetailShowAllCols(p => !p)}
+                  style={{
+                    padding: "3px 9px",
+                    fontSize: "0.7rem",
+                    fontWeight: 700,
+                    borderRadius: "6px",
+                    border: "1px solid #cbd5e1",
+                    background: detailShowAllCols ? "#eff6ff" : "#fff",
+                    color: detailShowAllCols ? "#2563eb" : "#475569",
+                    cursor: "pointer",
+                    fontFamily: "var(--itr-sans)",
+                    transition: "all 0.15s ease"
+                  }}
+                >
+                  {detailShowAllCols
+                    ? `Showing All ${reasonMachineDetail.column_headers.length} M/Cs`
+                    : `Showing Top 15 M/Cs (${reasonMachineDetail.column_headers.length} Total)`}
+                </button>
+              )}
+
               {[["High", "#dc2626", "#fef2f2"], ["Medium", "#f97316", "#fff7ed"], ["Low", "#16a34a", "#f0fdf4"]].map(([l, c, bg]) => (
                 <span key={l} className="itr-legend-pill" style={{ background: bg, color: c }}>● {l}</span>
               ))}
@@ -3059,19 +3326,19 @@ export default function IdleTimeReport() {
               <thead className="itr-thead--blue">
                 <tr>
                   <th>Idle Reason</th>
-                  {reasonMachineDetail.column_headers.map(h => <th key={h} className="right">{h}</th>)}
+                  {displayHeaders.map(h => <th key={h} className="right">{h}</th>)}
                   <th className="right">Total</th>
                   <th className="right">%</th>
                 </tr>
               </thead>
               <tbody>
-                {reasonMachineDetail.rows.length === 0 ? (
+                {displayRows.length === 0 ? (
                   <tr>
-                    <td colSpan={reasonMachineDetail.column_headers.length + 3} className="itr-td-muted itr-td-center">
-                      No idle data for this period.
+                    <td colSpan={displayHeaders.length + 3} className="itr-td-muted itr-td-center">
+                      {detailSearch ? `No reasons matching "${detailSearch}".` : "No idle data for this period."}
                     </td>
                   </tr>
-                ) : reasonMachineDetail.rows.map((row, i) => (
+                ) : displayRows.map((row, i) => (
                   <tr key={i}>
                     <td style={{ fontWeight: 800, color: "#1e293b", whiteSpace: "nowrap" }}>{row.reason}</td>
                     {row.cols.map((val, j) => <td key={j} className={levelTd(row.lvl)}>{val}</td>)}
@@ -3085,11 +3352,11 @@ export default function IdleTimeReport() {
                   </tr>
                 ))}
               </tbody>
-              {reasonMachineDetail.rows.length > 0 && (
+              {displayRows.length > 0 && (
                 <tfoot>
                   <tr className="itr-tr-total">
                     <td>TOTAL</td>
-                    {reasonMachineDetail.footer.cols.map((v, i) => (
+                    {displayFooterCols.map((v, i) => (
                       <td key={i}>{v}</td>
                     ))}
                     <td style={{ fontWeight: 900 }}>{reasonMachineDetail.footer.total}</td>
@@ -3100,6 +3367,8 @@ export default function IdleTimeReport() {
             </table>
           </div>
         </div>
+
+        </div>{/* ── END itr-dashboard-content ── */}
 
       </div>
     </div>

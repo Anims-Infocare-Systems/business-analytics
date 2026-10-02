@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo, memo } from "react";
 import { resolveApiBase } from "../../apiBase";
 import "./Dashboard1.css";
 
@@ -566,7 +566,7 @@ function YearMonthPicker({ value, onChange, disabled }) {
 // ════════════════════════════════════════════
 //  KPI Card (UNCHANGED)
 // ════════════════════════════════════════════
-function KpiCard({ kgrad, kbg, kclr, animDelay, icon, delta, deltaType, label, value, carouselValues, splitValues, footer, sparkData, sparkColor, collapsed }) {
+const KpiCard = memo(function KpiCard({ kgrad, kbg, kclr, animDelay, icon, delta, deltaType, label, value, carouselValues, splitValues, footer, sparkData, sparkColor, collapsed }) {
     const canvasRef = useRef(null);
     const [activeIdx, setActiveIdx] = useState(0);
 
@@ -677,16 +677,19 @@ function KpiCard({ kgrad, kbg, kclr, animDelay, icon, delta, deltaType, label, v
             </div>
         </div>
     );
-}
+});
 
 // ════════════════════════════════════════════
 //  Chart Card — with hover tooltip
 // ════════════════════════════════════════════
-function ChartCard({ title, legend, drawFn, deps, collapsed, canvasHeight = 118, footer, formatValue, spotlightId }) {
+const ChartCard = memo(function ChartCard({ title, legend, drawFn, deps, collapsed, canvasHeight = 118, footer, formatValue, spotlightId }) {
     const canvasRef = useRef(null);
     const wrapRef = useRef(null);
     const hitRef = useRef([]);           // stores hit-test rectangles / points
-    const [tooltip, setTooltip] = useState(null); // { x, y, items: [{label,seriesLabel,value,color}] }
+    const tipRef = useRef(null);
+    const posRef = useRef({ x: 0, y: 0 });
+    const activeLabelRef = useRef(null);
+    const [tooltip, setTooltip] = useState(null); // { label, items: [{seriesLabel,value,color}] }
 
     useEffect(() => {
         if (collapsed || !canvasRef.current) return;
@@ -715,6 +718,15 @@ function ChartCard({ title, legend, drawFn, deps, collapsed, canvasHeight = 118,
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [...deps, collapsed]);
 
+    const updateTipPosition = (x, y) => {
+        posRef.current = { x, y };
+        if (tipRef.current) {
+            tipRef.current.style.left = `${x}px`;
+            tipRef.current.style.top = `${y}px`;
+            tipRef.current.style.transform = x > 140 ? "translate(-100%, -110%)" : "translate(8px, -110%)";
+        }
+    };
+
     const handleMouseMove = (e) => {
         const canvas = canvasRef.current;
         const wrap = wrapRef.current;
@@ -742,6 +754,10 @@ function ChartCard({ title, legend, drawFn, deps, collapsed, canvasHeight = 118,
             }
         });
 
+        const wrapRect = wrap.getBoundingClientRect();
+        const tipX = e.clientX - wrapRect.left;
+        const tipY = e.clientY - wrapRect.top;
+
         if (!bestHit) {
             // For bar charts: find which group column the mouse is in and show all series
             if (hits.length > 0 && hits[0].type === "bar") {
@@ -756,48 +772,37 @@ function ChartCard({ title, legend, drawFn, deps, collapsed, canvasHeight = 118,
                     const xs = group.map(g => g.x1);
                     const xe = group.map(g => g.x2);
                     if (mx >= Math.min(...xs) - 2 && mx <= Math.max(...xe) + 2) {
-                        const wrapRect = wrap.getBoundingClientRect();
-                        const tipX = e.clientX - wrapRect.left;
-                        const tipY = e.clientY - wrapRect.top;
-                        setTooltip({
-                            x: tipX, y: tipY,
-                            label: group[0].label,
-                            items: group.map(g => ({
-                                seriesLabel: g.seriesLabel,
-                                color: g.color,
-                                value: g.value,
-                            }))
-                        });
+                        const targetLabel = group[0].label;
+                        updateTipPosition(tipX, tipY);
+                        if (activeLabelRef.current !== targetLabel) {
+                            activeLabelRef.current = targetLabel;
+                            setTooltip({
+                                label: targetLabel,
+                                items: group.map(g => ({
+                                    seriesLabel: g.seriesLabel,
+                                    color: g.color,
+                                    value: g.value,
+                                }))
+                            });
+                        }
                         return;
                     }
                 }
             }
-            setTooltip(null);
+            if (activeLabelRef.current !== null) {
+                activeLabelRef.current = null;
+                setTooltip(null);
+            }
             return;
         }
 
-        const wrapRect = wrap.getBoundingClientRect();
-        const tipX = e.clientX - wrapRect.left;
-        const tipY = e.clientY - wrapRect.top;
-
-        if (bestHit.type === "bar") {
-            // Group all same-label bars for combined tooltip
-            const group = hits.filter(h => h.label === bestHit.label);
+        updateTipPosition(tipX, tipY);
+        const targetLabel = bestHit.label;
+        if (activeLabelRef.current !== targetLabel) {
+            activeLabelRef.current = targetLabel;
+            const group = hits.filter(h => h.label === targetLabel);
             setTooltip({
-                x: tipX, y: tipY,
-                label: bestHit.label,
-                items: group.map(g => ({
-                    seriesLabel: g.seriesLabel,
-                    color: g.color,
-                    value: g.value,
-                }))
-            });
-        } else {
-            // Line chart: group same-label points from all series
-            const group = hits.filter(h => h.label === bestHit.label);
-            setTooltip({
-                x: tipX, y: tipY,
-                label: bestHit.label,
+                label: targetLabel,
                 items: group.map(g => ({
                     seriesLabel: g.seriesLabel,
                     color: g.color,
@@ -807,7 +812,10 @@ function ChartCard({ title, legend, drawFn, deps, collapsed, canvasHeight = 118,
         }
     };
 
-    const handleMouseLeave = () => setTooltip(null);
+    const handleMouseLeave = () => {
+        activeLabelRef.current = null;
+        setTooltip(null);
+    };
 
     const fmtVal = formatValue || ((v) => {
         const n = Number(v);
@@ -840,11 +848,13 @@ function ChartCard({ title, legend, drawFn, deps, collapsed, canvasHeight = 118,
             {/* Hover Tooltip */}
             {tooltip && (
                 <div
+                    ref={tipRef}
                     className="d1-chart-tooltip"
                     style={{
-                        left: tooltip.x,
-                        top: tooltip.y,
-                        transform: tooltip.x > 140 ? "translate(-100%, -110%)" : "translate(8px, -110%)",
+                        left: posRef.current.x,
+                        top: posRef.current.y,
+                        transform: posRef.current.x > 140 ? "translate(-100%, -110%)" : "translate(8px, -110%)",
+                        pointerEvents: "none",
                     }}
                 >
                     {tooltip.label && (
@@ -863,12 +873,12 @@ function ChartCard({ title, legend, drawFn, deps, collapsed, canvasHeight = 118,
             )}
         </div>
     );
-}
+});
 
 // ════════════════════════════════════════════
 //  Analysis Table (UNCHANGED)
 // ════════════════════════════════════════════
-function AnalysisTable({ title, sub, badgeLabel, badgeBg, badgeColor, headers, rows, collapsed }) {
+const AnalysisTable = memo(function AnalysisTable({ title, sub, badgeLabel, badgeBg, badgeColor, headers, rows, collapsed }) {
     return (
         <div className={`d1-tc${collapsed ? " d1-tc--collapsed" : ""}`} data-spotlight="tmd-table-dept">
             <div className="d1-tc__hd">
@@ -896,12 +906,12 @@ function AnalysisTable({ title, sub, badgeLabel, badgeBg, badgeColor, headers, r
             </div>
         </div>
     );
-}
+});
 
 // ════════════════════════════════════════════
 //  Section Header (UNCHANGED)
 // ════════════════════════════════════════════
-function SectionHeader({ title, collapsed, onToggle, accent }) {
+const SectionHeader = memo(function SectionHeader({ title, collapsed, onToggle, accent }) {
     return (
         <div className="d1-sec-hd" style={{ "--d1-sec-accent": accent }}>
             <span className="d1-sec-hd__title">{title}</span>
@@ -917,7 +927,7 @@ function SectionHeader({ title, collapsed, onToggle, accent }) {
             </button>
         </div>
     );
-}
+});
 
 // ════════════════════════════════════════════
 //  Refresh Icon (UNCHANGED)
@@ -933,69 +943,172 @@ function RefreshIcon({ spinning }) {
 }
 
 // ════════════════════════════════════════════
-//  Skeleton Cards for Lazy Loading UI
+//  Modern UI Skeleton Cards (Simple & Neat)
 // ════════════════════════════════════════════
-function KpiCardSkeleton() {
-    return (
-        <div className="d1-kc d1-kc--loading" style={{ height: "var(--d1-kpi-h)", display: "flex", flexDirection: "column" }}>
-            <div className="d1-kc__top" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div className="d1-skeleton-pulse" style={{ width: 40, height: 40, borderRadius: "10px" }} />
-                <div className="d1-skeleton-pulse" style={{ width: 60, height: 18, borderRadius: "100px" }} />
-            </div>
-            <div className="d1-kc__body" style={{ marginTop: "16px", display: "flex", flexDirection: "column", flex: 1 }}>
-                <div className="d1-skeleton-pulse" style={{ width: "40%", height: 10, marginBottom: "8px", borderRadius: "4px" }} />
-                <div className="d1-skeleton-pulse" style={{ width: "75%", height: 26, marginBottom: "8px", borderRadius: "4px" }} />
-                <div className="d1-skeleton-pulse" style={{ width: "50%", height: 11, marginTop: "auto", borderRadius: "4px" }} />
-            </div>
-        </div>
-    );
-}
+const KPI_SKELETON_THEMES = [
+    { kgrad: "linear-gradient(90deg, #1a56db, #38bdf8)", iconBg: "#eff4ff", sparkColor: "#1a56db" },
+    { kgrad: "linear-gradient(90deg, #f59e0b, #fbbf24)", iconBg: "#fffbeb", sparkColor: "#f59e0b" },
+    { kgrad: "linear-gradient(90deg, #10b981, #34d399)", iconBg: "#ecfdf5", sparkColor: "#10b981" },
+    { kgrad: "linear-gradient(90deg, #8b5cf6, #c4b5fd)", iconBg: "#f5f3ff", sparkColor: "#8b5cf6" },
+];
 
-function ChartCardSkeleton() {
+function KpiCardSkeleton({ index = 0, collapsed = false }) {
+    const theme = KPI_SKELETON_THEMES[index % KPI_SKELETON_THEMES.length];
     return (
-        <div className="d1-cc d1-cc--loading" style={{ height: "var(--d1-chart-h)", display: "flex", flexDirection: "column" }}>
-            <div className="d1-cc__hd" style={{ marginBottom: "12px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div className="d1-skeleton-pulse" style={{ width: "55%", height: 14, borderRadius: "4px" }} />
-                <div style={{ display: "flex", gap: "8px" }}>
-                    <div className="d1-skeleton-pulse" style={{ width: 32, height: 8, borderRadius: "2px" }} />
-                    <div className="d1-skeleton-pulse" style={{ width: 32, height: 8, borderRadius: "2px" }} />
-                </div>
+        <div className={`d1-kc d1-kc--skeleton${collapsed ? " d1-kc--collapsed" : ""}`} style={{ "--d1-kgrad": theme.kgrad }}>
+            <div className="d1-kc__top">
+                <div className="d1-skel-icon" style={{ background: theme.iconBg }} />
+                <div className="d1-skel-pill" style={{ width: 56, height: 20 }} />
             </div>
-            <div className="d1-cc__body" style={{ display: "flex", alignItems: "flex-end", gap: "10%", height: "90px", padding: "0 10px 10px", flex: 1 }}>
-                <div className="d1-skeleton-pulse" style={{ width: "16%", height: "35%", borderRadius: "4px 4px 0 0" }} />
-                <div className="d1-skeleton-pulse" style={{ width: "16%", height: "60%", borderRadius: "4px 4px 0 0" }} />
-                <div className="d1-skeleton-pulse" style={{ width: "16%", height: "75%", borderRadius: "4px 4px 0 0" }} />
-                <div className="d1-skeleton-pulse" style={{ width: "16%", height: "50%", borderRadius: "4px 4px 0 0" }} />
-                <div className="d1-skeleton-pulse" style={{ width: "16%", height: "85%", borderRadius: "4px 4px 0 0" }} />
-            </div>
-            <div style={{ display: "flex", justifyContent: "center", gap: "24px", marginTop: "6px", borderTop: "1px solid #f1f5f9", paddingTop: "8px" }}>
-                <div className="d1-skeleton-pulse" style={{ width: 70, height: 10, borderRadius: "4px" }} />
-                <div className="d1-skeleton-pulse" style={{ width: 70, height: 10, borderRadius: "4px" }} />
-            </div>
-        </div>
-    );
-}
-
-function AnalysisTableSkeleton() {
-    return (
-        <div className="d1-tc d1-tc--loading" style={{ height: "var(--d1-table-h)", display: "flex", flexDirection: "column" }}>
-            <div className="d1-tc__hd" style={{ padding: "11px 14px", borderBottom: "1px solid var(--d1-border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div style={{ flex: 1 }}>
-                    <div className="d1-skeleton-pulse" style={{ width: "50%", height: 13, marginBottom: "6px", borderRadius: "4px" }} />
-                    <div className="d1-skeleton-pulse" style={{ width: "30%", height: 9, borderRadius: "4px" }} />
-                </div>
-                <div className="d1-skeleton-pulse" style={{ width: 48, height: 16, borderRadius: "100px" }} />
-            </div>
-            <div className="d1-tc__body" style={{ padding: "12px 14px", flex: 1, display: "flex", flexDirection: "column", gap: "12px" }}>
-                {[1, 2, 3, 4, 5].map((i) => (
-                    <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingBottom: "8px", borderBottom: i < 5 ? "1px solid #f1f5f9" : "none" }}>
-                        <div className="d1-skeleton-pulse" style={{ width: "30%", height: 11, borderRadius: "4px" }} />
-                        <div className="d1-skeleton-pulse" style={{ width: "18%", height: 11, borderRadius: "4px" }} />
-                        <div className="d1-skeleton-pulse" style={{ width: "18%", height: 11, borderRadius: "4px" }} />
-                        <div className="d1-skeleton-pulse" style={{ width: "18%", height: 11, borderRadius: "4px" }} />
+            {!collapsed && (
+                <div className="d1-kc__body" style={{ marginTop: 10, justifyContent: "space-between" }}>
+                    <div>
+                        <div className="d1-skel-line" style={{ width: "36%", height: 10, marginBottom: 8 }} />
+                        <div className="d1-skel-line" style={{ width: "72%", height: 26, borderRadius: 6, marginBottom: 6 }} />
+                        <div className="d1-skel-line" style={{ width: "48%", height: 10 }} />
                     </div>
-                ))}
+                    <div className="d1-skel-spark">
+                        <svg width="100%" height="28" viewBox="0 0 200 28" fill="none" preserveAspectRatio="none">
+                            <path
+                                d="M0 20 Q 30 6, 60 16 T 120 10 T 170 18 T 200 8 L 200 28 L 0 28 Z"
+                                fill={theme.sparkColor}
+                                opacity="0.08"
+                            />
+                            <path
+                                d="M0 20 Q 30 6, 60 16 T 120 10 T 170 18 T 200 8"
+                                stroke={theme.sparkColor}
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                opacity="0.22"
+                            />
+                        </svg>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+function ChartCardSkeleton({ index = 0, collapsed = false }) {
+    const isLineChart = index >= 2;
+    return (
+        <div className={`d1-cc d1-cc--skeleton${collapsed ? " d1-cc--collapsed" : ""}`}>
+            <div className="d1-cc__hd">
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div className="d1-skel-line" style={{ width: "42%", height: 13 }} />
+                    <div style={{ display: "flex", gap: 10 }}>
+                        <div className="d1-skel-line" style={{ width: 34, height: 9, borderRadius: 3 }} />
+                        <div className="d1-skel-line" style={{ width: 34, height: 9, borderRadius: 3 }} />
+                    </div>
+                </div>
             </div>
+            {!collapsed && (
+                <>
+                    <div className="d1-cc__body d1-skel-chart-body" style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
+                        {!isLineChart ? (
+                            <div className="d1-skel-bars">
+                                {[
+                                    { h1: "42%", h2: "58%" },
+                                    { h1: "65%", h2: "48%" },
+                                    { h1: "80%", h2: "72%" },
+                                    { h1: "50%", h2: "62%" },
+                                    { h1: "35%", h2: "45%" },
+                                ].map((b, i) => (
+                                    <div key={i} className="d1-skel-bar-group">
+                                        <div className="d1-skel-bar" style={{ height: b.h1, background: "rgba(26, 86, 219, 0.15)" }} />
+                                        <div className="d1-skel-bar" style={{ height: b.h2, background: "rgba(245, 158, 11, 0.18)" }} />
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="d1-skel-linechart">
+                                <div className="d1-skel-grid-line" style={{ top: "25%" }} />
+                                <div className="d1-skel-grid-line" style={{ top: "50%" }} />
+                                <div className="d1-skel-grid-line" style={{ top: "75%" }} />
+                                <svg width="100%" height="60" viewBox="0 0 200 60" fill="none" preserveAspectRatio="none">
+                                    <path
+                                        d={index === 2
+                                            ? "M0 38 Q 40 18, 80 25 T 140 12 T 200 20"
+                                            : "M0 45 Q 40 32, 80 40 T 140 22 T 200 15"}
+                                        stroke={index === 2 ? "rgba(16, 185, 129, 0.3)" : "rgba(239, 68, 68, 0.3)"}
+                                        strokeWidth="2.5"
+                                        strokeLinecap="round"
+                                    />
+                                </svg>
+                                <div className="d1-skel-points">
+                                    {[1, 2, 3, 4, 5].map((p) => (
+                                        <div key={p} className="d1-skel-point" />
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                    <div className="d1-cc__foot d1-skel-foot" style={{ marginTop: 6, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <div className="d1-skel-line" style={{ width: "38%", height: 10 }} />
+                        <div className="d1-skel-line" style={{ width: "38%", height: 10 }} />
+                    </div>
+                </>
+            )}
+        </div>
+    );
+}
+
+const TABLE_SKELETON_CONFIGS = [
+    { titleWidth: "35%", badgeColor: "#eff4ff", cols: 5 },
+    { titleWidth: "38%", badgeColor: "#fffbeb", cols: 3 },
+    { titleWidth: "42%", badgeColor: "#ecfdf5", cols: 2 },
+    { titleWidth: "48%", badgeColor: "#f5f3ff", cols: 3 },
+];
+
+function AnalysisTableSkeleton({ index = 0, collapsed = false }) {
+    const config = TABLE_SKELETON_CONFIGS[index % TABLE_SKELETON_CONFIGS.length];
+    return (
+        <div className={`d1-tc d1-tc--skeleton${collapsed ? " d1-tc--collapsed" : ""}`}>
+            <div className="d1-tc__hd">
+                <div style={{ flex: 1 }}>
+                    <div className="d1-skel-line" style={{ width: config.titleWidth, height: 13, marginBottom: 5 }} />
+                    <div className="d1-skel-line" style={{ width: "22%", height: 9 }} />
+                </div>
+                <div className="d1-skel-pill" style={{ width: 44, height: 18, background: config.badgeColor }} />
+            </div>
+            {!collapsed && (
+                <div className="d1-tc__body" style={{ padding: "8px 12px" }}>
+                    <div className="d1-skel-tbl-header" style={{ display: "flex", justifyContent: "space-between", padding: "6px 4px 8px", borderBottom: "1px solid #f1f5f9" }}>
+                        <div className="d1-skel-line" style={{ width: "24%", height: 9 }} />
+                        {Array.from({ length: config.cols - 1 }).map((_, c) => (
+                            <div key={c} className="d1-skel-line" style={{ width: `${Math.floor(60 / (config.cols - 1))}%`, height: 9 }} />
+                        ))}
+                    </div>
+                    {[
+                        { labelW: "22%", isHighlight: false },
+                        { labelW: "18%", isHighlight: false },
+                        { labelW: "25%", isHighlight: true, bg: "rgba(239, 246, 255, 0.6)" },
+                        { labelW: "32%", isHighlight: false },
+                        { labelW: "20%", isHighlight: true, bg: "rgba(240, 253, 244, 0.6)" },
+                        { labelW: "16%", isHighlight: true, bg: "rgba(245, 243, 255, 0.6)" },
+                    ].map((row, r) => (
+                        <div
+                            key={r}
+                            className="d1-skel-tbl-row"
+                            style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center",
+                                padding: "6px 4px",
+                                borderBottom: r < 5 ? "1px solid #f8fafc" : "none",
+                                background: row.bg || "transparent",
+                                borderRadius: row.isHighlight ? 4 : 0,
+                                margin: row.isHighlight ? "1px 0" : 0,
+                            }}
+                        >
+                            <div className="d1-skel-line" style={{ width: row.labelW, height: 10 }} />
+                            {Array.from({ length: config.cols - 1 }).map((_, c) => (
+                                <div key={c} className="d1-skel-line" style={{ width: `${Math.floor(55 / (config.cols - 1))}%`, height: 10 }} />
+                            ))}
+                        </div>
+                    ))}
+                </div>
+            )}
         </div>
     );
 }
@@ -1033,70 +1146,155 @@ export default function Dashboard1() {
     const [chartsCollapsed, setChartsCollapsed] = useState(false);
     const [tablesCollapsed, setTablesCollapsed] = useState(false);
 
-    const fetchDashboardData = useCallback(async () => {
+    const clientCache = useRef(new Map());
+    const abortCtrlRef = useRef(null);
+
+    const fetchLegacyDashboardData = useCallback(async (periodQuery, cacheKey, signal) => {
+        const [salesResponse, purchaseResponse, productionResponse, qualityValueResponse, salesProjectionsResponse, purchaseProjectionsResponse, oaEfficiencyWeeklyResponse, qualityRejectionsWeeklyResponse] = await Promise.all([
+            fetch(`${API_BASE}/dashboard1/sales-kpi/?${periodQuery}`, { credentials: "include", signal }),
+            fetch(`${API_BASE}/dashboard1/purchase-kpi/?${periodQuery}`, { credentials: "include", signal }),
+            fetch(`${API_BASE}/dashboard1/production-kpi/?${periodQuery}`, { credentials: "include", signal }),
+            fetch(`${API_BASE}/dashboard1/quality-value-kpi/?${periodQuery}`, { credentials: "include", signal }),
+            fetch(`${API_BASE}/dashboard1/sales-projections/?${periodQuery}`, { credentials: "include", signal }),
+            fetch(`${API_BASE}/dashboard1/purchase-projections/?${periodQuery}`, { credentials: "include", signal }),
+            fetch(`${API_BASE}/dashboard1/oa-efficiency-weekly/?${periodQuery}`, { credentials: "include", signal }),
+            fetch(`${API_BASE}/dashboard1/quality-rejections-weekly/?${periodQuery}`, { credentials: "include", signal }),
+        ]);
+        const [salesResult, purchaseResult, productionResult, qualityValueResult, salesProjectionsResult, purchaseProjectionsResult, oaEfficiencyWeeklyResult, qualityRejectionsWeeklyResult] = await Promise.all([
+            salesResponse.json(),
+            purchaseResponse.json(),
+            productionResponse.json(),
+            qualityValueResponse.json(),
+            salesProjectionsResponse.json(),
+            purchaseProjectionsResponse.json(),
+            oaEfficiencyWeeklyResponse.json(),
+            qualityRejectionsWeeklyResponse.json(),
+        ]);
+
+        const sData = salesResponse.ok && salesResult.success ? salesResult.data : null;
+        const puData = purchaseResponse.ok && purchaseResult.success ? purchaseResult.data : null;
+        const prData = productionResponse.ok && productionResult.success ? productionResult.data : null;
+        const qvData = qualityValueResponse.ok && qualityValueResult.success ? qualityValueResult.data : null;
+        const spData = salesProjectionsResponse.ok && salesProjectionsResult.success ? salesProjectionsResult.data : null;
+        const ppData = purchaseProjectionsResponse.ok && purchaseProjectionsResult.success ? purchaseProjectionsResult.data : null;
+        const oaData = oaEfficiencyWeeklyResponse.ok && oaEfficiencyWeeklyResult.success ? oaEfficiencyWeeklyResult.data : null;
+        const qrData = qualityRejectionsWeeklyResponse.ok && qualityRejectionsWeeklyResult.success ? qualityRejectionsWeeklyResult.data : null;
+
+        clientCache.current.set(cacheKey, {
+            salesData: sData,
+            purchaseData: puData,
+            productionData: prData,
+            qualityValueData: qvData,
+            salesProjectionsData: spData,
+            purchaseProjectionsData: ppData,
+            oaEfficiencyWeeklyData: oaData,
+            qualityRejectionsWeeklyData: qrData,
+        });
+
+        setSalesData(sData);
+        setPurchaseData(puData);
+        setProductionData(prData);
+        setQualityValueData(qvData);
+        setSalesProjectionsData(spData);
+        setPurchaseProjectionsData(ppData);
+        setOaEfficiencyWeeklyData(oaData);
+        setQualityRejectionsWeeklyData(qrData);
+    }, []);
+
+    const fetchDashboardData = useCallback(async (bypassCache = false) => {
+        const cacheKey = `${period.year}-${period.month}`;
+
+        if (!bypassCache && clientCache.current.has(cacheKey)) {
+            const cached = clientCache.current.get(cacheKey);
+            setSalesData(cached.salesData);
+            setPurchaseData(cached.purchaseData);
+            setProductionData(cached.productionData);
+            setQualityValueData(cached.qualityValueData);
+            setSalesProjectionsData(cached.salesProjectionsData);
+            setPurchaseProjectionsData(cached.purchaseProjectionsData);
+            setOaEfficiencyWeeklyData(cached.oaEfficiencyWeeklyData);
+            setQualityRejectionsWeeklyData(cached.qualityRejectionsWeeklyData);
+            setLoading(false);
+            return;
+        }
+
+        if (abortCtrlRef.current) {
+            abortCtrlRef.current.abort();
+        }
+        const ctrl = new AbortController();
+        abortCtrlRef.current = ctrl;
+
         setLoading(true);
+
         const periodQuery = `year=${period.year}&month=${period.month}`;
         try {
-            const [salesResponse, purchaseResponse, productionResponse, qualityValueResponse, salesProjectionsResponse, purchaseProjectionsResponse, oaEfficiencyWeeklyResponse, qualityRejectionsWeeklyResponse] = await Promise.all([
-                fetch(`${API_BASE}/dashboard1/sales-kpi/?${periodQuery}`, { credentials: "include" }),
-                fetch(`${API_BASE}/dashboard1/purchase-kpi/?${periodQuery}`, { credentials: "include" }),
-                fetch(`${API_BASE}/dashboard1/production-kpi/?${periodQuery}`, { credentials: "include" }),
-                fetch(`${API_BASE}/dashboard1/quality-value-kpi/?${periodQuery}`, { credentials: "include" }),
-                fetch(`${API_BASE}/dashboard1/sales-projections/?${periodQuery}`, { credentials: "include" }),
-                fetch(`${API_BASE}/dashboard1/purchase-projections/?${periodQuery}`, { credentials: "include" }),
-                fetch(`${API_BASE}/dashboard1/oa-efficiency-weekly/?${periodQuery}`, { credentials: "include" }),
-                fetch(`${API_BASE}/dashboard1/quality-rejections-weekly/?${periodQuery}`, { credentials: "include" }),
-            ]);
-            const [salesResult, purchaseResult, productionResult, qualityValueResult, salesProjectionsResult, purchaseProjectionsResult, oaEfficiencyWeeklyResult, qualityRejectionsWeeklyResult] = await Promise.all([
-                salesResponse.json(),
-                purchaseResponse.json(),
-                productionResponse.json(),
-                qualityValueResponse.json(),
-                salesProjectionsResponse.json(),
-                purchaseProjectionsResponse.json(),
-                oaEfficiencyWeeklyResponse.json(),
-                qualityRejectionsWeeklyResponse.json(),
-            ]);
+            const bundleResponse = await fetch(`${API_BASE}/dashboard1/bundle/?${periodQuery}`, {
+                credentials: "include",
+                signal: ctrl.signal,
+            });
 
-            setSalesData(salesResponse.ok && salesResult.success ? salesResult.data : null);
-            setPurchaseData(purchaseResponse.ok && purchaseResult.success ? purchaseResult.data : null);
-            setProductionData(productionResponse.ok && productionResult.success ? productionResult.data : null);
-            setQualityValueData(qualityValueResponse.ok && qualityValueResult.success ? qualityValueResult.data : null);
-            setSalesProjectionsData(
-                salesProjectionsResponse.ok && salesProjectionsResult.success ? salesProjectionsResult.data : null
-            );
-            setPurchaseProjectionsData(
-                purchaseProjectionsResponse.ok && purchaseProjectionsResult.success ? purchaseProjectionsResult.data : null
-            );
-            setOaEfficiencyWeeklyData(
-                oaEfficiencyWeeklyResponse.ok && oaEfficiencyWeeklyResult.success ? oaEfficiencyWeeklyResult.data : null
-            );
-            setQualityRejectionsWeeklyData(
-                qualityRejectionsWeeklyResponse.ok && qualityRejectionsWeeklyResult.success ? qualityRejectionsWeeklyResult.data : null
-            );
+            if (bundleResponse.ok) {
+                const bundleResult = await bundleResponse.json();
+                const bData = bundleResult?.data || {};
+                const parseItem = (item) => (item && item.success ? item.data : null);
+
+                const sData = parseItem(bData.sales_kpi);
+                const puData = parseItem(bData.purchase_kpi);
+                const prData = parseItem(bData.production_kpi);
+                const qvData = parseItem(bData.quality_value_kpi);
+                const spData = parseItem(bData.sales_projections);
+                const ppData = parseItem(bData.purchase_projections);
+                const oaData = parseItem(bData.oa_efficiency_weekly);
+                const qrData = parseItem(bData.quality_rejections_weekly);
+
+                clientCache.current.set(cacheKey, {
+                    salesData: sData,
+                    purchaseData: puData,
+                    productionData: prData,
+                    qualityValueData: qvData,
+                    salesProjectionsData: spData,
+                    purchaseProjectionsData: ppData,
+                    oaEfficiencyWeeklyData: oaData,
+                    qualityRejectionsWeeklyData: qrData,
+                });
+
+                setSalesData(sData);
+                setPurchaseData(puData);
+                setProductionData(prData);
+                setQualityValueData(qvData);
+                setSalesProjectionsData(spData);
+                setPurchaseProjectionsData(ppData);
+                setOaEfficiencyWeeklyData(oaData);
+                setQualityRejectionsWeeklyData(qrData);
+            } else {
+                await fetchLegacyDashboardData(periodQuery, cacheKey, ctrl.signal);
+            }
         } catch (error) {
+            if (error.name === "AbortError") {
+                return;
+            }
             console.error("Error fetching dashboard data:", error);
-            setSalesData(null);
-            setPurchaseData(null);
-            setProductionData(null);
-            setQualityValueData(null);
-            setSalesProjectionsData(null);
-            setPurchaseProjectionsData(null);
-            setOaEfficiencyWeeklyData(null);
-            setQualityRejectionsWeeklyData(null);
+            setSalesData(prev => prev ?? null);
         } finally {
-            setLoading(false);
+            if (!ctrl.signal.aborted) {
+                setLoading(false);
+            }
         }
-    }, [period]);
+    }, [period, fetchLegacyDashboardData]);
 
     useEffect(() => {
         fetchDashboardData();
+        return () => {
+            if (abortCtrlRef.current) {
+                abortCtrlRef.current.abort();
+            }
+        };
     }, [fetchDashboardData]);
 
     const handleRefresh = () => {
         setSpinning(true);
-        fetchDashboardData().finally(() => {
-            setTimeout(() => setSpinning(false), 900);
+        fetchDashboardData(true).finally(() => {
+            setTimeout(() => setSpinning(false), 800);
         });
     };
 
@@ -1153,7 +1351,7 @@ export default function Dashboard1() {
     };
 
     // Build KPI Cards
-    const kpiCards = [
+    const kpiCards = useMemo(() => [
         {
             spotlightId: "tmd-kpi-sales",
             kgrad: "linear-gradient(90deg,#1a56db,#38bdf8)", kbg: "#eff4ff", kclr: "#1a56db", animDelay: "0s",
@@ -1216,9 +1414,9 @@ export default function Dashboard1() {
             sparkData: getSparkData(qualityValueData, [12, 18, 14, 16, 10, 15, 12]),
             sparkColor: "#8b5cf6",
         },
-    ];
+    ], [salesData, purchaseData, productionData, qualityValueData, period]);
 
-    const chartCards = [
+    const chartCards = useMemo(() => [
         {
             spotlightId: "tmd-chart-sales",
             title: "Sales Projections in Lakhs",
@@ -1378,10 +1576,8 @@ export default function Dashboard1() {
             ),
             canvasHeight: 74,
         },
-    ];
+    ], [salesProjectionsData, purchaseProjectionsData, oaEfficiencyWeeklyData, qualityRejectionsWeeklyData, period]);
 
-    // ── Trend helpers ──────────────────────────────────────────────────────
-    // Compute % change: (cur - prev) / |prev| * 100
     // ── Trend helpers ──────────────────────────────────────────────────────
     // Compute % change: (cur - prev) / |prev| * 100
     const calcTrend = (cur, prev) => {
@@ -1431,7 +1627,7 @@ export default function Dashboard1() {
         };
     };
 
-    const tables = [
+    const tables = useMemo(() => [
         {
             title: "Sales Analysis", sub: "in Lakhs",
             badgeLabel: "Sales", badgeBg: "#eff4ff", badgeColor: "#1a56db",
@@ -1487,7 +1683,7 @@ export default function Dashboard1() {
                 { rowClass: "d1-row-fin", cells: [{ val: "Fin" }, getQualityRejectionAnalysisCell("financial_year", "material"), getQualityRejectionAnalysisCell("financial_year", "machine")] },
             ],
         },
-    ];
+    ], [salesData, purchaseData, productionData, qualityRejectionsWeeklyData, period]);
 
     return (
         <div className="d1-root">
@@ -1498,7 +1694,7 @@ export default function Dashboard1() {
                 <div className="d1-subhd__ctrl">
                     <YearMonthPicker value={period} onChange={setPeriod} disabled={loading || spinning} />
                     <button className="d1-ref-btn" onClick={handleRefresh} disabled={loading || spinning}>
-                        <RefreshIcon spinning={spinning} />
+                        <RefreshIcon spinning={spinning || loading} />
                         <span className="d1-ref-btn__text">Refresh</span>
                     </button>
                 </div>
@@ -1507,7 +1703,7 @@ export default function Dashboard1() {
             <SectionHeader title="Key Performance Indicators" collapsed={kpiCollapsed} onToggle={() => setKpiCollapsed(v => !v)} accent="#1a56db" />
             <div className={`d1-kpi-grid${kpiCollapsed ? " d1-grid--collapsed" : ""}`} data-spotlight="tmd-kpis">
                 {loading ? (
-                    Array.from({ length: 4 }).map((_, i) => <KpiCardSkeleton key={i} />)
+                    Array.from({ length: 4 }).map((_, i) => <KpiCardSkeleton key={i} index={i} collapsed={kpiCollapsed} />)
                 ) : (
                     kpiCards.map((k) => <KpiCard key={k.label} {...k} collapsed={kpiCollapsed} />)
                 )}
@@ -1516,7 +1712,7 @@ export default function Dashboard1() {
             <SectionHeader title="Charts & Projections" collapsed={chartsCollapsed} onToggle={() => setChartsCollapsed(v => !v)} accent="#10b981" />
             <div className={`d1-charts-grid${chartsCollapsed ? " d1-grid--collapsed" : ""}`} data-spotlight="tmd-charts">
                 {loading ? (
-                    Array.from({ length: 4 }).map((_, i) => <ChartCardSkeleton key={i} />)
+                    Array.from({ length: 4 }).map((_, i) => <ChartCardSkeleton key={i} index={i} collapsed={chartsCollapsed} />)
                 ) : (
                     chartCards.map((c, i) => <ChartCard key={i} {...c} deps={c.deps ?? []} collapsed={chartsCollapsed} />)
                 )}
@@ -1525,7 +1721,7 @@ export default function Dashboard1() {
             <SectionHeader title="Analysis Tables" collapsed={tablesCollapsed} onToggle={() => setTablesCollapsed(v => !v)} accent="#8b5cf6" />
             <div className={`d1-tables-grid${tablesCollapsed ? " d1-grid--collapsed" : ""}`} data-spotlight="tmd-tables">
                 {loading ? (
-                    Array.from({ length: 4 }).map((_, i) => <AnalysisTableSkeleton key={i} />)
+                    Array.from({ length: 4 }).map((_, i) => <AnalysisTableSkeleton key={i} index={i} collapsed={tablesCollapsed} />)
                 ) : (
                     tables.map((t) => <AnalysisTable key={t.title} {...t} collapsed={tablesCollapsed} />)
                 )}

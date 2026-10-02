@@ -17,7 +17,7 @@ from .views import (
     dashboard2_kpis, dashboard2_production_by_shift, dashboard2_idle_hours, dashboard2_downtime_by_reason, dashboard2_customer_complaints, dashboard2_po_pipeline, dashboard2_inspection_pending_snapshot, dashboard2_grn_pending_pipeline, dashboard2_iqc_rejections, dashboard2_otd, dashboard2_final_inspection_kpi, dashboard2_injob_inspection, dashboard2_inter_inspection, dashboard2_final_inspection_org_rej_rwk, dashboard2_top_defect_categories,
 )
 from .views_dashboard1 import (
-    dashboard1_sales_kpi, dashboard1_purchase_kpi, dashboard1_production_kpi, dashboard1_quality_value_kpi, dashboard1_sales_projections, dashboard1_purchase_projections, dashboard1_oa_efficiency_weekly, dashboard1_quality_rejections_weekly,
+    dashboard1_bundle, dashboard1_sales_kpi, dashboard1_purchase_kpi, dashboard1_production_kpi, dashboard1_quality_value_kpi, dashboard1_sales_projections, dashboard1_purchase_projections, dashboard1_oa_efficiency_weekly, dashboard1_quality_rejections_weekly,
 )
 from .views_plantperformance import (
     plant_performance_bundle, plant_performance_kpis, plant_performance_production_by_shift, plant_performance_idle_hours, plant_performance_downtime_by_reason, plant_performance_customer_complaints, plant_performance_po_pipeline, plant_performance_inspection_pending_snapshot, plant_performance_grn_pending_pipeline, plant_performance_iqc_rejections, plant_performance_otd, plant_performance_final_inspection_kpi, plant_performance_injob_inspection, plant_performance_inter_inspection, plant_performance_final_inspection_org_rej_rwk, plant_performance_top_defect_categories, plant_performance_customer_po_vs_sales, plant_performance_grn_value, plant_performance_fg_value, plant_performance_sales_analysis, plant_performance_purchase_value, plant_performance_efficiency, plant_performance_oee, plant_performance_rejection, plant_performance_rework, plant_performance_customer_complaint, plant_performance_capa, plant_performance_operator_efficiency, plant_performance_daily_production, plant_performance_production_value, plant_performance_machine_efficiency, plant_performance_supplier_rating, plant_performance_vendor_rating, plant_performance_target_vs_actual,
@@ -45,6 +45,7 @@ from .views_sales_analysis import (
     sales_analysis_monthly_sales_trend, sales_analysis_bill_type_revenue, sales_analysis_monthly_tax_trend,
     sales_analysis_future_projections, sales_analysis_plan_vs_actual, sales_analysis_po_ledger,
     sales_analysis_traceability, sales_analysis_avg_rate_cards, sales_analysis_part_rate_history,
+    sales_analysis_schedule_analysis,
 )
 from .views_idle_time_report import idle_time_report
 from .views_efficiency_report import efficiency_report
@@ -185,6 +186,7 @@ urlpatterns = [
     path('plant-performance/supplier-rating/actions/', supplier_rating_actions_view, name='supplier_rating_actions_view'),
 
     # ── Dashboard1 ────────────────────────────────────────────────────
+    path('dashboard1/bundle/', dashboard1_bundle, name='dashboard1_bundle'),
     path('dashboard1/sales-kpi/', dashboard1_sales_kpi, name='dashboard1_sales_kpi'),
     path('dashboard1/purchase-kpi/', dashboard1_purchase_kpi, name='dashboard1_purchase_kpi'),
     path('dashboard1/production-kpi/', dashboard1_production_kpi, name='dashboard1_production_kpi'),
@@ -213,6 +215,7 @@ urlpatterns = [
     path('sales-analysis/traceability/', sales_analysis_traceability, name='sales_analysis_traceability'),
     path('sales-analysis/avg-rate-cards/', sales_analysis_avg_rate_cards, name='sales_analysis_avg_rate_cards'),
     path('sales-analysis/part-rate-history/', sales_analysis_part_rate_history, name='sales_analysis_part_rate_history'),
+    path('sales-analysis/schedule-analysis/', sales_analysis_schedule_analysis, name='sales_analysis_schedule_analysis'),
 
     # ── Idle Time Report ──────────────────────────────────────────────
     path('idle-time-report/', idle_time_report, name='idle_time_report'),

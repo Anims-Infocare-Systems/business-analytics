@@ -9,6 +9,8 @@ import { Chart, registerables } from "chart.js";
 import ChartDataLabels from "chartjs-plugin-datalabels";
 import "./plantperformance1.css";
 import PlantPerformance1DatePicker from "./plantperformance1DatePicker";
+import Pp1TablePagination from "./Pp1TablePagination";
+import DebouncedSearchInput from "./DebouncedSearchInput";
 import { getModuleDefaultDateRange } from "./dateSettingsHelper";
 import {
   Scale,
@@ -111,23 +113,10 @@ function Pp1SearchableMultiSelect({
     const strVal = String(value).trim();
     if (!strVal) return [];
     if (options && options.includes(strVal)) return [strVal];
-    if (options && Array.isArray(options) && options.length > 0) {
-      const sorted = [...options].sort((a, b) => b.length - a.length);
-      let rem = strVal;
-      const matched = [];
-      for (const opt of sorted) {
-        if (!opt) continue;
-        const esc = opt.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const re = new RegExp(`(^|[,|;]\\s*)${esc}(\\s*([,|;]|$))`, 'i');
-        if (re.test(rem)) {
-          matched.push(opt);
-          rem = rem.replace(re, '$1$3').trim();
-        }
-      }
-      if (matched.length > 0) return matched;
-    }
     return strVal.split(",").map(v => v.trim()).filter(Boolean);
-  }, [value, isAllSelected, options, allLabel]);
+  }, [value, isAllSelected, options]);
+
+  const selectedSet = useMemo(() => new Set(selectedList), [selectedList]);
 
   const toggleOption = (opt) => {
     if (opt === allLabel) {
@@ -136,8 +125,7 @@ function Pp1SearchableMultiSelect({
     }
 
     let nextList;
-    const idx = selectedList.indexOf(opt);
-    if (idx >= 0) {
+    if (selectedSet.has(opt)) {
       nextList = selectedList.filter(item => item !== opt);
     } else {
       nextList = [...selectedList, opt];
@@ -152,9 +140,16 @@ function Pp1SearchableMultiSelect({
     }
   };
 
-  const filteredOptions = options.filter(opt => {
-    return opt.toLowerCase().includes(search.toLowerCase());
-  });
+  const deferredSearch = React.useDeferredValue(search);
+
+  const filteredOptions = useMemo(() => {
+    if (!Array.isArray(options) || options.length === 0) return [];
+    const q = deferredSearch.trim().toLowerCase();
+    if (!q) return options;
+    return options.filter(opt => String(opt).toLowerCase().includes(q));
+  }, [options, deferredSearch]);
+
+  const visibleOptions = useMemo(() => filteredOptions.slice(0, 80), [filteredOptions]);
 
   const isDefault = isAllSelected;
   let triggerText = allLabel;
@@ -329,8 +324,8 @@ function Pp1SearchableMultiSelect({
               </button>
             )}
 
-            {filteredOptions.map(opt => {
-              const selected = selectedList.includes(opt);
+            {visibleOptions.map(opt => {
+              const selected = selectedSet.has(opt);
               return (
                 <button
                   key={opt}
@@ -379,6 +374,12 @@ function Pp1SearchableMultiSelect({
                 </button>
               );
             })}
+
+            {filteredOptions.length > 80 && (
+              <div style={{ textAlign: 'center', color: '#94a3b8', fontSize: '10px', padding: '6px 4px', fontFamily: PP1_FONT, borderTop: '1px dashed #e2e8f0' }}>
+                Showing 80 of {filteredOptions.length} — refine search for more
+              </div>
+            )}
 
             {filteredOptions.length === 0 && search && (
               <div style={{ textAlign: 'center', color: '#64748b', fontSize: '0.75rem', padding: '16px 4px', fontFamily: PP1_FONT }}>
@@ -3543,6 +3544,15 @@ function PurchaseOrderView({ data, loading, uid }) {
 
 function PurchaseOrderBottomTable({ data, loading, uid }) {
   const rows = Array.isArray(data?.po?.rows) ? data.po.rows : [];
+  const [currentPage, setCurrentPage] = React.useState(1);
+  const [pageSize, setPageSize] = React.useState(25);
+
+  const pagedRows = React.useMemo(() => {
+    if (pageSize === "All" || pageSize >= rows.length) return rows;
+    const start = (currentPage - 1) * pageSize;
+    return rows.slice(start, start + pageSize);
+  }, [rows, currentPage, pageSize]);
+
   const fmtDate = (d) => {
     if (!d) return "—";
     const dt = new Date(d);
@@ -3570,10 +3580,10 @@ function PurchaseOrderBottomTable({ data, loading, uid }) {
           <tbody>
             {loading ? (
               <tr><td colSpan={9} className="pp1-cc-tbl__empty" style={{ padding: 0 }}><D3TableLoader rows={4} cols={9} /></td></tr>
-            ) : rows.length === 0 ? (
+            ) : pagedRows.length === 0 ? (
               <tr><td colSpan={9} className="pp1-cc-tbl__empty">No PO lines in this range.</td></tr>
             ) : (
-              rows.map((r, i) => (
+              pagedRows.map((r, i) => (
                 <tr key={`${r.po_number}-${i}`} className="pp1-cc-tbl__tr">
                   <td className="pp1-cc-tbl__id">{r.po_number || "—"}</td>
                   <td><span className="pp1-cc-badge" style={{ background: "#f1f5f9", color: "#475569" }}>{r.po_type || "—"}</span></td>
@@ -3590,6 +3600,13 @@ function PurchaseOrderBottomTable({ data, loading, uid }) {
           </tbody>
         </table>
       </div>
+      <Pp1TablePagination
+        currentPage={currentPage}
+        pageSize={pageSize}
+        totalItems={rows.length}
+        onPageChange={setCurrentPage}
+        onPageSizeChange={(sz) => { setPageSize(sz); setCurrentPage(1); }}
+      />
     </div>
   );
 }
@@ -3712,6 +3729,15 @@ function GrnPipelineView({ data, loading, uid }) {
 
 function GrnPipelineBottomTable({ data, loading, uid }) {
   const rows = Array.isArray(data?.grn?.rows) ? data.grn.rows : [];
+  const [currentPage, setCurrentPage] = React.useState(1);
+  const [pageSize, setPageSize] = React.useState(25);
+
+  const pagedRows = React.useMemo(() => {
+    if (pageSize === "All" || pageSize >= rows.length) return rows;
+    const start = (currentPage - 1) * pageSize;
+    return rows.slice(start, start + pageSize);
+  }, [rows, currentPage, pageSize]);
+
   return (
     <div className="pp1-cc-bot" key={uid}>
       <div className="pp1-cc-bot__hd">GRN Pending Lines</div>
@@ -3729,10 +3755,10 @@ function GrnPipelineBottomTable({ data, loading, uid }) {
           <tbody>
             {loading ? (
               <tr><td colSpan={5} className="pp1-cc-tbl__empty" style={{ padding: 0 }}><D3TableLoader rows={4} cols={5} /></td></tr>
-            ) : rows.length === 0 ? (
+            ) : pagedRows.length === 0 ? (
               <tr><td colSpan={5} className="pp1-cc-tbl__empty">No pending GRN lines in this range.</td></tr>
             ) : (
-              rows.map((r, i) => (
+              pagedRows.map((r, i) => (
                 <tr key={`${r.grn_no}-${i}`} className="pp1-cc-tbl__tr">
                   <td className="pp1-cc-tbl__id">{r.grn_no || "—"}</td>
                   <td className="pp1-cc-tbl__mono">{r.grn_date || "—"}</td>
@@ -3751,6 +3777,13 @@ function GrnPipelineBottomTable({ data, loading, uid }) {
           </tbody>
         </table>
       </div>
+      <Pp1TablePagination
+        currentPage={currentPage}
+        pageSize={pageSize}
+        totalItems={rows.length}
+        onPageChange={setCurrentPage}
+        onPageSizeChange={(sz) => { setPageSize(sz); setCurrentPage(1); }}
+      />
     </div>
   );
 }
@@ -4573,6 +4606,8 @@ function CustomerPoCompareBottomTable({ data, loading, uid, filters, showTargetO
   const [sortIndex, setSortIndex] = React.useState(null);
   const [sortDirection, setSortDirection] = React.useState("asc");
   const [hoveredHeader, setHoveredHeader] = React.useState(null);
+  const [currentPage, setCurrentPage] = React.useState(1);
+  const [pageSize, setPageSize] = React.useState(25);
 
   const handleSort = (idx) => {
     if (sortIndex === idx) {
@@ -4593,7 +4628,8 @@ function CustomerPoCompareBottomTable({ data, loading, uid, filters, showTargetO
     setSortIndex(null);
     setSortDirection("asc");
     setHoveredHeader(null);
-  }, [showTargetOnly, uid]);
+    setCurrentPage(1);
+  }, [showTargetOnly, uid, filters]);
 
   // Process data for Table 1 (Customer PO Value Summary)
   const table1Rows = React.useMemo(() => {
@@ -4710,6 +4746,12 @@ function CustomerPoCompareBottomTable({ data, loading, uid, filters, showTargetO
       }
     });
   }, [table1Rows, sortIndex, sortDirection, showTargetOnly, salesTarget]);
+
+  const paginatedRows = React.useMemo(() => {
+    if (pageSize === "all") return sortedRows;
+    const start = (currentPage - 1) * pageSize;
+    return sortedRows.slice(start, start + pageSize);
+  }, [sortedRows, currentPage, pageSize]);
 
   // Render table content
   return (
@@ -4859,14 +4901,14 @@ function CustomerPoCompareBottomTable({ data, loading, uid, filters, showTargetO
             </tr>
           </thead>
           <tbody>
-            {sortedRows.length === 0 ? (
+            {paginatedRows.length === 0 ? (
               <tr>
                 <td colSpan={showTargetOnly ? 2 : 4} style={{ padding: 0 }}>
                   <Pp1NoDataOverlay />
                 </td>
               </tr>
             ) : (
-              sortedRows.map((r, idx) => (
+              paginatedRows.map((r, idx) => (
                 <tr key={idx} className="pp1-cc-tbl__tr">
                   <td className="pp1-cc-tbl__bold" style={{ fontWeight: 700 }}>{r.customer}</td>
                   {showTargetOnly ? (
@@ -4900,6 +4942,13 @@ function CustomerPoCompareBottomTable({ data, loading, uid, filters, showTargetO
           )}
         </table>
       </div>
+      <Pp1TablePagination
+        currentPage={currentPage}
+        pageSize={pageSize}
+        totalItems={sortedRows.length}
+        onPageChange={setCurrentPage}
+        onPageSizeChange={setPageSize}
+      />
     </div>
   );
 }
@@ -5570,6 +5619,19 @@ function PremiumDashboardBottomTable({ title, columns, rows }) {
     return sorted;
   }, [rows, sortIndex, sortDirection, columns]);
 
+  const [currentPage, setCurrentPage] = React.useState(1);
+  const [pageSize, setPageSize] = React.useState(25);
+
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [rows, title]);
+
+  const pagedRows = React.useMemo(() => {
+    if (pageSize === "All" || pageSize >= sortedRows.length) return sortedRows;
+    const start = (currentPage - 1) * pageSize;
+    return sortedRows.slice(start, start + pageSize);
+  }, [sortedRows, currentPage, pageSize]);
+
   return (
     <div className="pp1-cc-bot" style={{ animation: "pp1-detail-in 0.3s ease both" }}>
       <div className="pp1-cc-bot__hd">{title}</div>
@@ -5615,10 +5677,10 @@ function PremiumDashboardBottomTable({ title, columns, rows }) {
             </tr>
           </thead>
           <tbody>
-            {sortedRows.length === 0 ? (
+            {pagedRows.length === 0 ? (
               <tr><td colSpan={columns.length} style={{ padding: 0 }}><Pp1NoDataOverlay /></td></tr>
             ) : (
-              sortedRows.map((row, ri) => (
+              pagedRows.map((row, ri) => (
                 <tr key={ri} className="pp1-cc-tbl__tr">
                   {row.map((cell, ci) => {
                     const isRightAligned = ci > 2 && (columns[ci].toLowerCase().includes("qty") || columns[ci].toLowerCase().includes("value") || columns[ci].toLowerCase().includes("hours") || columns[ci].toLowerCase().includes("hour") || columns[ci].toLowerCase().includes("hrs") || columns[ci].toLowerCase().includes("cost") || columns[ci].toLowerCase().includes("rate") || columns[ci].toLowerCase().includes("ratio") || columns[ci].toLowerCase().includes("%") || columns[ci].toLowerCase().includes("day") || columns[ci].toLowerCase().includes("month") || columns[ci].toLowerCase().includes("loss") || columns[ci].toLowerCase().includes("price"));
@@ -5819,6 +5881,13 @@ function PremiumDashboardBottomTable({ title, columns, rows }) {
           </tbody>
         </table>
       </div>
+      <Pp1TablePagination
+        currentPage={currentPage}
+        pageSize={pageSize}
+        totalItems={sortedRows.length}
+        onPageChange={setCurrentPage}
+        onPageSizeChange={(sz) => { setPageSize(sz); setCurrentPage(1); }}
+      />
     </div>
   );
 }
@@ -6495,6 +6564,12 @@ function PurchaseReportBottomTable({ data, loading, filters }) {
   const [sortIndex, setSortIndex] = React.useState(null);
   const [sortDirection, setSortDirection] = React.useState("asc");
   const [hoveredHeader, setHoveredHeader] = React.useState(null);
+  const [currentPage, setCurrentPage] = React.useState(1);
+  const [pageSize, setPageSize] = React.useState(25);
+
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [filters]);
 
   const grnRows = React.useMemo(
     () => (Array.isArray(data?.grnValueCompare?.rows) ? data.grnValueCompare.rows : []),
@@ -6597,6 +6672,12 @@ function PurchaseReportBottomTable({ data, loading, filters }) {
     });
   }, [rowsMonthWise, sortIndex, sortDirection, columnsMonthWise]);
 
+  const pagedRows = React.useMemo(() => {
+    if (pageSize === "All" || pageSize >= sortedRowsMonthWise.length) return sortedRowsMonthWise;
+    const start = (currentPage - 1) * pageSize;
+    return sortedRowsMonthWise.slice(start, start + pageSize);
+  }, [sortedRowsMonthWise, currentPage, pageSize]);
+
   const totalRowData = React.useMemo(() => {
     if (!sortedRowsMonthWise || sortedRowsMonthWise.length === 0) return null;
     const monthTotals = uniqueMonths.map((_, mIdx) => {
@@ -6650,10 +6731,10 @@ function PurchaseReportBottomTable({ data, loading, filters }) {
             </tr>
           </thead>
           <tbody>
-            {sortedRowsMonthWise.length === 0 ? (
+            {pagedRows.length === 0 ? (
               <tr><td colSpan={columnsMonthWise.length} className="pp1-cc-tbl__empty">No data available.</td></tr>
             ) : (
-              sortedRowsMonthWise.map((row, ri) => {
+              pagedRows.map((row, ri) => {
                 const totalVal = row.slice(1).reduce((s, v) => s + v, 0);
                 return (
                   <tr key={ri} className="pp1-cc-tbl__tr">
@@ -6695,6 +6776,13 @@ function PurchaseReportBottomTable({ data, loading, filters }) {
           )}
         </table>
       </div>
+      <Pp1TablePagination
+        currentPage={currentPage}
+        pageSize={pageSize}
+        totalItems={sortedRowsMonthWise.length}
+        onPageChange={setCurrentPage}
+        onPageSizeChange={(sz) => { setPageSize(sz); setCurrentPage(1); }}
+      />
     </div>
   );
 }
@@ -7460,6 +7548,15 @@ function PurchaseValueBottomTable({ data, filters }) {
   const [activeTab, setActiveTab] = React.useState("month_wise");
   const [sortIndex, setSortIndex] = React.useState(null);
   const [sortDirection, setSortDirection] = React.useState("asc");
+  const [mwPage, setMwPage] = React.useState(1);
+  const [mwPageSize, setMwPageSize] = React.useState(25);
+  const [osPage, setOsPage] = React.useState(1);
+  const [osPageSize, setOsPageSize] = React.useState(25);
+
+  React.useEffect(() => {
+    setMwPage(1);
+    setOsPage(1);
+  }, [filters]);
 
   const purchaseRows = React.useMemo(
     () => (Array.isArray(data?.purchaseValueCompare?.rows) ? data.purchaseValueCompare.rows : []),
@@ -7611,6 +7708,18 @@ function PurchaseValueBottomTable({ data, filters }) {
     });
   }, [purchaseOrdersSummaryRows, sortIndex, sortDirection, activeTab]);
 
+  const pagedMonthWiseRows = React.useMemo(() => {
+    if (mwPageSize === "All" || mwPageSize >= sortedMonthWiseRows.length) return sortedMonthWiseRows;
+    const start = (mwPage - 1) * mwPageSize;
+    return sortedMonthWiseRows.slice(start, start + mwPageSize);
+  }, [sortedMonthWiseRows, mwPage, mwPageSize]);
+
+  const pagedSummaryRows = React.useMemo(() => {
+    if (osPageSize === "All" || osPageSize >= sortedSummaryRows.length) return sortedSummaryRows;
+    const start = (osPage - 1) * osPageSize;
+    return sortedSummaryRows.slice(start, start + osPageSize);
+  }, [sortedSummaryRows, osPage, osPageSize]);
+
   const monthWiseTotalData = React.useMemo(() => {
     if (!sortedMonthWiseRows || sortedMonthWiseRows.length === 0) return null;
     const monthTotals = uniqueMonths.map((_, mIdx) => {
@@ -7738,10 +7847,10 @@ function PurchaseValueBottomTable({ data, filters }) {
               </tr>
             </thead>
             <tbody>
-              {sortedMonthWiseRows.length === 0 ? (
+              {pagedMonthWiseRows.length === 0 ? (
                 <tr><td colSpan={columns1.length} className="pp1-cc-tbl__empty">No data available.</td></tr>
               ) : (
-                sortedMonthWiseRows.map((row, ri) => {
+                pagedMonthWiseRows.map((row, ri) => {
                   const rowTotal = row.slice(1).reduce((s, v) => s + Number(v || 0), 0);
                   return (
                     <tr key={ri} className="pp1-cc-tbl__tr">
@@ -7831,26 +7940,29 @@ function PurchaseValueBottomTable({ data, filters }) {
               </tr>
             </thead>
             <tbody>
-              {sortedSummaryRows.length === 0 ? (
+              {pagedSummaryRows.length === 0 ? (
                 <tr><td colSpan={columns2.length} className="pp1-cc-tbl__empty">No data available.</td></tr>
               ) : (
-                sortedSummaryRows.map((row, ri) => (
-                  <tr key={ri} className="pp1-cc-tbl__tr">
-                    <td style={{ ...pvNoWrapCell, textAlign: "center", padding: "8px 6px", fontSize: "12px" }}>{ri + 1}</td>
-                    <td className="pp1-cc-tbl__bold" style={{ ...pvWrapCell, fontWeight: 600, padding: "8px 10px", fontSize: "12px" }}>{row.supplier}</td>
-                    <td style={{ ...pvNoWrapCell, padding: "8px 8px", fontSize: "12px" }} className="pp1-cc-tbl__id">
-                      <span style={{ color: "#2563eb", textDecoration: "underline", fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
-                        {row.poNo}
-                      </span>
-                    </td>
-                    <td style={{ ...pvNoWrapCell, padding: "8px 8px", fontSize: "12px" }}>{row.poDate}</td>
-                    <td className="pp1-cc-tbl__mono" style={{ ...pvNoWrapCell, padding: "8px 8px", fontWeight: 600, color: "var(--pp1-text-primary, #334155)", fontSize: "12px" }}>{row.code}</td>
-                    <td style={{ ...pvWrapCell, padding: "8px 10px", fontSize: "12px" }}>{row.name}</td>
-                    <td style={{ ...pvNoWrapCell, padding: "8px 8px", textAlign: "right", fontWeight: 600, fontVariantNumeric: "tabular-nums", fontSize: "12px" }}>{row.qty}</td>
-                    <td style={{ ...pvNoWrapCell, padding: "8px 8px", textAlign: "right", fontWeight: 600, fontVariantNumeric: "tabular-nums", fontSize: "12px" }}>{row.rate}</td>
-                    <td style={{ ...pvNoWrapCell, padding: "8px 10px", textAlign: "right", fontWeight: 700, color: "#10b981", fontVariantNumeric: "tabular-nums", fontSize: "12px" }}>{row.value}</td>
-                  </tr>
-                ))
+                pagedSummaryRows.map((row, idx) => {
+                  const ri = (osPageSize === "All" ? 0 : (osPage - 1) * osPageSize) + idx;
+                  return (
+                    <tr key={ri} className="pp1-cc-tbl__tr">
+                      <td style={{ ...pvNoWrapCell, textAlign: "center", padding: "8px 6px", fontSize: "12px" }}>{ri + 1}</td>
+                      <td className="pp1-cc-tbl__bold" style={{ ...pvWrapCell, fontWeight: 600, padding: "8px 10px", fontSize: "12px" }}>{row.supplier}</td>
+                      <td style={{ ...pvNoWrapCell, padding: "8px 8px", fontSize: "12px" }} className="pp1-cc-tbl__id">
+                        <span style={{ color: "#2563eb", textDecoration: "underline", fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
+                          {row.poNo}
+                        </span>
+                      </td>
+                      <td style={{ ...pvNoWrapCell, padding: "8px 8px", fontSize: "12px" }}>{row.poDate}</td>
+                      <td className="pp1-cc-tbl__mono" style={{ ...pvNoWrapCell, padding: "8px 8px", fontWeight: 600, color: "var(--pp1-text-primary, #334155)", fontSize: "12px" }}>{row.code}</td>
+                      <td style={{ ...pvWrapCell, padding: "8px 10px", fontSize: "12px" }}>{row.name}</td>
+                      <td style={{ ...pvNoWrapCell, padding: "8px 8px", textAlign: "right", fontWeight: 600, fontVariantNumeric: "tabular-nums", fontSize: "12px" }}>{row.qty}</td>
+                      <td style={{ ...pvNoWrapCell, padding: "8px 8px", textAlign: "right", fontWeight: 600, fontVariantNumeric: "tabular-nums", fontSize: "12px" }}>{row.rate}</td>
+                      <td style={{ ...pvNoWrapCell, padding: "8px 10px", textAlign: "right", fontWeight: 700, color: "#10b981", fontVariantNumeric: "tabular-nums", fontSize: "12px" }}>{row.value}</td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
             {ordersSummaryTotalData && (
@@ -7883,6 +7995,23 @@ function PurchaseValueBottomTable({ data, filters }) {
           </table>
         )}
       </div>
+      {activeTab === "month_wise" ? (
+        <Pp1TablePagination
+          currentPage={mwPage}
+          pageSize={mwPageSize}
+          totalItems={sortedMonthWiseRows.length}
+          onPageChange={setMwPage}
+          onPageSizeChange={(sz) => { setMwPageSize(sz); setMwPage(1); }}
+        />
+      ) : (
+        <Pp1TablePagination
+          currentPage={osPage}
+          pageSize={osPageSize}
+          totalItems={sortedSummaryRows.length}
+          onPageChange={setOsPage}
+          onPageSizeChange={(sz) => { setOsPageSize(sz); setOsPage(1); }}
+        />
+      )}
     </div>
   );
 }
@@ -8426,6 +8555,18 @@ function SalesAnalysisReportBottomTable({ data, loading, filters }) {
   const [turnoverSortDir, setTurnoverSortDir] = React.useState("asc");
   const [selectedCustomers, setSelectedCustomers] = React.useState("");
   const [selectedInvoices, setSelectedInvoices] = React.useState("");
+  const [turnoverPage, setTurnoverPage] = React.useState(1);
+  const [turnoverPageSize, setTurnoverPageSize] = React.useState(25);
+  const [invoicePage, setInvoicePage] = React.useState(1);
+  const [invoicePageSize, setInvoicePageSize] = React.useState(25);
+
+  React.useEffect(() => {
+    setTurnoverPage(1);
+  }, [filters]);
+
+  React.useEffect(() => {
+    setInvoicePage(1);
+  }, [filters, selectedCustomers, selectedInvoices]);
 
   const salesRows = React.useMemo(
     () => (Array.isArray(data?.salesAnalysisCompare?.rows) ? data.salesAnalysisCompare.rows : []),
@@ -8588,6 +8729,18 @@ function SalesAnalysisReportBottomTable({ data, loading, filters }) {
     });
   }, [filteredRows, sortField, sortDirection, selectedCustomers, selectedInvoices]);
 
+  const pagedTurnoverRows = React.useMemo(() => {
+    if (turnoverPageSize === "All" || turnoverPageSize >= rowsTurnover.length) return rowsTurnover;
+    const start = (turnoverPage - 1) * turnoverPageSize;
+    return rowsTurnover.slice(start, start + turnoverPageSize);
+  }, [rowsTurnover, turnoverPage, turnoverPageSize]);
+
+  const pagedInvoiceRows = React.useMemo(() => {
+    if (invoicePageSize === "All" || invoicePageSize >= sortedInvoiceRows.length) return sortedInvoiceRows;
+    const start = (invoicePage - 1) * invoicePageSize;
+    return sortedInvoiceRows.slice(start, start + invoicePageSize);
+  }, [sortedInvoiceRows, invoicePage, invoicePageSize]);
+
   const turnoverMonthTotals = React.useMemo(() => {
     return uniqueMonths.map((m, mIdx) => {
       return rowsTurnover.reduce((sum, row) => sum + Number(row[mIdx + 1] || 0), 0);
@@ -8734,10 +8887,10 @@ function SalesAnalysisReportBottomTable({ data, loading, filters }) {
               </tr>
             </thead>
             <tbody>
-              {rowsTurnover.length === 0 ? (
+              {pagedTurnoverRows.length === 0 ? (
                 <tr><td colSpan={columnsTurnover.length} className="pp1-cc-tbl__empty">No data available.</td></tr>
               ) : (
-                rowsTurnover.map((row, ri) => {
+                pagedTurnoverRows.map((row, ri) => {
                   const totalVal = row.slice(1).reduce((s, v) => s + v, 0);
                   return (
                     <tr key={ri} className="pp1-cc-tbl__tr">
@@ -8826,69 +8979,72 @@ function SalesAnalysisReportBottomTable({ data, loading, filters }) {
               </tr>
             </thead>
             <tbody>
-              {sortedInvoiceRows.length === 0 ? (
+              {pagedInvoiceRows.length === 0 ? (
                 <tr><td colSpan={invoiceHeaders.length} className="pp1-cc-tbl__empty">No data available.</td></tr>
               ) : (
-                sortedInvoiceRows.map((row, ri) => (
-                  <tr
-                    key={`${row.invoiceNo}-${ri}`}
-                    className="pp1-cc-tbl__tr pp1-table-row-animate"
-                    style={{ animationDelay: `${Math.min(ri, 20) * 40}ms` }}
-                  >
-                    {/* SL.No — muted slate number chip */}
-                    <td style={{ padding: "10px 16px", width: "52px", textAlign: "center" }}>
-                      <span style={{
-                        display: "inline-flex", alignItems: "center", justifyContent: "center",
-                        width: "24px", height: "24px", borderRadius: "6px",
-                        background: "#f1f5f9",
-                        color: "#64748b", fontWeight: 700, fontSize: "10px",
-                        border: "1px solid #e2e8f0"
-                      }}>{ri + 1}</span>
-                    </td>
-                    {/* Customer Name — primary text */}
-                    <td style={{ padding: "10px 16px", fontWeight: 600, fontSize: "12.5px", color: "#0f172a", letterSpacing: "-0.1px" }}>
-                      {row.customer}
-                    </td>
-                    {/* Invoice No — matching blue gradient badge */}
-                    <td style={{ padding: "10px 16px" }}>
-                      <span style={{
-                        display: "inline-block",
-                        background: "linear-gradient(135deg, #2563eb 0%, #1a54d4 55%, #1448b8 100%)",
-                        color: "#ffffff",
-                        fontWeight: 700, fontSize: "11px",
-                        letterSpacing: "0.8px",
-                        padding: "3px 10px",
-                        borderRadius: "6px",
-                        fontFamily: "'Courier New', 'Fira Code', monospace",
-                        boxShadow: "0 2px 6px rgba(26, 84, 212, 0.3)",
-                        whiteSpace: "nowrap"
-                      }}>{row.invoiceNo}</span>
-                    </td>
-                    {/* Invoice Date — calendar icon + indigo soft pill */}
-                    <td style={{ padding: "10px 16px", whiteSpace: "nowrap" }}>
-                      <span style={{
-                        display: "inline-flex", alignItems: "center", gap: "5px",
-                        fontSize: "11.5px", fontWeight: 500, color: "#475569",
-                        fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif"
-                      }}>
-                        <Calendar size={12} style={{ color: "#94a3b8", flexShrink: 0 }} />
-                        {row.date}
-                      </span>
-                    </td>
-                    {/* Value — emerald right-aligned amount */}
-                    <td style={{ padding: "10px 16px", textAlign: "right" }}>
-                      <span style={{
-                        display: "inline-block",
-                        fontWeight: 700, fontSize: "12.5px",
-                        color: "#059669",
-                        letterSpacing: "-0.2px",
-                        fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif"
-                      }}>
-                        ₹{row.salesValue > 0 ? Number(row.salesValue).toFixed(4) : "0.0000"} L
-                      </span>
-                    </td>
-                  </tr>
-                ))
+                pagedInvoiceRows.map((row, idx) => {
+                  const ri = (invoicePageSize === "All" ? 0 : (invoicePage - 1) * invoicePageSize) + idx;
+                  return (
+                    <tr
+                      key={`${row.invoiceNo}-${ri}`}
+                      className="pp1-cc-tbl__tr pp1-table-row-animate"
+                      style={{ animationDelay: `${Math.min(idx, 20) * 40}ms` }}
+                    >
+                      {/* SL.No — muted slate number chip */}
+                      <td style={{ padding: "10px 16px", width: "52px", textAlign: "center" }}>
+                        <span style={{
+                          display: "inline-flex", alignItems: "center", justifyContent: "center",
+                          width: "24px", height: "24px", borderRadius: "6px",
+                          background: "#f1f5f9",
+                          color: "#64748b", fontWeight: 700, fontSize: "10px",
+                          border: "1px solid #e2e8f0"
+                        }}>{ri + 1}</span>
+                      </td>
+                      {/* Customer Name — primary text */}
+                      <td style={{ padding: "10px 16px", fontWeight: 600, fontSize: "12.5px", color: "#0f172a", letterSpacing: "-0.1px" }}>
+                        {row.customer}
+                      </td>
+                      {/* Invoice No — matching blue gradient badge */}
+                      <td style={{ padding: "10px 16px" }}>
+                        <span style={{
+                          display: "inline-block",
+                          background: "linear-gradient(135deg, #2563eb 0%, #1a54d4 55%, #1448b8 100%)",
+                          color: "#ffffff",
+                          fontWeight: 700, fontSize: "11px",
+                          letterSpacing: "0.8px",
+                          padding: "3px 10px",
+                          borderRadius: "6px",
+                          fontFamily: "'Courier New', 'Fira Code', monospace",
+                          boxShadow: "0 2px 6px rgba(26, 84, 212, 0.3)",
+                          whiteSpace: "nowrap"
+                        }}>{row.invoiceNo}</span>
+                      </td>
+                      {/* Invoice Date — calendar icon + indigo soft pill */}
+                      <td style={{ padding: "10px 16px", whiteSpace: "nowrap" }}>
+                        <span style={{
+                          display: "inline-flex", alignItems: "center", gap: "5px",
+                          fontSize: "11.5px", fontWeight: 500, color: "#475569",
+                          fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif"
+                        }}>
+                          <Calendar size={12} style={{ color: "#94a3b8", flexShrink: 0 }} />
+                          {row.date}
+                        </span>
+                      </td>
+                      {/* Value — emerald right-aligned amount */}
+                      <td style={{ padding: "10px 16px", textAlign: "right" }}>
+                        <span style={{
+                          display: "inline-block",
+                          fontWeight: 700, fontSize: "12.5px",
+                          color: "#059669",
+                          letterSpacing: "-0.2px",
+                          fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif"
+                        }}>
+                          ₹{row.salesValue > 0 ? Number(row.salesValue).toFixed(4) : "0.0000"} L
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
             {sortedInvoiceRows.length > 0 && (
@@ -8915,6 +9071,23 @@ function SalesAnalysisReportBottomTable({ data, loading, filters }) {
           </table>
         )}
       </div>
+      {activeTab === "turnover" ? (
+        <Pp1TablePagination
+          currentPage={turnoverPage}
+          pageSize={turnoverPageSize}
+          totalItems={rowsTurnover.length}
+          onPageChange={setTurnoverPage}
+          onPageSizeChange={(sz) => { setTurnoverPageSize(sz); setTurnoverPage(1); }}
+        />
+      ) : (
+        <Pp1TablePagination
+          currentPage={invoicePage}
+          pageSize={invoicePageSize}
+          totalItems={sortedInvoiceRows.length}
+          onPageChange={setInvoicePage}
+          onPageSizeChange={(sz) => { setInvoicePageSize(sz); setInvoicePage(1); }}
+        />
+      )}
     </div>
   );
 }
@@ -9570,6 +9743,10 @@ function ProductionAnalysisReportBottomTable({ data, filters, xAxisGroup = "Mach
   const [sortIndex, setSortIndex] = React.useState(null);
   const [sortDirection, setSortDirection] = React.useState("asc");
   const [hoveredHeader, setHoveredHeader] = React.useState(null);
+  const [ratePage, setRatePage] = React.useState(1);
+  const [ratePageSize, setRatePageSize] = React.useState(25);
+  const [dailyPage, setDailyPage] = React.useState(1);
+  const [dailyPageSize, setDailyPageSize] = React.useState(25);
 
   // Reset sorting state when switching tabs
   React.useEffect(() => {
@@ -9577,6 +9754,11 @@ function ProductionAnalysisReportBottomTable({ data, filters, xAxisGroup = "Mach
     setSortDirection("asc");
     setHoveredHeader(null);
   }, [activeTab]);
+
+  React.useEffect(() => {
+    setRatePage(1);
+    setDailyPage(1);
+  }, [filters, xAxisGroup]);
 
   // Tab 1 columns dynamically based on xAxisGroup
   const columnsRateVsHour = React.useMemo(() => {
@@ -9754,6 +9936,18 @@ function ProductionAnalysisReportBottomTable({ data, filters, xAxisGroup = "Mach
     });
   }, [rowsDailyLog, sortIndex, sortDirection, activeTab]);
 
+  const pagedRowsRateVsHour = React.useMemo(() => {
+    if (ratePageSize === "All" || ratePageSize >= sortedRowsRateVsHour.length) return sortedRowsRateVsHour;
+    const start = (ratePage - 1) * ratePageSize;
+    return sortedRowsRateVsHour.slice(start, start + ratePageSize);
+  }, [sortedRowsRateVsHour, ratePage, ratePageSize]);
+
+  const pagedRowsDailyLog = React.useMemo(() => {
+    if (dailyPageSize === "All" || dailyPageSize >= sortedRowsDailyLog.length) return sortedRowsDailyLog;
+    const start = (dailyPage - 1) * dailyPageSize;
+    return sortedRowsDailyLog.slice(start, start + dailyPageSize);
+  }, [sortedRowsDailyLog, dailyPage, dailyPageSize]);
+
   return (
     <div className="pp1-cc-bot" style={{ animation: "pp1-detail-in 0.3s ease both" }}>
       <div className="pp1-cc-bot__hd" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -9834,10 +10028,10 @@ function ProductionAnalysisReportBottomTable({ data, filters, xAxisGroup = "Mach
               </tr>
             </thead>
             <tbody>
-              {sortedRowsRateVsHour.length === 0 ? (
+              {pagedRowsRateVsHour.length === 0 ? (
                 <tr><td colSpan={columnsRateVsHour.length} className="pp1-cc-tbl__empty">No data available.</td></tr>
               ) : (
-                sortedRowsRateVsHour.map((row, ri) => (
+                pagedRowsRateVsHour.map((row, ri) => (
                   <tr key={ri} className="pp1-cc-tbl__tr">
                     <td className="pp1-cc-tbl__bold" style={{ fontWeight: 700, padding: "10px 16px" }}>{row[0]}</td>
                     <td style={{ fontWeight: 600, padding: "10px 16px" }}>{row[1]}</td>
@@ -9919,10 +10113,10 @@ function ProductionAnalysisReportBottomTable({ data, filters, xAxisGroup = "Mach
               </tr>
             </thead>
             <tbody>
-              {sortedRowsDailyLog.length === 0 ? (
+              {pagedRowsDailyLog.length === 0 ? (
                 <tr><td colSpan={columnsDailyLog.length} className="pp1-cc-tbl__empty">No data available.</td></tr>
               ) : (
-                sortedRowsDailyLog.map((row, ri) => (
+                pagedRowsDailyLog.map((row, ri) => (
                   <tr key={ri} className="pp1-cc-tbl__tr">
                     <td className="pp1-cc-tbl__bold" style={{ fontWeight: 700, padding: "10px 16px" }}>{row[0]}</td>
                     <td style={{ fontWeight: 600, padding: "10px 16px" }}>{row[1]}</td>
@@ -9971,6 +10165,23 @@ function ProductionAnalysisReportBottomTable({ data, filters, xAxisGroup = "Mach
           </table>
         )}
       </div>
+      {activeTab === "rateVsHour" ? (
+        <Pp1TablePagination
+          currentPage={ratePage}
+          pageSize={ratePageSize}
+          totalItems={sortedRowsRateVsHour.length}
+          onPageChange={setRatePage}
+          onPageSizeChange={(sz) => { setRatePageSize(sz); setRatePage(1); }}
+        />
+      ) : (
+        <Pp1TablePagination
+          currentPage={dailyPage}
+          pageSize={dailyPageSize}
+          totalItems={sortedRowsDailyLog.length}
+          onPageChange={setDailyPage}
+          onPageSizeChange={(sz) => { setDailyPageSize(sz); setDailyPage(1); }}
+        />
+      )}
     </div>
   );
 }
@@ -10932,6 +11143,19 @@ function IdleHoursReportBottomTable({ filters, defaultFrom, defaultTo, initialRo
     });
   }, [rows1, sortIndex, sortDirection]);
 
+  const [currentPage, setCurrentPage] = React.useState(1);
+  const [pageSize, setPageSize] = React.useState(25);
+
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [filters, activeFromStr, activeToStr]);
+
+  const pagedRows = React.useMemo(() => {
+    if (pageSize === "All" || pageSize >= sortedRows1.length) return sortedRows1;
+    const start = (currentPage - 1) * pageSize;
+    return sortedRows1.slice(start, start + pageSize);
+  }, [sortedRows1, currentPage, pageSize]);
+
   return (
     <div className="pp1-cc-bot" style={{ animation: "pp1-detail-in 0.3s ease both" }}>
       <div className="pp1-cc-bot__hd" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -11009,14 +11233,14 @@ function IdleHoursReportBottomTable({ filters, defaultFrom, defaultTo, initialRo
                   Loading…
                 </td>
               </tr>
-            ) : sortedRows1.length === 0 ? (
+            ) : pagedRows.length === 0 ? (
               <tr>
                 <td colSpan={columns1.length} className="pp1-cc-tbl__empty">
                   No data available.
                 </td>
               </tr>
             ) : (
-              sortedRows1.map((row, ri) => (
+              pagedRows.map((row, ri) => (
                 <tr key={ri} className="pp1-cc-tbl__tr">
                   {row.map((cell, ci) => {
                     const isRightAligned = ci > 2 && (
@@ -11050,6 +11274,13 @@ function IdleHoursReportBottomTable({ filters, defaultFrom, defaultTo, initialRo
           </tbody>
         </table>
       </div>
+      <Pp1TablePagination
+        currentPage={currentPage}
+        pageSize={pageSize}
+        totalItems={sortedRows1.length}
+        onPageChange={setCurrentPage}
+        onPageSizeChange={(sz) => { setPageSize(sz); setCurrentPage(1); }}
+      />
     </div>
   );
 }
@@ -13279,6 +13510,19 @@ function OeeComparisonReportBottomTable({ data, filters, xAxisGroup = "Month Wis
     return [...reindexed, ...summaryRows];
   }, [activeRows, sortIndex, sortDirection]);
 
+  const [currentPage, setCurrentPage] = React.useState(1);
+  const [pageSize, setPageSize] = React.useState(25);
+
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [filters, xAxisGroup]);
+
+  const pagedRows = React.useMemo(() => {
+    if (pageSize === "All" || pageSize >= sortedRows.length) return sortedRows;
+    const start = (currentPage - 1) * pageSize;
+    return sortedRows.slice(start, start + pageSize);
+  }, [sortedRows, currentPage, pageSize]);
+
   return (
     <div className="pp1-cc-bot" style={{ animation: "pp1-detail-in 0.3s ease both" }}>
       <div className="pp1-cc-bot__hd" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
@@ -13345,14 +13589,14 @@ function OeeComparisonReportBottomTable({ data, filters, xAxisGroup = "Month Wis
             </tr>
           </thead>
           <tbody>
-            {sortedRows.length === 0 ? (
+            {pagedRows.length === 0 ? (
               <tr>
                 <td colSpan={activeColumns.length} style={{ textAlign: "center", padding: "20px", color: "var(--pp1-text-4)" }}>
                   No data available.
                 </td>
               </tr>
             ) : (
-              sortedRows.map((row, ri) => (
+              pagedRows.map((row, ri) => (
                 <tr key={ri}>
                   {row.map((cell, ci) => {
                     const isRightAligned = ci > 0 && activeColumns[ci] && (
@@ -13390,6 +13634,13 @@ function OeeComparisonReportBottomTable({ data, filters, xAxisGroup = "Month Wis
           </tbody>
         </table>
       </div>
+      <Pp1TablePagination
+        currentPage={currentPage}
+        pageSize={pageSize}
+        totalItems={sortedRows.length}
+        onPageChange={setCurrentPage}
+        onPageSizeChange={(sz) => { setPageSize(sz); setCurrentPage(1); }}
+      />
     </div>
   );
 }
@@ -14452,6 +14703,19 @@ function EfficiencyEffReportBottomTable({ data, filters, xAxisGroup = "Month Wis
     return "auto";
   };
 
+  const [currentPage, setCurrentPage] = React.useState(1);
+  const [pageSize, setPageSize] = React.useState(25);
+
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [filters, xAxisGroup]);
+
+  const pagedRows = React.useMemo(() => {
+    if (pageSize === "All" || pageSize >= sortedRows.length) return sortedRows;
+    const start = (currentPage - 1) * pageSize;
+    return sortedRows.slice(start, start + pageSize);
+  }, [sortedRows, currentPage, pageSize]);
+
   return (
     <div className="pp1-cc-bot" style={{ animation: "pp1-detail-in 0.3s ease both" }}>
       <div className="pp1-cc-bot__hd" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
@@ -14517,14 +14781,14 @@ function EfficiencyEffReportBottomTable({ data, filters, xAxisGroup = "Month Wis
             </tr>
           </thead>
           <tbody>
-            {sortedRows.length === 0 ? (
+            {pagedRows.length === 0 ? (
               <tr>
                 <td colSpan={activeColumns.length} className="pp1-cc-tbl__empty">
                   No data matches active filters.
                 </td>
               </tr>
             ) : (
-              sortedRows.map((row, ri) => {
+              pagedRows.map((row, ri) => {
                 const isOverallRow = row[0] === "-" || row[0] === "Overall Average" || row[0] === "Overall OEE %" || row[0] === "Overall Total";
                 return (
                   <tr key={ri} className="pp1-cc-tbl__tr">
@@ -14563,6 +14827,13 @@ function EfficiencyEffReportBottomTable({ data, filters, xAxisGroup = "Month Wis
           </tbody>
         </table>
       </div>
+      <Pp1TablePagination
+        currentPage={currentPage}
+        pageSize={pageSize}
+        totalItems={sortedRows.length}
+        onPageChange={setCurrentPage}
+        onPageSizeChange={(sz) => { setPageSize(sz); setCurrentPage(1); }}
+      />
     </div>
   );
 }
@@ -22583,45 +22854,48 @@ export default function PlantPerformance1() {
     itemCode: [],
   });
 
-  // ✅ Persist filters and selections to sessionStorage on every change
+  // ✅ Persist filters and selections to sessionStorage with debounce to eliminate typing lag
   useEffect(() => {
-    writePP1Session("ba_filter_plantperformance", {
-      selKpi,
-      selAction,
-      activePeriod,
-      dateRange,
-      poFilters,
-      otdFilters,
-      supplierFilters,
-      vendorFilters,
-      fgFilters,
-      dailyProductionFilters,
-      targetVsActualFilters,
-      operatorEfficiencyFilters,
-      machineEfficiencyFilters,
-      capaFilters,
-      purFilters,
-      purchaseValueFilters,
-      salesFilters,
-      prodFilters,
-      prodXAxisGroup,
-      idleFilters,
-      idleActiveTab,
-      nonAccFilters,
-      compFilters,
-      oeeFilters,
-      oeeActiveTab,
-      oeeCompActiveTab,
-      rejActiveTab,
-      oeeCompFilters,
-      oeeCompXAxisGroup,
-      effXAxisGroup,
-      effFilters,
-      rejFilters,
-      rewFilters,
-      reworkXAxisGroup,
-      stockFilters,
-    });
+    const timer = setTimeout(() => {
+      writePP1Session("ba_filter_plantperformance", {
+        selKpi,
+        selAction,
+        activePeriod,
+        dateRange,
+        poFilters,
+        otdFilters,
+        supplierFilters,
+        vendorFilters,
+        fgFilters,
+        dailyProductionFilters,
+        targetVsActualFilters,
+        operatorEfficiencyFilters,
+        machineEfficiencyFilters,
+        capaFilters,
+        purFilters,
+        purchaseValueFilters,
+        salesFilters,
+        prodFilters,
+        prodXAxisGroup,
+        idleFilters,
+        idleActiveTab,
+        nonAccFilters,
+        compFilters,
+        oeeFilters,
+        oeeActiveTab,
+        oeeCompActiveTab,
+        rejActiveTab,
+        oeeCompFilters,
+        oeeCompXAxisGroup,
+        effXAxisGroup,
+        effFilters,
+        rejFilters,
+        rewFilters,
+        reworkXAxisGroup,
+        stockFilters,
+      });
+    }, 400);
+    return () => clearTimeout(timer);
   }, [
     selKpi, selAction, activePeriod, dateRange, poFilters, otdFilters, supplierFilters,
     vendorFilters, fgFilters, dailyProductionFilters, targetVsActualFilters, operatorEfficiencyFilters,
@@ -22963,7 +23237,10 @@ export default function PlantPerformance1() {
 
       setData(combinedData);
       try {
-        sessionStorage.setItem("ba_cache_plantperformance", JSON.stringify(combinedData));
+        const serialized = JSON.stringify(combinedData);
+        if (serialized && serialized.length < 1500000) {
+          sessionStorage.setItem("ba_cache_plantperformance", serialized);
+        }
       } catch { }
 
       setRejPanelData(null);

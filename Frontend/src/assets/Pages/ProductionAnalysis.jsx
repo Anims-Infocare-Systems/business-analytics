@@ -1971,9 +1971,12 @@ export default function ProductionAnalysis() {
       } else if (dailySortField === "RwQty") {
         valA = a._rwQty ?? 0;
         valB = b._rwQty ?? 0;
-      } else if (dailySortField === "IdleHrs") {
+      } else if (dailySortField === "IdleHrs" || dailySortField === "IdleHours") {
         valA = a._idleHrs ?? 0;
         valB = b._idleHrs ?? 0;
+      } else if (dailySortField === "EffPct" || dailySortField === "OprEffPct") {
+        valA = a.OprEffPct ?? a.EffPct ?? 0;
+        valB = b.OprEffPct ?? b.EffPct ?? 0;
       } else if (dailySortField === "Date") {
         const dateA = a.Date ? new Date(a.Date).getTime() : 0;
         const dateB = b.Date ? new Date(b.Date).getTime() : 0;
@@ -2333,10 +2336,10 @@ export default function ProductionAnalysis() {
     const applyDaily = (data) => {
         if (data && data.status === "success" && Array.isArray(data.data)) {
           const normalized = data.data.map((row, idx) => {
-            const matRej = row.MaterialRejection ?? row.MatRej ?? (row.Rej ? Math.floor(row.Rej * 0.6) : 0);
-            const macRej = row.MachineRejection ?? row.MacRej ?? (row.Rej ? (row.Rej - matRej) : 0);
-            const rwQty = row.ReworkQty ?? row.RwQty ?? (row.OKQty ? Math.max(0, (row.SNo % 3 === 0 ? Math.floor(row.OKQty * 0.05) : 0)) : 0);
-            const idleHrs = row.IdleHours ?? row.IdleHrs ?? (row.Rej > 0 || row.OKQty < row.Target ? parseFloat((Math.max(0.2, (row.Target - row.OKQty) * 0.1)).toFixed(1)) : 0);
+            const matRej = row.MatRej ?? row.MaterialRejection ?? (row.Rej ? Math.floor(row.Rej * 0.6) : 0);
+            const macRej = row.MacRej ?? row.MachineRejection ?? (row.Rej ? (row.Rej - matRej) : 0);
+            const rwQty = row.RwQty ?? row.ReworkQty ?? 0;
+            const idleHrs = Number(row.IdleHours ?? row.IdleHrs ?? 0);
             let formattedDate = "—";
             if (row.Date) {
               try {
@@ -5626,11 +5629,6 @@ NEW §3 — NON-ACCEPTED IDLE: PRODUCTION LOSS
                     Process <SortIcon active={dailySortField === "Process"} direction={dailySortDirection} />
                   </div>
                 </th>
-                <th onClick={() => handleDailySort("Target")} style={{ cursor: "pointer", userSelect: "none" }}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "4px" }}>
-                    Target <SortIcon active={dailySortField === "Target"} direction={dailySortDirection} />
-                  </div>
-                </th>
                 <th onClick={() => handleDailySort("OKQty")} style={{ cursor: "pointer", userSelect: "none" }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "4px" }}>
                     OK Qty <SortIcon active={dailySortField === "OKQty"} direction={dailySortDirection} />
@@ -5658,7 +5656,7 @@ NEW §3 — NON-ACCEPTED IDLE: PRODUCTION LOSS
                 </th>
                 <th onClick={() => handleDailySort("EffPct")} style={{ cursor: "pointer", userSelect: "none" }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "4px" }}>
-                    Eff % <SortIcon active={dailySortField === "EffPct"} direction={dailySortDirection} />
+                    Opr Eff % <SortIcon active={dailySortField === "EffPct"} direction={dailySortDirection} />
                   </div>
                 </th>
                 <th onClick={() => handleDailySort("Status")} style={{ cursor: "pointer", userSelect: "none" }}>
@@ -5672,7 +5670,7 @@ NEW §3 — NON-ACCEPTED IDLE: PRODUCTION LOSS
               {pageLoading ? (
                 Array.from({ length: 6 }).map((_, idx) => (
                   <tr key={idx}>
-                    {Array.from({ length: 15 }).map((__, tdIdx) => (
+                    {Array.from({ length: 14 }).map((__, tdIdx) => (
                       <td key={tdIdx}><div className="pa2-skeleton" style={{ width: tdIdx === 0 ? "15px" : tdIdx === 4 ? "90px" : "45px", height: "12px" }} /></td>
                     ))}
                   </tr>
@@ -5680,10 +5678,10 @@ NEW §3 — NON-ACCEPTED IDLE: PRODUCTION LOSS
               ) : (
                 <>
                   {tableLoading && (
-                    <tr><td colSpan={15} style={{ textAlign: "center", padding: "2rem", color: "#94a3b8", fontStyle: "italic" }}>Loading production data…</td></tr>
+                    <tr><td colSpan={14} style={{ textAlign: "center", padding: "2rem", color: "#94a3b8", fontStyle: "italic" }}>Loading production data…</td></tr>
                   )}
                   {!tableLoading && filteredTableData.length === 0 && (
-                    <NoDataFound isTableRow={true} colSpan={15} title="No Data Found on this period" sub="No shift production records found matching the selected period and filters." icon={FiTable} />
+                    <NoDataFound isTableRow={true} colSpan={14} title="No Data Found on this period" sub="No shift production records found matching the selected period and filters." icon={FiTable} />
                   )}
                   {!tableLoading && paginatedTableData.map((row, i) => {
                     const isRejected = row.Status === "Rejected";
@@ -5703,13 +5701,12 @@ NEW §3 — NON-ACCEPTED IDLE: PRODUCTION LOSS
                         <td>{row.Operator || "—"}</td>
                         <td className="pa2-td-part">{row.Part || "—"}</td>
                         <td>{row.Process || "—"}</td>
-                        <td className="pa2-td-num" style={{ fontVariantNumeric: "tabular-nums" }}>{(row.Target || 0).toLocaleString()}</td>
                         <td className="pa2-td-num" style={{ fontVariantNumeric: "tabular-nums" }}>{(row.OKQty || 0).toLocaleString()}</td>
                         <td className="pa2-td-num" style={{ color: matRej > 0 ? "#ef4444" : "#059669", fontWeight: "600", fontVariantNumeric: "tabular-nums" }}>{matRej}</td>
                         <td className="pa2-td-num" style={{ color: macRej > 0 ? "#ef4444" : "#059669", fontWeight: "600", fontVariantNumeric: "tabular-nums" }}>{macRej}</td>
                         <td className="pa2-td-num" style={{ color: rwQty > 0 ? "#f59e0b" : "#059669", fontWeight: "600", fontVariantNumeric: "tabular-nums" }}>{rwQty}</td>
                         <td className="pa2-td-num" style={{ color: idleHrs > 0 ? "#ef4444" : "#059669", fontWeight: "600", fontVariantNumeric: "tabular-nums" }}>{formatHoursMins(idleHrs)}</td>
-                        <td className="pa2-td-num" style={{ fontVariantNumeric: "tabular-nums" }}>{(row.EffPct || 0).toFixed(2)}%</td>
+                        <td className="pa2-td-num" style={{ fontVariantNumeric: "tabular-nums" }}>{(row.OprEffPct ?? row.EffPct ?? 0).toFixed(2)}%</td>
                         <td><span className={`pa2-badge ${badge}`}>{row.Status || "OK"}</span></td>
                       </tr>
                     );
@@ -5728,11 +5725,6 @@ NEW §3 — NON-ACCEPTED IDLE: PRODUCTION LOSS
                   <td></td>
                   <td className="pa2-daily-tfoot-label" style={{ textAlign: "right", fontWeight: "800", color: "#334155" }}>
                     Total
-                  </td>
-                  <td className="pa2-td-num">
-                    <span className="pa2-daily-total-badge pa2-daily-total-blue" title="Total Target">
-                      {dailyTableTotals.target.toLocaleString("en-IN")}
-                    </span>
                   </td>
                   <td className="pa2-td-num">
                     <span className="pa2-daily-total-badge pa2-daily-total-green" title="Total OK Qty">

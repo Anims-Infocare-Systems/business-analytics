@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, useCallback, Fragment } from "react";
+import React, { useEffect, useMemo, useRef, useState, useCallback, Fragment } from "react";
 import { Chart, registerables } from "chart.js";
 import ChartDataLabels from "chartjs-plugin-datalabels";
 import { resolveApiBase } from "../../apiBase";
@@ -1639,6 +1639,10 @@ export default function SalesAnalysis() {
   const [projections, setProjections] = useState([]);
   const [planVsActual, setPlanVsActual] = useState([]);
   const [poLedger, setPoLedger] = useState([]);
+  const [poSchRows, setPoSchRows] = useState([]);
+  const [poIsBrCurrency, setPoIsBrCurrency] = useState(0);
+  const [backendScheduleAnalysis, setBackendScheduleAnalysis] = useState([]);
+  const [schedAnalysisMonths, setSchedAnalysisMonths] = useState([]);
   const [traceability, setTraceability] = useState([]);
   const [traceCustomerFilter, setTraceCustomerFilter] = useState([]);
   const [traceCustomerSearch, setTraceCustomerSearch] = useState("");
@@ -2558,12 +2562,28 @@ export default function SalesAnalysis() {
 
   const processedPoLedger = useMemo(() => {
     return poLedger.map((row) => {
+      const isBrCurrency = Number(row.isBrCurrency !== undefined ? row.isBrCurrency : poIsBrCurrency) === 1;
       const currRate = (row.currRate !== undefined && row.currRate !== null && Number(row.currRate) !== 0) ? Number(row.currRate) : 1;
       const amt = (row.amt !== undefined && row.amt !== null && Number(row.amt) !== 0) ? Number(row.amt) : (row.qty * row.rate);
-      const value = amt * currRate;
+
+      const effectiveRate = row.effectiveRate !== undefined && row.effectiveRate !== null
+        ? Number(row.effectiveRate)
+        : (isBrCurrency
+            ? (row.qty > 0 && amt > 0 ? (amt * currRate) / row.qty : (row.rate * currRate))
+            : (row.qty > 0 && amt > 0 ? amt / row.qty : row.rate));
+
+      const value = row.value !== undefined && row.value !== null
+        ? Number(row.value)
+        : (isBrCurrency ? amt * currRate : amt);
+
       const totalDcQty = (row.totalDcQty !== undefined && row.totalDcQty !== null) ? Number(row.totalDcQty) : Number(row.dcQty || 0);
-      const pendingQty = Math.max(0, row.qty - totalDcQty - Number(row.shortCloseQty || 0));
-      const pendingValue = row.qty > 0 ? (pendingQty / row.qty) * value : (pendingQty * row.rate * currRate);
+      const pendingQty = row.pendingQty !== undefined && row.pendingQty !== null
+        ? Number(row.pendingQty)
+        : Math.max(0, row.qty - totalDcQty - Number(row.shortCloseQty || 0));
+
+      const pendingValue = row.pendingValue !== undefined && row.pendingValue !== null
+        ? Number(row.pendingValue)
+        : pendingQty * effectiveRate;
 
       let ageDays = 0;
       if (row.poDate) {
@@ -2597,6 +2617,8 @@ export default function SalesAnalysis() {
         ...row,
         amt,
         currRate,
+        isBrCurrency: isBrCurrency ? 1 : 0,
+        effectiveRate,
         value,
         pendingQty,
         pendingValue,
@@ -2605,7 +2627,7 @@ export default function SalesAnalysis() {
         invDate
       };
     });
-  }, [poLedger]);
+  }, [poLedger, poIsBrCurrency]);
 
   const uniquePoTypes = useMemo(() => {
     const types = new Set();
@@ -4193,50 +4215,69 @@ export default function SalesAnalysis() {
       if (schDate && !item.schDate) item.schDate = schDate;
     };
 
-    if (processedPoLedger && processedPoLedger.length > 0) {
-      const seenLineKeys = new Set();
-      processedPoLedger.forEach((r) => {
-        if (appliedSelectedCustomers.length > 0 && !appliedSelectedCustomers.includes(r.custName)) {
-          return;
-        }
-        let pNo = (r.partNo || "").trim();
-        let desc = (r.description || "").trim();
-        if (!pNo && r.partDesc) {
-          if (r.partDesc.includes(" - ")) {
-            const parts = r.partDesc.split(" - ");
-            pNo = parts[0].trim();
-            desc = parts.slice(1).join(" - ").trim();
-          } else {
-            pNo = r.partDesc.trim();
-            desc = "—";
-          }
-        }
-        const lineKey = `${r.apoNo || ""}::${r.poNo || ""}::${r.poSlNo || ""}::${pNo}`;
-        const isFirst = !seenLineKeys.has(lineKey);
-        seenLineKeys.add(lineKey);
-        const poQty = isFirst ? (Number(r.qty) || 0) : 0;
-        const salQty = Number(r.dcQty) || 0;
-        const pendQty = isFirst ? (r.pendingQty !== undefined ? Number(r.pendingQty) : Math.max(0, poQty - salQty)) : 0;
-        addPoRow(r.custName, pNo, desc, poQty, salQty, pendQty, r.poDate, r.dcDate || r.poDate);
-      });
-    } else if (invoiceRows && invoiceRows.length > 0) {
-      invoiceRows.forEach((r) => {
+    if (pendingPoFilterMode === "sch") {
+      (poSchRows || []).forEach((r) => {
         if (appliedSelectedCustomers.length > 0 && !appliedSelectedCustomers.includes(r.customer)) {
           return;
         }
-        const rawQty = typeof r.qty === "number" ? r.qty : String(r.qty || "").replace(/,/g, "").trim();
-        const salQty = Number(rawQty) || 0;
-        const poQty = Math.round(salQty * 1.25);
-        const pendQty = Math.max(0, poQty - salQty);
-        addPoRow(r.customer, r.part_no, r.description, poQty, salQty, pendQty, r.inv_date || r.date, r.inv_date || r.date);
+        addPoRow(
+          r.customer,
+          r.partNo,
+          r.description,
+          r.poQty,
+          r.salQty,
+          r.pendQty,
+          r.poDate,
+          r.schDate
+        );
       });
+    } else {
+      // Po Date Wise
+      if (processedPoLedger && processedPoLedger.length > 0) {
+        const seenLineKeys = new Set();
+        processedPoLedger.forEach((r) => {
+          if (appliedSelectedCustomers.length > 0 && !appliedSelectedCustomers.includes(r.custName)) {
+            return;
+          }
+          let pNo = (r.partNo || "").trim();
+          let desc = (r.description || "").trim();
+          if (!pNo && r.partDesc) {
+            if (r.partDesc.includes(" - ")) {
+              const parts = r.partDesc.split(" - ");
+              pNo = parts[0].trim();
+              desc = parts.slice(1).join(" - ").trim();
+            } else {
+              pNo = r.partDesc.trim();
+              desc = "—";
+            }
+          }
+          const lineKey = `${r.apoNo || ""}::${r.poNo || ""}::${r.poSlNo || ""}::${pNo}`;
+          const isFirst = !seenLineKeys.has(lineKey);
+          seenLineKeys.add(lineKey);
+          const poQty = isFirst ? (Number(r.qty) || 0) : 0;
+          const salQty = Number(r.dcQty) || 0;
+          const pendQty = isFirst ? (r.pendingQty !== undefined ? Number(r.pendingQty) : Math.max(0, poQty - salQty)) : 0;
+          addPoRow(r.custName, pNo, desc, poQty, salQty, pendQty, r.poDate, r.dcDate || r.poDate);
+        });
+      } else if (invoiceRows && invoiceRows.length > 0) {
+        invoiceRows.forEach((r) => {
+          if (appliedSelectedCustomers.length > 0 && !appliedSelectedCustomers.includes(r.customer)) {
+            return;
+          }
+          const rawQty = typeof r.qty === "number" ? r.qty : String(r.qty || "").replace(/,/g, "").trim();
+          const salQty = Number(rawQty) || 0;
+          const poQty = Math.round(salQty * 1.25);
+          const pendQty = Math.max(0, poQty - salQty);
+          addPoRow(r.customer, r.part_no, r.description, poQty, salQty, pendQty, r.inv_date || r.date, r.inv_date || r.date);
+        });
+      }
     }
 
     return Array.from(map.values()).map(item => ({
       ...item,
       description: item.description || "—"
     }));
-  }, [processedPoLedger, invoiceRows, appliedSelectedCustomers]);
+  }, [processedPoLedger, poSchRows, pendingPoFilterMode, invoiceRows, appliedSelectedCustomers]);
 
   const filteredPendingPoList = useMemo(() => {
     let list = [...pendingPoSummaryData];
@@ -4249,15 +4290,10 @@ export default function SalesAnalysis() {
           r.description.toLowerCase().includes(q)
       );
     }
-    if (pendingPoFilterMode === "sch") {
-      // Po sch wise: sort by pending urgency
-      list.sort((a, b) => b.poPendQty - a.poPendQty || b.poQty - a.poQty);
-    } else {
-      // Po date wise: sort by PO Date / Total volume
-      list.sort((a, b) => (b.poDate || "").localeCompare(a.poDate || "") || b.poQty - a.poQty);
-    }
+    // Sort by PO Qty descending (matching the first image summary view), then pending qty descending
+    list.sort((a, b) => (b.poQty - a.poQty) || (b.poPendQty - a.poPendQty));
     return list;
-  }, [pendingPoSummaryData, pendingPoSearch, pendingPoFilterMode]);
+  }, [pendingPoSummaryData, pendingPoSearch]);
 
   const pendingPoTotals = useMemo(() => {
     return filteredPendingPoList.reduce(
@@ -4278,154 +4314,95 @@ export default function SalesAnalysis() {
   }, [filteredPendingPoList, pendingPoPage, pendingPoPageSize]);
 
   // ── 2. Customer & Part-Wise Schedule Analysis Data Hook ──
+  const displaySchedMonths = useMemo(() => {
+    if (schedAnalysisMonths && schedAnalysisMonths.length > 0) {
+      return schedAnalysisMonths;
+    }
+    const list = [];
+    if (appliedDateRange?.from && appliedDateRange?.to) {
+      let cur = new Date(appliedDateRange.from);
+      const end = new Date(appliedDateRange.to);
+      cur.setDate(1);
+      while (cur <= end) {
+        const monthName = cur.toLocaleString("en-US", { month: "long" });
+        const yr = String(cur.getFullYear()).slice(-2);
+        const key = `${monthName}-${yr}`;
+        list.push({ key, label: key });
+        cur.setMonth(cur.getMonth() + 1);
+      }
+    }
+    return list.length > 0 ? list : [{ key: "September-26", label: "September-26" }];
+  }, [schedAnalysisMonths, appliedDateRange.from, appliedDateRange.to]);
+
   const scheduleAnalysisData = useMemo(() => {
-    const map = new Map();
-
-    const getOrCreate = (cust, partNo, desc) => {
-      const c = (cust || "—").trim();
-      const p = (partNo || "—").trim();
-      const d = (desc || "—").trim();
-      const key = `${c}___${p}`;
-
-      if (!map.has(key)) {
-        map.set(key, {
-          key,
-          customer: c,
-          partNo: p,
-          description: d !== "—" ? d : "",
-          august: { schdQty: 0, schdVal: 0, salQty: 0, salVal: 0 },
-          september: { schdQty: 0, schdVal: 0, salQty: 0, salVal: 0 },
-          totalSchdQty: 0,
-          totalSchdVal: 0,
-          totalSalQty: 0,
-          totalSalVal: 0,
-        });
-      }
-      const item = map.get(key);
-      if (!item.description && d && d !== "—") {
-        item.description = d;
-      }
-      return item;
-    };
-
-    // 1. Process Invoices (Sales Actuals for August & September)
-    if (invoiceRows && invoiceRows.length > 0) {
-      invoiceRows.forEach((r) => {
+    if (backendScheduleAnalysis && backendScheduleAnalysis.length > 0) {
+      return backendScheduleAnalysis.filter((r) => {
         if (appliedSelectedCustomers.length > 0 && !appliedSelectedCustomers.includes(r.customer)) {
-          return;
+          return false;
         }
-        const item = getOrCreate(r.customer, r.part_no, r.description);
-        const mKey = getMonthKeyHelper(r.inv_date || r.date);
-        const rawQty = typeof r.qty === "number" ? r.qty : String(r.qty || "").replace(/,/g, "").trim();
-        const rawAmt = typeof r.amount === "number" ? r.amount : String(r.amount || "").replace(/,/g, "").trim();
-        const q = Number(rawQty) || 0;
-        const val = Number(rawAmt) || (q * (Number(r.rate) || 0));
-
-        if (mKey === "August-26") {
-          item.august.salQty += q;
-          item.august.salVal += val;
-        } else if (mKey === "September-26") {
-          item.september.salQty += q;
-          item.september.salVal += val;
-        } else {
-          item.september.salQty += q;
-          item.september.salVal += val;
-        }
-        item.totalSalQty += q;
-        item.totalSalVal += val;
+        return true;
       });
     }
 
-    // 2. Process PO Ledger (Schedule Qty & Schedule Value)
-    if (processedPoLedger && processedPoLedger.length > 0) {
-      const seenLineKeys = new Set();
-      processedPoLedger.forEach((r) => {
-        if (appliedSelectedCustomers.length > 0 && !appliedSelectedCustomers.includes(r.custName)) {
+    // Fallback: Group from poSchRows using real ERP schedule Qty, effective rate, and sales Qty/Val
+    if (poSchRows && poSchRows.length > 0) {
+      const map = new Map();
+
+      poSchRows.forEach((s) => {
+        if (appliedSelectedCustomers.length > 0 && !appliedSelectedCustomers.includes(s.customer)) {
           return;
         }
-        let pNo = (r.partNo || "").trim();
-        let desc = (r.description || "").trim();
-        if (!pNo && r.partDesc) {
-          if (r.partDesc.includes(" - ")) {
-            const parts = r.partDesc.split(" - ");
-            pNo = parts[0].trim();
-            desc = parts.slice(1).join(" - ").trim();
-          } else {
-            pNo = r.partDesc.trim();
-            desc = "—";
-          }
-        }
-        const lineKey = `${r.apoNo || ""}::${r.poNo || ""}::${r.poSlNo || ""}::${pNo}`;
-        if (seenLineKeys.has(lineKey)) return;
-        seenLineKeys.add(lineKey);
+        const c = (s.customer || "—").trim();
+        const p = (s.partNo || "—").trim();
+        const d = (s.description || "—").trim();
+        const key = `${c}___${p}`;
 
-        const item = getOrCreate(r.custName, pNo, desc);
-        const mKey = getMonthKeyHelper(r.dcDate || r.poDate);
-        const q = Number(r.qty) || 0;
-        const rate = Number(r.rate) || 1;
-        const val = Number(r.amt) || (q * rate);
-
-        if (mKey === "August-26") {
-          item.august.schdQty += q;
-          item.august.schdVal += val;
-        } else if (mKey === "September-26") {
-          item.september.schdQty += q;
-          item.september.schdVal += val;
-        } else {
-          item.august.schdQty += Math.round(q * 0.5);
-          item.august.schdVal += val * 0.5;
-          item.september.schdQty += Math.round(q * 0.5);
-          item.september.schdVal += val * 0.5;
+        if (!map.has(key)) {
+          const mObj = {};
+          displaySchedMonths.forEach((m) => {
+            mObj[m.key] = { schdQty: 0, schdVal: 0, salQty: 0, salVal: 0 };
+          });
+          map.set(key, {
+            key,
+            customer: c,
+            partNo: p,
+            description: d !== "—" ? d : "",
+            months: mObj,
+            totalSchdQty: 0,
+            totalSchdVal: 0,
+            totalSalQty: 0,
+            totalSalVal: 0,
+          });
         }
-        item.totalSchdQty += q;
-        item.totalSchdVal += val;
+        const item = map.get(key);
+        if (!item.description && d && d !== "—") item.description = d;
+
+        const mKey = getMonthKeyHelper(s.schDate || s.poDate);
+        const schdQty = Number(s.poQty) || 0;
+        const schdVal = Number(s.schdVal) || (schdQty * (Number(s.effectiveRate) || Number(s.rate) || 0));
+        const salQty = Number(s.salQty) || 0;
+        const salVal = Number(s.salVal) || (salQty * (Number(s.effectiveRate) || Number(s.rate) || 0));
+
+        if (item.months && item.months[mKey]) {
+          item.months[mKey].schdQty += schdQty;
+          item.months[mKey].schdVal += schdVal;
+          item.months[mKey].salQty += salQty;
+          item.months[mKey].salVal += salVal;
+        }
+
+        item.totalSchdQty += schdQty;
+        item.totalSchdVal += schdVal;
+        item.totalSalQty += salQty;
+        item.totalSalVal += salVal;
       });
+
+      return Array.from(map.values()).filter(
+        (it) => it.customer !== "—" && (it.totalSchdQty > 0 || it.totalSalQty > 0 || it.partNo !== "—")
+      );
     }
 
-    // 3. Match with Projections where available
-    if (projections && projections.length > 0) {
-      projections.forEach((p) => {
-        if (appliedSelectedCustomers.length > 0 && !appliedSelectedCustomers.includes(p.customer)) {
-          return;
-        }
-        const sMonth = (p.schdMonth || "").toLowerCase();
-        for (const item of map.values()) {
-          if (item.customer === p.customer) {
-            if (sMonth.includes("august") && item.august.schdQty === 0) {
-              item.august.schdQty = Math.round(Number(p.schdQty) || 0);
-              item.august.schdVal = Number(p.totAmt) || 0;
-            } else if (sMonth.includes("september") && item.september.schdQty === 0) {
-              item.september.schdQty = Math.round(Number(p.schdQty) || 0);
-              item.september.schdVal = Number(p.totAmt) || 0;
-            }
-          }
-        }
-      });
-    }
-
-    // 4. Ensure realistic schedule benchmarks
-    for (const item of map.values()) {
-      if (!item.description || item.description === "—") {
-        item.description = item.partNo !== "—" ? `Part ${item.partNo}` : "Assembly Component";
-      }
-      if (item.august.salQty > 0 && item.august.schdQty === 0) {
-        item.august.schdQty = Math.round(item.august.salQty * 1.1);
-        item.august.schdVal = Math.round(item.august.salVal * 1.1);
-      }
-      if (item.september.salQty > 0 && item.september.schdQty === 0) {
-        item.september.schdQty = Math.round(item.september.salQty * 1.15);
-        item.september.schdVal = Math.round(item.september.salVal * 1.15);
-      }
-      item.totalSchdQty = item.august.schdQty + item.september.schdQty;
-      item.totalSchdVal = item.august.schdVal + item.september.schdVal;
-      item.totalSalQty = item.august.salQty + item.september.salQty;
-      item.totalSalVal = item.august.salVal + item.september.salVal;
-    }
-
-    return Array.from(map.values()).filter(
-      (it) => it.customer !== "—" && (it.totalSchdQty > 0 || it.totalSalQty > 0 || it.partNo !== "—")
-    );
-  }, [invoiceRows, processedPoLedger, projections, appliedSelectedCustomers]);
+    return [];
+  }, [backendScheduleAnalysis, poSchRows, displaySchedMonths, appliedSelectedCustomers]);
 
   const filteredSchedList = useMemo(() => {
     let list = [...scheduleAnalysisData];
@@ -4438,30 +4415,31 @@ export default function SalesAnalysis() {
           r.description.toLowerCase().includes(q)
       );
     }
-    list.sort((a, b) => (b.september.salVal + b.august.salVal) - (a.september.salVal + a.august.salVal));
+    list.sort((a, b) => {
+      const bVal = b.totalSchdVal ?? 0;
+      const aVal = a.totalSchdVal ?? 0;
+      if (bVal !== aVal) return bVal - aVal;
+      return (b.totalSalVal ?? 0) - (a.totalSalVal ?? 0);
+    });
     return list;
   }, [scheduleAnalysisData, schedSearch]);
 
   const schedTotals = useMemo(() => {
-    return filteredSchedList.reduce(
-      (acc, r) => {
-        acc.augSchdQty += r.august.schdQty;
-        acc.augSchdVal += r.august.schdVal;
-        acc.augSalQty += r.august.salQty;
-        acc.augSalVal += r.august.salVal;
-
-        acc.sepSchdQty += r.september.schdQty;
-        acc.sepSchdVal += r.september.schdVal;
-        acc.sepSalQty += r.september.salQty;
-        acc.sepSalVal += r.september.salVal;
-        return acc;
-      },
-      {
-        augSchdQty: 0, augSchdVal: 0, augSalQty: 0, augSalVal: 0,
-        sepSchdQty: 0, sepSchdVal: 0, sepSalQty: 0, sepSalVal: 0
-      }
-    );
-  }, [filteredSchedList]);
+    const totals = {};
+    displaySchedMonths.forEach((m) => {
+      totals[m.key] = { schdQty: 0, schdVal: 0, salQty: 0, salVal: 0 };
+    });
+    filteredSchedList.forEach((r) => {
+      displaySchedMonths.forEach((m) => {
+        const mData = r.months?.[m.key] || (m.key.toLowerCase().startsWith('aug') ? r.august : r.september) || {};
+        totals[m.key].schdQty += Number(mData.schdQty) || 0;
+        totals[m.key].schdVal += Number(mData.schdVal) || 0;
+        totals[m.key].salQty += Number(mData.salQty) || 0;
+        totals[m.key].salVal += Number(mData.salVal) || 0;
+      });
+    });
+    return totals;
+  }, [filteredSchedList, displaySchedMonths]);
 
   const totalSchedPages = Math.max(1, Math.ceil(filteredSchedList.length / schedPageSize));
   const paginatedSchedList = useMemo(() => {
@@ -5698,7 +5676,7 @@ export default function SalesAnalysis() {
     // ── Tier 3: Deep Data & Tables — one bundle request, started immediately so
     //    it overlaps the head bundle instead of waiting for it (was a waterfall).
     const tablesParams = new URLSearchParams(params);
-    tablesParams.set("keys", "invoice_details,future_projections,plan_vs_actual,po_ledger,traceability");
+    tablesParams.set("keys", "invoice_details,future_projections,plan_vs_actual,po_ledger,traceability,schedule_analysis");
     const pTables = fetch(`${API_BASE}/sales-analysis/bundle/?${tablesParams}`, fetchOpts)
       .then(async (r) => {
         const bundleData = await r.json();
@@ -5716,14 +5694,33 @@ export default function SalesAnalysis() {
           () => { setInvoiceRows([]); setInvoiceBtypes([]); });
         pick("future_projections", "Future projections", (x) => setProjections(x.rows ?? []), () => setProjections([]));
         pick("plan_vs_actual", "Plan vs actual", (x) => setPlanVsActual(x.rows ?? []), () => setPlanVsActual([]));
-        pick("po_ledger", "PO ledger", (x) => setPoLedger(x.rows ?? []), () => setPoLedger([]));
+        pick("po_ledger", "PO ledger", (x) => {
+          setPoLedger(x.rows ?? []);
+          setPoSchRows(x.schRows ?? []);
+          setPoIsBrCurrency(Number(x.isBrCurrency ?? (x.rows?.[0]?.isBrCurrency ?? 0)));
+        }, () => {
+          setPoLedger([]);
+          setPoSchRows([]);
+          setPoIsBrCurrency(0);
+        });
         pick("traceability", "Traceability", (x) => setTraceability(x.rows ?? []), () => setTraceability([]));
+        pick("schedule_analysis", "Schedule analysis",
+          (x) => {
+            setBackendScheduleAnalysis(x.rows ?? []);
+            setSchedAnalysisMonths(x.months ?? []);
+          },
+          () => {
+            setBackendScheduleAnalysis([]);
+            setSchedAnalysisMonths([]);
+          }
+        );
       })
       .catch((err) => {
         if (err.name !== "AbortError") {
           console.error("Sales tables bundle fetch failed:", err);
           setInvoiceRows([]); setInvoiceBtypes([]); setProjections([]);
           setPlanVsActual([]); setPoLedger([]); setTraceability([]);
+          setBackendScheduleAnalysis([]); setSchedAnalysisMonths([]);
         }
       })
       .finally(() => {
@@ -6719,9 +6716,6 @@ export default function SalesAnalysis() {
                 </span>
                 Customer &amp; Part-Wise Schedule Analysis
               </span>
-              {/* <span className="sa-badge sa-badge--purple" title="Total matching schedules"> */}
-              {/* {filteredSchedList.length} Items */}
-              {/* </span> */}
             </div>
 
             <div className="sa-card__actions-group">
@@ -6769,16 +6763,17 @@ export default function SalesAnalysis() {
                 <col className="sa-col-sc-cust" />
                 <col className="sa-col-sc-partno" />
                 <col className="sa-col-sc-desc" />
-                {/* August */}
-                <col className="sa-col-sc-aug-schdqty" />
-                <col className="sa-col-sc-aug-schdval" />
-                <col className="sa-col-sc-aug-salqty" />
-                <col className="sa-col-sc-aug-salval" />
-                {/* September */}
-                <col className="sa-col-sc-sep-schdqty" />
-                <col className="sa-col-sc-sep-schdval" />
-                <col className="sa-col-sc-sep-salqty" />
-                <col className="sa-col-sc-sep-salval" />
+                {displaySchedMonths.map((m, mIdx) => {
+                  const prefix = mIdx % 2 === 0 ? "aug" : "sep";
+                  return (
+                    <Fragment key={m.key || mIdx}>
+                      <col className={`sa-col-sc-${prefix}-schdqty`} />
+                      <col className={`sa-col-sc-${prefix}-schdval`} />
+                      <col className={`sa-col-sc-${prefix}-salqty`} />
+                      <col className={`sa-col-sc-${prefix}-salval`} />
+                    </Fragment>
+                  );
+                })}
               </colgroup>
               <thead>
                 <tr>
@@ -6786,27 +6781,33 @@ export default function SalesAnalysis() {
                   <th rowSpan={2} className="sa-col-sc-cust">Customer</th>
                   <th rowSpan={2} className="sa-col-sc-partno">Partno</th>
                   <th rowSpan={2} className="sa-col-sc-desc">Description</th>
-                  <th colSpan={4} className="sa-sched-month-hdr sa-sched-month-hdr--aug">
-                    <span className="sa-month-hdr-pill sa-month-hdr-pill--aug">
-                      August-26
-                    </span>
-                  </th>
-                  <th colSpan={4} className="sa-sched-month-hdr sa-sched-month-hdr--sep">
-                    <span className="sa-month-hdr-pill sa-month-hdr-pill--sep">
-                      September-26
-                    </span>
-                  </th>
+                  {displaySchedMonths.map((m, mIdx) => {
+                    const theme = mIdx % 2 === 0 ? "aug" : "sep";
+                    return (
+                      <th
+                        key={m.key || mIdx}
+                        colSpan={4}
+                        className={`sa-sched-month-hdr sa-sched-month-hdr--${theme}`}
+                      >
+                        <span className={`sa-month-hdr-pill sa-month-hdr-pill--${theme}`}>
+                          {m.label || m.key}
+                        </span>
+                      </th>
+                    );
+                  })}
                 </tr>
                 <tr className="sa-sched-subhdr-row">
-                  <th className="sa-num sa-sched-subhdr-cell sa-sched-col-aug sa-col-sc-aug-schdqty">Schd Qty</th>
-                  <th className="sa-num sa-sched-subhdr-cell sa-sched-col-aug sa-col-sc-aug-schdval">Schd Val</th>
-                  <th className="sa-num sa-sched-subhdr-cell sa-sched-col-aug sa-col-sc-aug-salqty">Sal Qty</th>
-                  <th className="sa-num sa-sched-subhdr-cell sa-sched-col-aug sa-col-sc-aug-salval">Sal Val</th>
-
-                  <th className="sa-num sa-sched-subhdr-cell sa-sched-col-sep sa-col-sc-sep-schdqty">Schd Qty</th>
-                  <th className="sa-num sa-sched-subhdr-cell sa-sched-col-sep sa-col-sc-sep-schdval">Schd Val</th>
-                  <th className="sa-num sa-sched-subhdr-cell sa-sched-col-sep sa-col-sc-sep-salqty">Sal Qty</th>
-                  <th className="sa-num sa-sched-subhdr-cell sa-sched-col-sep sa-col-sc-sep-salval">Sal Val</th>
+                  {displaySchedMonths.map((m, mIdx) => {
+                    const theme = mIdx % 2 === 0 ? "aug" : "sep";
+                    return (
+                      <Fragment key={m.key || mIdx}>
+                        <th className={`sa-num sa-sched-subhdr-cell sa-sched-col-${theme} sa-col-sc-${theme}-schdqty`}>Schd Qty</th>
+                        <th className={`sa-num sa-sched-subhdr-cell sa-sched-col-${theme} sa-col-sc-${theme}-schdval`}>Schd Val</th>
+                        <th className={`sa-num sa-sched-subhdr-cell sa-sched-col-${theme} sa-col-sc-${theme}-salqty`}>Sal Qty</th>
+                        <th className={`sa-num sa-sched-subhdr-cell sa-sched-col-${theme} sa-col-sc-${theme}-salval`}>Sal Val</th>
+                      </Fragment>
+                    );
+                  })}
                 </tr>
               </thead>
               <tbody>
@@ -6817,7 +6818,7 @@ export default function SalesAnalysis() {
                       <td><div className="sa-skeleton" style={{ width: '130px', height: '14px' }} /></td>
                       <td><div className="sa-skeleton" style={{ width: '80px', height: '14px' }} /></td>
                       <td><div className="sa-skeleton" style={{ width: '130px', height: '14px' }} /></td>
-                      {[...Array(8)].map((_, colI) => (
+                      {[...Array(displaySchedMonths.length * 4)].map((_, colI) => (
                         <td key={colI} className="sa-num"><div className="sa-skeleton" style={{ width: '50px', height: '14px', marginLeft: 'auto' }} /></td>
                       ))}
                     </tr>
@@ -6835,50 +6836,49 @@ export default function SalesAnalysis() {
                             {row.customer}
                           </span>
                         </td>
-                        <td>
+                        <td className="sa-col-sc-partno-cell">
                           <span className="sa-partno-badge" title={row.partNo}>
                             {row.partNo}
                           </span>
                         </td>
-                        <td>
+                        <td className="sa-col-sc-desc-cell">
                           <span className="sa-part-desc-cell" title={row.description}>
                             {row.description}
                           </span>
                         </td>
 
-                        {/* August-26 Data */}
-                        <td className="sa-num sa-mono-num sa-col-aug-bg sa-col-sc-aug-schdqty" style={{ fontWeight: 600 }}>
-                          {row.august.schdQty > 0 ? formatQty(row.august.schdQty) : <span className="sa-num-empty">—</span>}
-                        </td>
-                        <td className="sa-num sa-mono-num sa-col-aug-bg sa-col-sc-aug-schdval" style={{ color: '#1e40af', fontWeight: 600 }}>
-                          {row.august.schdVal > 0 ? `₹${formatRupees(row.august.schdVal)}` : <span className="sa-num-empty">—</span>}
-                        </td>
-                        <td className="sa-num sa-mono-num sa-col-aug-bg sa-col-sc-aug-salqty" style={{ color: '#059669', fontWeight: 700 }}>
-                          {row.august.salQty > 0 ? formatQty(row.august.salQty) : <span className="sa-num-empty">—</span>}
-                        </td>
-                        <td className="sa-num sa-mono-num sa-col-aug-bg sa-col-sc-aug-salval" style={{ color: '#047857', fontWeight: 700 }}>
-                          {row.august.salVal > 0 ? `₹${formatRupees(row.august.salVal)}` : <span className="sa-num-empty">—</span>}
-                        </td>
+                        {displaySchedMonths.map((m, mIdx) => {
+                          const theme = mIdx % 2 === 0 ? "aug" : "sep";
+                          const mData = row.months?.[m.key] || (m.key.toLowerCase().startsWith('aug') ? row.august : row.september) || {};
+                          const schdQty = Number(mData.schdQty) || 0;
+                          const schdVal = Number(mData.schdVal) || 0;
+                          const salQty = Number(mData.salQty) || 0;
+                          const salVal = Number(mData.salVal) || 0;
+                          const valColor = theme === "aug" ? "#1e40af" : "#6b21a8";
 
-                        {/* September-26 Data */}
-                        <td className="sa-num sa-mono-num sa-col-sep-bg sa-col-sc-sep-schdqty" style={{ fontWeight: 600 }}>
-                          {row.september.schdQty > 0 ? formatQty(row.september.schdQty) : <span className="sa-num-empty">—</span>}
-                        </td>
-                        <td className="sa-num sa-mono-num sa-col-sep-bg sa-col-sc-sep-schdval" style={{ color: '#6b21a8', fontWeight: 600 }}>
-                          {row.september.schdVal > 0 ? `₹${formatRupees(row.september.schdVal)}` : <span className="sa-num-empty">—</span>}
-                        </td>
-                        <td className="sa-num sa-mono-num sa-col-sep-bg sa-col-sc-sep-salqty" style={{ color: '#059669', fontWeight: 700 }}>
-                          {row.september.salQty > 0 ? formatQty(row.september.salQty) : <span className="sa-num-empty">—</span>}
-                        </td>
-                        <td className="sa-num sa-mono-num sa-col-sep-bg sa-col-sc-sep-salval" style={{ color: '#047857', fontWeight: 700 }}>
-                          {row.september.salVal > 0 ? `₹${formatRupees(row.september.salVal)}` : <span className="sa-num-empty">—</span>}
-                        </td>
+                          return (
+                            <Fragment key={m.key || mIdx}>
+                              <td className={`sa-num sa-mono-num sa-col-${theme}-bg sa-col-sc-${theme}-schdqty`} style={{ fontWeight: 600 }}>
+                                {schdQty > 0 ? formatQty(schdQty) : <span className="sa-num-empty">—</span>}
+                              </td>
+                              <td className={`sa-num sa-mono-num sa-col-${theme}-bg sa-col-sc-${theme}-schdval`} style={{ color: valColor, fontWeight: 600 }}>
+                                {schdVal > 0 ? `₹${formatRupees(schdVal)}` : <span className="sa-num-empty">—</span>}
+                              </td>
+                              <td className={`sa-num sa-mono-num sa-col-${theme}-bg sa-col-sc-${theme}-salqty`} style={{ color: '#059669', fontWeight: 700 }}>
+                                {salQty > 0 ? formatQty(salQty) : <span className="sa-num-empty">—</span>}
+                              </td>
+                              <td className={`sa-num sa-mono-num sa-col-${theme}-bg sa-col-sc-${theme}-salval`} style={{ color: '#047857', fontWeight: 700 }}>
+                                {salVal > 0 ? `₹${formatRupees(salVal)}` : <span className="sa-num-empty">—</span>}
+                              </td>
+                            </Fragment>
+                          );
+                        })}
                       </tr>
                     );
                   })
                 ) : (
                   <tr>
-                    <td colSpan={12} className="sa-table-empty-cell">
+                    <td colSpan={4 + displaySchedMonths.length * 4} className="sa-table-empty-cell">
                       No schedule analysis items found.
                     </td>
                   </tr>
@@ -6891,33 +6891,32 @@ export default function SalesAnalysis() {
                       TOTAL ({filteredSchedList.length} ITEMS):
                     </td>
 
-                    {/* August Totals */}
-                    <td className="sa-num sa-mono-num sa-col-sc-aug-schdqty" style={{ fontWeight: 800 }}>
-                      {formatQty(schedTotals.augSchdQty)}
-                    </td>
-                    <td className="sa-num sa-mono-num sa-col-sc-aug-schdval" style={{ color: '#1e40af', fontWeight: 800 }}>
-                      ₹{formatRupees(schedTotals.augSchdVal)}
-                    </td>
-                    <td className="sa-num sa-mono-num sa-col-sc-aug-salqty" style={{ color: '#059669', fontWeight: 800 }}>
-                      {formatQty(schedTotals.augSalQty)}
-                    </td>
-                    <td className="sa-num sa-mono-num sa-col-sc-aug-salval" style={{ color: '#047857', fontWeight: 800 }}>
-                      ₹{formatRupees(schedTotals.augSalVal)}
-                    </td>
+                    {displaySchedMonths.map((m, mIdx) => {
+                      const theme = mIdx % 2 === 0 ? "aug" : "sep";
+                      const mTots = schedTotals[m.key] || {};
+                      const schdQty = mTots.schdQty || 0;
+                      const schdVal = mTots.schdVal || 0;
+                      const salQty = mTots.salQty || 0;
+                      const salVal = mTots.salVal || 0;
+                      const valColor = theme === "aug" ? "#1e40af" : "#6b21a8";
 
-                    {/* September Totals */}
-                    <td className="sa-num sa-mono-num sa-col-sc-sep-schdqty" style={{ fontWeight: 800 }}>
-                      {formatQty(schedTotals.sepSchdQty)}
-                    </td>
-                    <td className="sa-num sa-mono-num sa-col-sc-sep-schdval" style={{ color: '#6b21a8', fontWeight: 800 }}>
-                      ₹{formatRupees(schedTotals.sepSchdVal)}
-                    </td>
-                    <td className="sa-num sa-mono-num sa-col-sc-sep-salqty" style={{ color: '#059669', fontWeight: 800 }}>
-                      {formatQty(schedTotals.sepSalQty)}
-                    </td>
-                    <td className="sa-num sa-mono-num sa-col-sc-sep-salval" style={{ color: '#047857', fontWeight: 800 }}>
-                      ₹{formatRupees(schedTotals.sepSalVal)}
-                    </td>
+                      return (
+                        <Fragment key={m.key || mIdx}>
+                          <td className={`sa-num sa-mono-num sa-col-sc-${theme}-schdqty`} style={{ fontWeight: 800 }}>
+                            {formatQty(schdQty)}
+                          </td>
+                          <td className={`sa-num sa-mono-num sa-col-sc-${theme}-schdval`} style={{ color: valColor, fontWeight: 800 }}>
+                            ₹{formatRupees(schdVal)}
+                          </td>
+                          <td className={`sa-num sa-mono-num sa-col-sc-${theme}-salqty`} style={{ color: '#059669', fontWeight: 800 }}>
+                            {formatQty(salQty)}
+                          </td>
+                          <td className={`sa-num sa-mono-num sa-col-sc-${theme}-salval`} style={{ color: '#047857', fontWeight: 800 }}>
+                            ₹{formatRupees(salVal)}
+                          </td>
+                        </Fragment>
+                      );
+                    })}
                   </tr>
                 </tfoot>
               )}

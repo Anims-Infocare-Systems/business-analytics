@@ -1659,14 +1659,34 @@
     }
 }
 
-/* ── Skeleton / Lazy Loading Shimmer ── */
-.d1-skeleton-pulse {
-    background: #e2e8f0;
+/* ── Modern UI Skeleton Loading (Simple & Neat) ── */
+.d1-skel-line {
+    background: #e9eef5;
+    border-radius: 4px;
     position: relative;
     overflow: hidden;
 }
 
-.d1-skeleton-pulse::after {
+.d1-skel-pill {
+    background: #e9eef5;
+    border-radius: 100px;
+    position: relative;
+    overflow: hidden;
+}
+
+.d1-skel-icon {
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    position: relative;
+    overflow: hidden;
+    border: 1px solid rgba(226, 232, 240, 0.6);
+}
+
+.d1-skel-line::after,
+.d1-skel-pill::after,
+.d1-skel-icon::after,
+.d1-skel-bar::after {
     content: "";
     position: absolute;
     top: 0;
@@ -1674,17 +1694,105 @@
     bottom: 0;
     left: 0;
     transform: translateX(-100%);
-    background: linear-gradient(90deg,
-            rgba(255, 255, 255, 0) 0%,
-            rgba(255, 255, 255, 0.4) 20%,
-            rgba(255, 255, 255, 0.6) 60%,
-            rgba(255, 255, 255, 0) 100%);
-    animation: d1-shimmer 1.6s infinite;
+    background: linear-gradient(
+        90deg,
+        rgba(255, 255, 255, 0) 0%,
+        rgba(255, 255, 255, 0.75) 50%,
+        rgba(255, 255, 255, 0) 100%
+    );
+    animation: d1-modern-shimmer 1.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
 
-@keyframes d1-shimmer {
+@keyframes d1-modern-shimmer {
     100% {
         transform: translateX(100%);
+    }
+}
+
+.d1-kc--skeleton,
+.d1-cc--skeleton,
+.d1-tc--skeleton {
+    pointer-events: none;
+    user-select: none;
+}
+
+.d1-skel-spark {
+    width: 100%;
+    margin-top: auto;
+    overflow: hidden;
+    display: flex;
+    align-items: flex-end;
+}
+
+.d1-skel-bars {
+    display: flex;
+    justify-content: space-around;
+    align-items: flex-end;
+    height: 78px;
+    padding: 0 10px 4px;
+}
+
+.d1-skel-bar-group {
+    display: flex;
+    gap: 3px;
+    align-items: flex-end;
+    height: 100%;
+    width: 14%;
+}
+
+.d1-skel-bar {
+    width: 50%;
+    border-radius: 3px 3px 0 0;
+    position: relative;
+    overflow: hidden;
+}
+
+.d1-skel-linechart {
+    position: relative;
+    height: 78px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    padding: 0 8px 6px;
+}
+
+.d1-skel-grid-line {
+    position: absolute;
+    left: 8px;
+    right: 8px;
+    height: 1px;
+    background: #f1f5f9;
+}
+
+.d1-skel-points {
+    display: flex;
+    justify-content: space-between;
+    padding: 0 8px;
+    position: absolute;
+    bottom: 12px;
+    left: 8px;
+    right: 8px;
+}
+
+.d1-skel-point {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #cbd5e1;
+    opacity: 0.6;
+}
+
+.d1-skel-spark svg,
+.d1-skel-linechart svg {
+    animation: d1-skel-breathe 2.2s ease-in-out infinite alternate;
+}
+
+@keyframes d1-skel-breathe {
+    0% {
+        opacity: 0.6;
+    }
+    100% {
+        opacity: 1;
     }
 }
 

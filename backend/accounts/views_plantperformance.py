@@ -270,14 +270,21 @@ def dashboard2_customer_po_vs_sales(request):
 def dashboard2_grn_value(request):
     """Plant Performance — GRN Value (same pattern as dashboard2_customer_po_vs_sales)."""
     try:
-        from .views import get_tenant_connection
+        from .views import get_tenant_connection, parse_date_range
         conn, tenant = get_tenant_connection(request)
     except ValueError as e:
         return Response({"error": str(e)}, status=401)
 
     from datetime import datetime
 
-    sql = """
+    start_date, end_date = parse_date_range(request)
+    date_where = ""
+    params = []
+    if start_date and end_date:
+        date_where = " AND GM.grndate >= ? AND GM.grndate < DATEADD(day, 1, ?) "
+        params = [start_date, end_date]
+
+    sql = f"""
 SELECT
     GM.grnno,
     GM.grndate,
@@ -297,6 +304,7 @@ LEFT JOIN CustAliasMast CA
     ON GM.cid = CA.Id
 WHERE
     ISNULL(GM.deleted, 0) = 0
+    {date_where}
 GROUP BY
     GM.grnno,
     GM.grndate,
@@ -312,7 +320,7 @@ ORDER BY
     cursor = None
     try:
         cursor = conn.cursor()
-        cursor.execute(sql)
+        cursor.execute(sql, tuple(params))
         for row in cursor.fetchall() or []:
             grn_no = str(row[0]) if row[0] else ""
             grn_date_val = row[1]
@@ -808,7 +816,7 @@ ORDER BY
 def dashboard2_sales_analysis(request):
     """Plant Performance — Sales Analysis (Bill_Mas invoices, same pattern as customer_po_vs_sales)."""
     try:
-        from .views import get_tenant_connection
+        from .views import get_tenant_connection, parse_date_range
         from .views_sales_analysis import (
             _cust_join_sql,
             _cust_name_expr,
@@ -829,6 +837,13 @@ def dashboard2_sales_analysis(request):
         "July", "August", "September", "October", "November", "December",
     ]
 
+    start_date, end_date = parse_date_range(request)
+    date_where = ""
+    params = []
+    if start_date and end_date:
+        date_where = " AND m.invdt >= ? AND m.invdt < DATEADD(day, 1, ?) "
+        params = [start_date, end_date]
+
     rows = []
     cursor = None
     try:
@@ -846,6 +861,7 @@ SELECT
 FROM Bill_Mas m
 {join_sql}
 WHERE ISNULL(m.deleted, 0) = 0
+  {date_where}
   AND LOWER(LTRIM(RTRIM(ISNULL(m.btype, '')))) NOT IN (
         'with material rejection',
         'raw material insp rej',
@@ -868,7 +884,7 @@ WHERE ISNULL(m.deleted, 0) = 0
 ORDER BY m.invdt, m.invno;
         """
 
-        cursor.execute(sql)
+        cursor.execute(sql, tuple(params))
         for row in cursor.fetchall() or []:
             inv_no = str(row[0]).strip() if row[0] else ""
             inv_date_val = row[1]
@@ -942,7 +958,7 @@ def dashboard2_efficiency(request):
     start_date, end_date = parse_date_range(request)
     include_cnc = _parse_bool_param(request.GET.get("cnc"), True)
     include_conv = _parse_bool_param(request.GET.get("conv"), True)
-    load_full_fy = _parse_bool_param(request.GET.get("full_fy"), True)
+    load_full_fy = _parse_bool_param(request.GET.get("full_fy"), False)
 
     if not include_cnc and not include_conv:
         return Response({
@@ -989,7 +1005,7 @@ def dashboard2_oee(request):
     start_date, end_date = parse_date_range(request)
     include_cnc = _parse_bool_param(request.GET.get("cnc"), True)
     include_conv = _parse_bool_param(request.GET.get("conv"), True)
-    load_full_fy = _parse_bool_param(request.GET.get("full_fy"), True)
+    load_full_fy = _parse_bool_param(request.GET.get("full_fy"), False)
 
     if not include_cnc and not include_conv:
         return Response({
@@ -1037,7 +1053,7 @@ def dashboard2_rejection(request):
         return Response({"error": str(e)}, status=401)
 
     start_date, end_date = parse_date_range(request)
-    load_full_fy = _parse_bool_param(request.GET.get("full_fy"), True)
+    load_full_fy = _parse_bool_param(request.GET.get("full_fy"), False)
 
     cursor = None
     try:
@@ -1077,7 +1093,7 @@ def dashboard2_rework(request):
         return Response({"error": str(e)}, status=401)
 
     start_date, end_date = parse_date_range(request)
-    load_full_fy = _parse_bool_param(request.GET.get("full_fy"), True)
+    load_full_fy = _parse_bool_param(request.GET.get("full_fy"), False)
 
     cursor = None
     try:
@@ -2555,15 +2571,12 @@ def _po_month_labels(dt_val):
         po_date_str = raw[:10] if len(raw) >= 10 else raw
         mo = yr = None
         try:
-            from datetime import datetime
             parsed = datetime.strptime(po_date_str, "%Y-%m-%d")
             mo, yr = parsed.month, parsed.year
         except Exception:
             try:
-                from datetime import datetime
                 parsed = datetime.strptime(po_date_str[:10], "%d-%m-%Y")
                 mo, yr = parsed.month, parsed.year
-                po_date_str = parsed.strftime("%Y-%m-%d")
             except Exception:
                 return "—", "—"
     if not mo or not yr or mo < 1 or mo > 12:
@@ -2574,7 +2587,7 @@ def _po_month_labels(dt_val):
     )
 
 
-def _fetch_plant_performance_purchase_value_rows(conn, tenant):
+def _fetch_plant_performance_purchase_value_rows(conn, tenant, from_date=None, to_date=None):
     """
     PO line items for Plant Performance Purchase Value report.
     SQL/logic aligned with views_purchaseanalysis.purchase_analysis_po_table.
@@ -2654,6 +2667,11 @@ def _fetch_plant_performance_purchase_value_rows(conn, tenant):
         company_sql = f" AND M.[{po_cc}] = ?"
         params.append(company_code)
 
+    date_filter = ""
+    if from_date and to_date and po_date:
+        date_filter = f" AND M.[{po_date}] >= ? AND M.[{po_date}] < DATEADD(day, 1, ?)"
+        params.extend([from_date, to_date])
+
     rm_a = f"D.[{det_rm}]" if det_rm else "CAST(NULL AS NVARCHAR(256))"
     mt_a = f"D.[{det_mt}]" if det_mt else "CAST(NULL AS NVARCHAR(256))"
     mat_concat = (
@@ -2727,6 +2745,7 @@ def _fetch_plant_performance_purchase_value_rows(conn, tenant):
         WHERE {del_po_sql}
           {exclude_filter}
           {company_sql}
+          {date_filter}
         ORDER BY M.[{po_date}] DESC, M.[{po_pono}]
     """
 
@@ -2794,14 +2813,15 @@ def _fetch_plant_performance_purchase_value_rows(conn, tenant):
 def dashboard2_purchase_value(request):
     """Plant Performance — Purchase Value (PO lines, purchase analysis logic)."""
     try:
-        from .views import get_tenant_connection
+        from .views import get_tenant_connection, parse_date_range
         conn, tenant = get_tenant_connection(request)
     except ValueError as e:
         return Response({"error": str(e)}, status=401)
 
+    start_date, end_date = parse_date_range(request)
     cursor = None
     try:
-        rows = _fetch_plant_performance_purchase_value_rows(conn, tenant)
+        rows = _fetch_plant_performance_purchase_value_rows(conn, tenant, from_date=start_date, to_date=end_date)
     except Exception as e:
         if cursor:
             try:
@@ -5176,34 +5196,26 @@ def plant_performance_bundle(request):
             "errors": {"keys": "No valid bundle keys requested"},
         })
 
-    compare_views = [(k, v) for k, v in views_to_run if k in _COMPARE_BUNDLE_KEYS]
-    parallel_views = [(k, v) for k, v in views_to_run if k not in _COMPARE_BUNDLE_KEYS]
-
-    for key, view_fn in compare_views:
-        key, body, err = _bundle_fetch_one(key, view_fn, django_request)
-        if err:
-            err_str = str(err).lower()
-            if any(p in err_str for p in ("logged in from another", "session expired", "please login again", "please log in again")):
-                return Response({"error": str(err), "code": "session_terminated"}, status=401)
-            errors_out[key] = err
-            data_out[key] = None
-        else:
-            data_out[key] = body
-
-    if parallel_views:
-        max_workers = min(8, len(parallel_views))
+    max_workers = min(4, len(views_to_run))
+    try:
         with ThreadPoolExecutor(max_workers=max_workers) as pool:
             futures = [
                 pool.submit(_bundle_fetch_one, key, view_fn, django_request)
-                for key, view_fn in parallel_views
+                for key, view_fn in views_to_run
             ]
             for fut in as_completed(futures):
                 key, body, err = fut.result()
                 if err:
+                    err_str = str(err).lower()
+                    if any(p in err_str for p in ("logged in from another", "session expired", "please login again", "please log in again")):
+                        return Response({"error": str(err), "code": "session_terminated"}, status=401)
                     errors_out[key] = err
                     data_out[key] = None
                 else:
                     data_out[key] = body
+    finally:
+        from .utils.db import release_request_connections
+        release_request_connections(django_request)
 
     return Response({
         "from": from_param,

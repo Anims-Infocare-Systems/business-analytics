@@ -2841,6 +2841,41 @@ def daily_production_details(request):
             cur.close()
             return Response({"status": "error", "message": str(te), "data": []}, status=500)
 
+        idle_branches, idle_branch_params = _build_production_idle_branches(cur, from_date, to_date)
+        if idle_branches:
+            idle_union_subquery = "\n    UNION ALL\n".join(idle_branches)
+            shift_idle_cte = f""",
+ShiftIdleData AS
+(
+    SELECT
+        CONVERT(date, I.EntryDate) AS IdleDate,
+        I.Shift AS IdleShift,
+        LTRIM(RTRIM(CAST(I.MacNo AS NVARCHAR(100)))) AS IdleMacNo,
+        SUM(I.IdleSeconds) AS TotalShiftIdleSecs
+    FROM (
+        {idle_union_subquery}
+    ) I
+    GROUP BY CONVERT(date, I.EntryDate), I.Shift, LTRIM(RTRIM(CAST(I.MacNo AS NVARCHAR(100))))
+)"""
+            shift_idle_join = """
+LEFT JOIN ShiftIdleData SI
+    ON CONVERT(date, F.ProdDate) = SI.IdleDate
+   AND LTRIM(RTRIM(CAST(F.Machine AS NVARCHAR(100)))) = SI.IdleMacNo
+   AND LTRIM(RTRIM(CAST(F.Shift AS NVARCHAR(100)))) = LTRIM(RTRIM(CAST(SI.IdleShift AS NVARCHAR(100))))"""
+            idle_calc_expr = """CAST(
+        COALESCE(
+            NULLIF(F.IdleHours, 0),
+            CAST(ISNULL(SI.TotalShiftIdleSecs, 0) / 3600.0 AS DECIMAL(18,2)),
+            0
+        ) AS DECIMAL(18,2)
+    )"""
+            query_params = idle_branch_params
+        else:
+            shift_idle_cte = ""
+            shift_idle_join = ""
+            idle_calc_expr = "CAST(ISNULL(F.IdleHours, 0) AS DECIMAL(18,2))"
+            query_params = []
+
         touch_cnc_cte = """
 , TouchCNCData AS
 (
@@ -2884,7 +2919,14 @@ def daily_production_details(request):
                 ELSE 0
             END / 3600.0 AS DECIMAL(18,2)
         ) AS SettingTime,
-        CAST(1.00 AS DECIMAL(18,2)) AS DefaultSettingTime
+        CAST(1.00 AS DECIMAL(18,2)) AS DefaultSettingTime,
+        CAST(
+            CASE 
+                WHEN CTD.idlTime IS NOT NULL AND DATEDIFF(SECOND, 0, CTD.idlTime) > 0 
+                THEN DATEDIFF(SECOND, 0, CTD.idlTime) 
+                ELSE 0 
+            END / 3600.0 AS DECIMAL(18,2)
+        ) AS IdleHours
 
     FROM CncProd_TouchDet CTD
     INNER JOIN CncProd_TouchMas CTM ON CTD.TchEntryNo = CTM.TchEntryNo
@@ -2928,7 +2970,10 @@ def daily_production_details(request):
                 ELSE 0
             END / 3600.0 AS DECIMAL(18,2)
         ) AS SettingTime,
-        CAST(1.00 AS DECIMAL(18,2)) AS DefaultSettingTime
+        CAST(1.00 AS DECIMAL(18,2)) AS DefaultSettingTime,
+        CAST(
+            COALESCE(DATEDIFF(SECOND, 0, ISNULL(VTD.idlTime, '1900-01-01 00:00:00')), 0) / 3600.0 
+        AS DECIMAL(18,2)) AS IdleHours
 
     FROM ConvProd_TouchDet VTD
     INNER JOIN ConvProd_TouchMas VTM ON VTD.TchEntryNo = VTM.TchEntryNo
@@ -2956,7 +3001,7 @@ def daily_production_details(request):
         AS DECIMAL(18,0)) AS TargetQty,
 
         ISNULL(RTD.qty,0) AS OKQty,
-        ISNULL(RTD.OAEFF,0) AS EffPct,
+        ISNULL(RTD.EFF,0) AS EffPct,
         ISNULL(RTD.OEENEW,0) AS OEEPct,
         CAST(
             CASE 
@@ -2971,7 +3016,10 @@ def daily_production_details(request):
                 ELSE 0
             END / 3600.0 AS DECIMAL(18,2)
         ) AS SettingTime,
-        CAST(1.00 AS DECIMAL(18,2)) AS DefaultSettingTime
+        CAST(1.00 AS DECIMAL(18,2)) AS DefaultSettingTime,
+        CAST(
+            COALESCE(DATEDIFF(SECOND, 0, ISNULL(RTD.idlTime, '1900-01-01 00:00:00')), 0) / 3600.0 
+        AS DECIMAL(18,2)) AS IdleHours
 
     FROM ConvRodProd_TouchDet RTD
     INNER JOIN ConvRodProd_TouchMas RTM ON RTD.TchEntryNo = RTM.TchEntryNo
@@ -2990,7 +3038,10 @@ def daily_production_details(request):
 (
     SELECT
         CAST(prodid AS VARCHAR(50)) AS RefNo,
-        SUM(ISNULL(rejqty,0)) AS RejQty
+        SUM(ISNULL(matrejqty,0)) AS MatRej,
+        SUM(ISNULL(rejqty,0)) AS MacRej,
+        SUM(ISNULL(rwqty,0)) AS RwQty,
+        SUM(ISNULL(rejqty,0) + ISNULL(matrejqty,0)) AS RejQty
     FROM InterInspectionEntry
     WHERE deleted = 0
       AND TRY_CAST(prodid AS INT) IN (SELECT prodid FROM #FilteredPE)
@@ -3039,7 +3090,14 @@ ProductionEntryData AS
                 ELSE 0
             END / 3600.0 AS DECIMAL(18,2)
         ) AS SettingTime,
-        CAST(1.00 AS DECIMAL(18,2)) AS DefaultSettingTime
+        CAST(1.00 AS DECIMAL(18,2)) AS DefaultSettingTime,
+        CAST(
+            CASE 
+                WHEN PE.idlTime IS NOT NULL AND DATEDIFF(SECOND, 0, PE.idlTime) > 0 
+                THEN DATEDIFF(SECOND, 0, PE.idlTime) 
+                ELSE ISNULL(PE.accidletimesecs, 0) + ISNULL(PE.nonaccidletimesecs, 0) 
+            END / 3600.0 AS DECIMAL(18,2)
+        ) AS IdleHours
 
     FROM ProductionEntry PE
 
@@ -3086,7 +3144,10 @@ ConvProductionData AS
                 ELSE 0
             END / 3600.0 AS DECIMAL(18,2)
         ) AS SettingTime,
-        CAST(1.00 AS DECIMAL(18,2)) AS DefaultSettingTime
+        CAST(1.00 AS DECIMAL(18,2)) AS DefaultSettingTime,
+        CAST(
+            COALESCE(DATEDIFF(SECOND, 0, ISNULL(CPE.IdleTime, '1900-01-01 00:00:00')), 0) / 3600.0 
+        AS DECIMAL(18,2)) AS IdleHours
 
     FROM ConvProductionEntry CPE
 
@@ -3120,7 +3181,7 @@ ConvRodData AS
         AS DECIMAL(18,0)) AS TargetQty,
 
         ISNULL(CPR.qty,0) AS OKQty,
-        ISNULL(CPR.OAEFF,0) AS EffPct,
+        ISNULL(CPR.eff,0) AS EffPct,
         ISNULL(CPR.OEENEW,0) AS OEEPct,
         CAST(
             CASE 
@@ -3134,7 +3195,10 @@ ConvRodData AS
                 ELSE 0
             END / 3600.0 AS DECIMAL(18,2)
         ) AS SettingTime,
-        CAST(1.00 AS DECIMAL(18,2)) AS DefaultSettingTime
+        CAST(1.00 AS DECIMAL(18,2)) AS DefaultSettingTime,
+        CAST(
+            COALESCE(DATEDIFF(SECOND, 0, ISNULL(CPR.IdleTime, '1900-01-01 00:00:00')), 0) / 3600.0 
+        AS DECIMAL(18,2)) AS IdleHours
 
     FROM ConvProductionEntryRod CPR
 
@@ -3149,7 +3213,7 @@ ConvRodData AS
        AND PT.deleted = 0
 
     WHERE CPR.entryno IN (SELECT entryno FROM #FilteredCPR)
-){touch_cnc_cte}{touch_conv_cte}{touch_rod_cte},
+){touch_cnc_cte}{touch_conv_cte}{touch_rod_cte}{shift_idle_cte},
 
 FinalData AS
 (
@@ -3174,7 +3238,12 @@ SELECT
     ISNULL(F.TargetQty,0) AS [Target],
     ISNULL(F.OKQty,0) AS [OKQty],
     ISNULL(R.RejQty,0) AS [Rej],
+    ISNULL(R.MatRej,0) AS [MatRej],
+    ISNULL(R.MacRej,0) AS [MacRej],
+    ISNULL(R.RwQty,0) AS [RwQty],
+    {idle_calc_expr} AS [IdleHours],
     CAST(F.EffPct AS DECIMAL(18,2)) AS [EffPct],
+    CAST(F.EffPct AS DECIMAL(18,2)) AS [OprEffPct],
     CAST(F.OEEPct AS DECIMAL(18,2)) AS [OEEPct],
 
     CAST(F.SettingTime AS DECIMAL(18,2)) AS [SettingTime],
@@ -3188,12 +3257,16 @@ SELECT
 FROM FinalData F
 
 LEFT JOIN RejData R ON F.RefNo = R.RefNo
+{shift_idle_join}
 
 ORDER BY F.ProdDate DESC, F.Machine, F.Shift;
         """
 
         try:
-            cur.execute(sql)
+            if query_params:
+                cur.execute(sql, query_params)
+            else:
+                cur.execute(sql)
             rows = cur.fetchall()
             columns = [desc[0] for desc in cur.description]
         except Exception as qe:
@@ -3213,12 +3286,13 @@ ORDER BY F.ProdDate DESC, F.Machine, F.Shift;
                 except AttributeError:
                     record["Date"] = str(prod_date)
             # Ensure numeric types are JSON-safe
-            for key in ["Target", "OKQty", "Rej", "EffPct", "OEEPct", "SettingTime", "DefaultSettingTime"]:
+            for key in ["Target", "OKQty", "Rej", "MatRej", "MacRej", "RwQty", "IdleHours", "EffPct", "OprEffPct", "OEEPct", "SettingTime", "DefaultSettingTime"]:
                 v = record.get(key)
                 if v is not None:
-                    record[key] = float(v) if key in ("EffPct", "OEEPct", "SettingTime", "DefaultSettingTime") else int(v)
+                    record[key] = float(v) if key in ("IdleHours", "EffPct", "OprEffPct", "OEEPct", "SettingTime", "DefaultSettingTime") else int(v)
                 else:
                     record[key] = 0
+            record["IdleHrs"] = record.get("IdleHours", 0.0)
             data.append(record)
 
         return Response({
