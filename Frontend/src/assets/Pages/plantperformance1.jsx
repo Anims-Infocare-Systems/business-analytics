@@ -1114,16 +1114,24 @@ function fmtPct(n, d = 1) {
 }
 
 function fmtHours(n) {
-  if (n === null || n === undefined) return "—";
+  if (n === null || n === undefined || n === "") return "—";
   if (typeof n === "string" && (n.includes("Hrs") || n.includes("Mins"))) {
     return n;
+  }
+  if (typeof n === "string" && n.includes(":")) {
+    const parts = n.replace(/,/g, "").trim().split(":");
+    if (parts.length >= 2) {
+      const h = parseInt(parts[0], 10) || 0;
+      const m = parseInt(parts[1], 10) || 0;
+      return `${h.toLocaleString()} Hrs ${m} Mins`;
+    }
   }
   const v = Number(n);
   if (Number.isNaN(v)) return "—";
   const totalMins = Math.round(v * 60);
   const hrs = Math.floor(totalMins / 60);
   const mins = totalMins % 60;
-  return `${hrs} Hrs ${mins} Mins`;
+  return `${hrs.toLocaleString()} Hrs ${mins} Mins`;
 }
 
 function qualitySplit(data) {
@@ -10202,18 +10210,23 @@ function IdleHoursReportDashboardView({ data, loading, filters, onFilterChange, 
   const [chartTypeOpen, setChartTypeOpen] = React.useState(false);
   const [liveLogs, setLiveLogs] = React.useState(() => {
     if (Array.isArray(initialData?.rows) && initialData.rows.length > 0) {
-      return initialData.rows.map(row => ({
-        date: row.entry_date ? row.entry_date.slice(0, 10) : "",
-        machine: row.mac_no || "",
-        operator: row.operator || "",
-        reason: row.reason || "",
-        shift: row.shift || "",
-        duration: Number(row.total_idle_hours_decimal) || 0,
-        ratePerHour: Number(row.rate_per_hour) || 500,
-      }));
+      return initialData.rows.map(row => {
+        const idleSecs = Number(row.idle_seconds) || Math.round((Number(row.total_idle_hours_decimal) || 0) * 3600);
+        return {
+          date: row.entry_date ? row.entry_date.slice(0, 10) : "",
+          machine: row.mac_no || "",
+          operator: row.operator || "",
+          reason: row.reason || "",
+          shift: row.shift || "",
+          duration: idleSecs / 3600.0,
+          idleSeconds: idleSecs,
+          ratePerHour: Number(row.rate_per_hour) || 500,
+        };
+      });
     }
     return [];
   });
+  const [serverKpis, setServerKpis] = React.useState(() => initialData?.kpis || null);
   const [isLoading, setIsLoading] = React.useState(false);
   const [filterOptions, setFilterOptions] = React.useState({ machines: [], reasons: [] });
   const chartTypeRef = React.useRef(null);
@@ -10233,16 +10246,23 @@ function IdleHoursReportDashboardView({ data, loading, filters, onFilterChange, 
   }, []);
 
   React.useEffect(() => {
+    if (initialData?.kpis) {
+      setServerKpis(initialData.kpis);
+    }
     if (liveLogs.length === 0 && Array.isArray(initialData?.rows) && initialData.rows.length > 0) {
-      const mapped = initialData.rows.map(row => ({
-        date: row.entry_date ? row.entry_date.slice(0, 10) : "",
-        machine: row.mac_no || "",
-        operator: row.operator || "",
-        reason: row.reason || "",
-        shift: row.shift || "",
-        duration: Number(row.total_idle_hours_decimal) || 0,
-        ratePerHour: Number(row.rate_per_hour) || 500,
-      }));
+      const mapped = initialData.rows.map(row => {
+        const idleSecs = Number(row.idle_seconds) || Math.round((Number(row.total_idle_hours_decimal) || 0) * 3600);
+        return {
+          date: row.entry_date ? row.entry_date.slice(0, 10) : "",
+          machine: row.mac_no || "",
+          operator: row.operator || "",
+          reason: row.reason || "",
+          shift: row.shift || "",
+          duration: idleSecs / 3600.0,
+          idleSeconds: idleSecs,
+          ratePerHour: Number(row.rate_per_hour) || 500,
+        };
+      });
       setLiveLogs(mapped);
     }
   }, [initialData]);
@@ -10330,6 +10350,9 @@ function IdleHoursReportDashboardView({ data, loading, filters, onFilterChange, 
       .then(({ ok, json }) => {
         if (!ok || !json) throw new Error("Idle Report fetch failed");
         onIdleData?.(json);
+        if (json.kpis) {
+          setServerKpis(json.kpis);
+        }
         if (json.filter_options) {
           setFilterOptions({
             machines: Array.isArray(json.filter_options.machines) ? json.filter_options.machines : [],
@@ -10338,15 +10361,19 @@ function IdleHoursReportDashboardView({ data, loading, filters, onFilterChange, 
           });
         }
         if (Array.isArray(json.rows)) {
-          const mapped = json.rows.map(row => ({
-            date: row.entry_date ? row.entry_date.slice(0, 10) : "",
-            machine: row.mac_no || "",
-            operator: row.operator || "",
-            reason: row.reason || "",
-            shift: row.shift || "",
-            duration: Number(row.total_idle_hours_decimal) || 0,
-            ratePerHour: Number(row.rate_per_hour) || 500,
-          }));
+          const mapped = json.rows.map(row => {
+            const idleSecs = Number(row.idle_seconds) || Math.round((Number(row.total_idle_hours_decimal) || 0) * 3600);
+            return {
+              date: row.entry_date ? row.entry_date.slice(0, 10) : "",
+              machine: row.mac_no || "",
+              operator: row.operator || "",
+              reason: row.reason || "",
+              shift: row.shift || "",
+              duration: idleSecs / 3600.0,
+              idleSeconds: idleSecs,
+              ratePerHour: Number(row.rate_per_hour) || 500,
+            };
+          });
           setLiveLogs(mapped);
         } else {
           setLiveLogs([]);
@@ -10397,7 +10424,23 @@ function IdleHoursReportDashboardView({ data, loading, filters, onFilterChange, 
       ];
     }
 
-    const totalIdleHours = filteredLogs.reduce((sum, r) => sum + r.duration, 0);
+    const hasOperatorFilter = Boolean(filters.operator && filters.operator.trim());
+    let totalIdleHoursDisplay = "0 Hrs 0 Mins";
+    const totalIdleSeconds = filteredLogs.reduce((sum, r) => sum + (r.idleSeconds != null ? r.idleSeconds : Math.round(r.duration * 3600)), 0);
+
+    if (!hasOperatorFilter && serverKpis?.total_idle_hours_display) {
+      totalIdleHoursDisplay = fmtHours(serverKpis.total_idle_hours_display);
+    } else if (!hasOperatorFilter && serverKpis?.total_idle_seconds != null) {
+      const s = Number(serverKpis.total_idle_seconds);
+      const h = Math.floor(s / 3600);
+      const m = Math.floor((s % 3600) / 60);
+      totalIdleHoursDisplay = `${h} Hrs ${m} Mins`;
+    } else {
+      const h = Math.floor(totalIdleSeconds / 3600);
+      const m = Math.floor((totalIdleSeconds % 3600) / 60);
+      totalIdleHoursDisplay = `${h} Hrs ${m} Mins`;
+    }
+
     const totalLossValue = filteredLogs.reduce((sum, r) => sum + (r.duration * r.ratePerHour), 0);
 
     const machineLoss = {};
@@ -10429,12 +10472,12 @@ function IdleHoursReportDashboardView({ data, loading, filters, onFilterChange, 
     const highestLossReason = maxReasonLoss > 0 ? `${maxReason}\n₹${(maxReasonLoss / 100000).toFixed(3)} L` : "—";
 
     return [
-      { label: "Total Idle Hours", value: fmtHours(totalIdleHours), icon: Timer, color: "#ef4444" },
+      { label: "Total Idle Hours", value: totalIdleHoursDisplay, icon: Timer, color: "#ef4444" },
       { label: "Total Loss Value", value: `₹${(totalLossValue / 100000).toFixed(3)} L`, icon: IndianRupee, color: "#ea580c" },
       { label: "Highest Loss Machine", value: highestLossMachine, icon: Settings, color: "#3b82f6" },
       { label: "Highest Loss Reason", value: highestLossReason, icon: AlertTriangle, color: "#f59e0b" }
     ];
-  }, [busy, filteredLogs, filters.fromDate, filters.operator, filters.machine, filters.idleReason]);
+  }, [busy, filteredLogs, serverKpis, filters.fromDate, filters.operator, filters.machine, filters.idleReason]);
 
   const [xAxisGroup, setXAxisGroup] = React.useState("Month Wise");
 
@@ -10445,9 +10488,10 @@ function IdleHoursReportDashboardView({ data, loading, filters, onFilterChange, 
         if (!r.date) return;
         const yrMo = r.date.substring(0, 7); // "YYYY-MM"
         if (!groups[yrMo]) {
-          groups[yrMo] = { idleHours: 0, loss: 0 };
+          groups[yrMo] = { idleHours: 0, idleSeconds: 0, loss: 0 };
         }
-        groups[yrMo].idleHours += r.duration;
+        const secs = r.idleSeconds != null ? r.idleSeconds : Math.round(r.duration * 3600);
+        groups[yrMo].idleSeconds += secs;
         groups[yrMo].loss += (r.duration * r.ratePerHour) / 100000;
       });
 
@@ -10467,7 +10511,7 @@ function IdleHoursReportDashboardView({ data, loading, filters, onFilterChange, 
         return `${monthNames[mo] || mo} ${shortYear}`;
       });
 
-      const idleHours = sortedKeys.map(k => groups[k].idleHours);
+      const idleHours = sortedKeys.map(k => groups[k].idleSeconds / 3600.0);
       const loss = sortedKeys.map(k => Number(groups[k].loss.toFixed(3)));
 
       return { labels, idleHours, loss };
@@ -10481,9 +10525,10 @@ function IdleHoursReportDashboardView({ data, loading, filters, onFilterChange, 
         if (!r.machine) return;
         const key = r.machine;
         if (!groups[key]) {
-          groups[key] = { idleHours: 0, loss: 0 };
+          groups[key] = { idleHours: 0, idleSeconds: 0, loss: 0 };
         }
-        groups[key].idleHours += (r.duration / numMonths);
+        const secs = r.idleSeconds != null ? r.idleSeconds : Math.round(r.duration * 3600);
+        groups[key].idleSeconds += (secs / numMonths);
         groups[key].loss += ((r.duration * r.ratePerHour) / 100000) / numMonths;
       });
 
@@ -10493,7 +10538,7 @@ function IdleHoursReportDashboardView({ data, loading, filters, onFilterChange, 
       }
 
       const labels = sortedKeys;
-      const idleHours = sortedKeys.map(k => groups[k].idleHours);
+      const idleHours = sortedKeys.map(k => groups[k].idleSeconds / 3600.0);
       const loss = sortedKeys.map(k => Number(groups[k].loss.toFixed(3)));
 
       return { labels, idleHours, loss };
@@ -10944,11 +10989,14 @@ function IdleHoursReportBottomTable({ filters, defaultFrom, defaultTo, initialRo
           aggMap[key] = {
             date,
             machine,
+            idleSeconds: 0,
             idleHours: 0,
             ratePerHour: Number(row.rate_per_hour || 0),
           };
         }
-        aggMap[key].idleHours += Number(row.total_idle_hours_decimal || 0);
+        const secs = Number(row.idle_seconds) || Math.round((Number(row.total_idle_hours_decimal) || 0) * 3600);
+        aggMap[key].idleSeconds = (aggMap[key].idleSeconds || 0) + secs;
+        aggMap[key].idleHours = aggMap[key].idleSeconds / 3600.0;
         if (Number(row.rate_per_hour || 0) > aggMap[key].ratePerHour) {
           aggMap[key].ratePerHour = Number(row.rate_per_hour || 0);
         }
@@ -10975,11 +11023,14 @@ function IdleHoursReportBottomTable({ filters, defaultFrom, defaultTo, initialRo
           aggMap[key] = {
             date,
             machine,
+            idleSeconds: 0,
             idleHours: 0,
             ratePerHour: Number(row.rate_per_hour || 0),
           };
         }
-        aggMap[key].idleHours += Number(row.total_idle_hours_decimal || 0);
+        const secs = Number(row.idle_seconds) || Math.round((Number(row.total_idle_hours_decimal) || 0) * 3600);
+        aggMap[key].idleSeconds = (aggMap[key].idleSeconds || 0) + secs;
+        aggMap[key].idleHours = aggMap[key].idleSeconds / 3600.0;
         if (Number(row.rate_per_hour || 0) > aggMap[key].ratePerHour) {
           aggMap[key].ratePerHour = Number(row.rate_per_hour || 0);
         }
@@ -11038,11 +11089,14 @@ function IdleHoursReportBottomTable({ filters, defaultFrom, defaultTo, initialRo
               aggMap[key] = {
                 date,
                 machine,
+                idleSeconds: 0,
                 idleHours: 0,
                 ratePerHour: Number(row.rate_per_hour || 0),
               };
             }
-            aggMap[key].idleHours += Number(row.total_idle_hours_decimal || 0);
+            const secs = Number(row.idle_seconds) || Math.round((Number(row.total_idle_hours_decimal) || 0) * 3600);
+            aggMap[key].idleSeconds = (aggMap[key].idleSeconds || 0) + secs;
+            aggMap[key].idleHours = aggMap[key].idleSeconds / 3600.0;
             // Keep the highest rate for the machine (same machine, same rate)
             if (Number(row.rate_per_hour || 0) > aggMap[key].ratePerHour) {
               aggMap[key].ratePerHour = Number(row.rate_per_hour || 0);
@@ -23533,8 +23587,8 @@ export default function PlantPerformance1() {
       }
     }
     const idleSummary = data?.idle?.summary ?? {};
-    const totalIdle = (idlePanelData && Array.isArray(idlePanelData.rows))
-      ? idleRows.reduce((sum, r) => sum + (Number(r.total_idle_hours_decimal) || 0), 0)
+    const totalIdle = (idlePanelData && Array.isArray(idlePanelData.rows) && idlePanelData.rows.length > 0)
+      ? idleRows.reduce((sum, r) => sum + (Number(r.idle_seconds ? r.idle_seconds / 3600.0 : r.total_idle_hours_decimal) || 0), 0)
       : Number(idleSummary.total_idle_hours_decimal ?? idleSummary.total_idle_hours ?? 0);
     const maxIdle = targetConfig.idle_hours?.maxIdleHours ?? 15;
     const idleOk = totalIdle > 0 ? totalIdle <= maxIdle : true;

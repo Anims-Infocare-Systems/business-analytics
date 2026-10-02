@@ -708,7 +708,7 @@ export default function DashboardLayout() {
     // ✅ Read logged-in company name from localStorage
     const user = JSON.parse(localStorage.getItem("user") || "{}");
     const isAuthenticated = !!user.username;
-    const companyName = user.company || "Anims Infocare Systems";
+    const companyName = (user.company || "Anims Infocare Systems").trim();
     const companyCode = user.company_code || user.companyCode || "";
     const userName = user.username || "User";
     const userInitials = (userName.slice(0, 2) || "US").toUpperCase();

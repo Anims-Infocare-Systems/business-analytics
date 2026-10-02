@@ -363,6 +363,8 @@
 .d1-ymp__panel {
     position: absolute;
     top: calc(100% + 8px);
+    right: 0;
+    left: auto;
     z-index: 9999;
     width: 272px;
     max-width: calc(100vw - 24px);

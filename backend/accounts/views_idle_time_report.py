@@ -657,15 +657,26 @@ def _machine_options(distinct_machines):
 
 
 def _row_to_dict(row):
-    if len(row) >= 8:
+    if len(row) >= 10:
+        entry_date, shift, mac_no, reason, total_hms, total_decimal, rate_per_hour, is_accepted, operator, idle_seconds = row[:10]
+    elif len(row) >= 9:
+        entry_date, shift, mac_no, reason, total_hms, total_decimal, rate_per_hour, is_accepted, operator = row[:9]
+        idle_seconds = round(float(total_decimal or 0) * 3600)
+    elif len(row) >= 8:
         entry_date, shift, mac_no, reason, total_hms, total_decimal, rate_per_hour, is_accepted = row[:8]
+        operator = "—"
+        idle_seconds = round(float(total_decimal or 0) * 3600)
     elif len(row) == 7:
         entry_date, shift, mac_no, reason, total_hms, total_decimal, rate_per_hour = row[:7]
         is_accepted = 1
+        operator = "—"
+        idle_seconds = round(float(total_decimal or 0) * 3600)
     else:
         entry_date, shift, mac_no, reason, total_hms, total_decimal = row
         rate_per_hour = 0
         is_accepted = 1
+        operator = "—"
+        idle_seconds = round(float(total_decimal or 0) * 3600)
     total_hms_clean = (str(total_hms).strip() if total_hms is not None else "")
     if total_hms_clean.count(":") >= 2:
         parts = total_hms_clean.split(":")
@@ -679,6 +690,8 @@ def _row_to_dict(row):
         "total_idle_hours_decimal": float(total_decimal or 0),
         "rate_per_hour": float(rate_per_hour or 0),
         "is_accepted": bool(is_accepted),
+        "operator": (str(operator).strip() if operator is not None and str(operator).strip() not in ("—", "Pending", "-", "NO OPERATOR", "None", "") else "—"),
+        "idle_seconds": int(idle_seconds or 0),
     }
 
 
@@ -3538,8 +3551,25 @@ def _fetch_reason_machine_detail_fast(cursor, outer_filters, outer_params):
     }
 
 
-def _fetch_operator_wise_idle_fast(cursor, start_date, end_date, outer_filters, outer_params):
-    """Aggregate total idle time by operator joining #TempIdle with operator entries."""
+def _materialize_temp_op(cursor, start_date, end_date):
+    """
+    Materialize operator mapping into session temp table #TempOp once for the date range.
+    Reused across operator rankings and detailed rows.
+    """
+    try:
+        cursor.execute("IF OBJECT_ID('tempdb..#TempOp') IS NOT NULL DROP TABLE #TempOp;")
+    except Exception:
+        pass
+
+    cursor.execute("""
+        CREATE TABLE #TempOp (
+            EntryDate DATE NOT NULL,
+            Shift NVARCHAR(128) NOT NULL,
+            MacNo NVARCHAR(512) NOT NULL,
+            Operator NVARCHAR(256) NOT NULL
+        );
+    """)
+
     op_branches = []
     op_params = []
     for tbl, dt_col, sh_col, mc_col, op_col in [
@@ -3562,27 +3592,30 @@ def _fetch_operator_wise_idle_fast(cursor, start_date, end_date, outer_filters, 
             """)
             op_params.extend([start_date, end_date])
 
-    if not op_branches:
-        return []
+    if op_branches:
+        insert_op_sql = f"""
+        INSERT INTO #TempOp (EntryDate, Shift, MacNo, Operator)
+        SELECT EntryDate, Shift, MacNo, MAX(OperatorName) AS Operator
+        FROM (
+            {" UNION ALL ".join(op_branches)}
+        ) O_ALL
+        GROUP BY EntryDate, Shift, MacNo;
+        """
+        cursor.execute(insert_op_sql, op_params)
+        try:
+            cursor.execute("CREATE NONCLUSTERED INDEX IX_TempOp_Key ON #TempOp(EntryDate, Shift, MacNo);")
+        except Exception:
+            pass
 
+
+def _fetch_operator_wise_idle_fast(cursor, outer_filters, outer_params):
+    """Aggregate total idle time by operator joining #TempIdle with #TempOp."""
     sql = f"""
-    WITH O_ALL AS (
-        {" UNION ALL ".join(op_branches)}
-    ),
-    OP_MAP AS (
-        SELECT
-            EntryDate,
-            Shift,
-            MacNo,
-            MAX(OperatorName) AS Operator
-        FROM O_ALL
-        GROUP BY EntryDate, Shift, MacNo
-    )
     SELECT
         OP.Operator,
         SUM(T.IdleSeconds) AS TotalSeconds
     FROM #TempIdle T
-    INNER JOIN OP_MAP OP
+    INNER JOIN #TempOp OP
         ON T.EntryDate = OP.EntryDate
        AND T.Shift = OP.Shift
        AND T.MacNo = OP.MacNo
@@ -3593,7 +3626,7 @@ def _fetch_operator_wise_idle_fast(cursor, start_date, end_date, outer_filters, 
     ORDER BY SUM(T.IdleSeconds) DESC;
     """
     try:
-        cursor.execute(sql, op_params + outer_params)
+        cursor.execute(sql, outer_params)
         rows = cursor.fetchall() or []
         total_secs = sum(int(r[1] or 0) for r in rows)
         results = []
@@ -3610,6 +3643,48 @@ def _fetch_operator_wise_idle_fast(cursor, start_date, end_date, outer_filters, 
             })
         return results
     except Exception:
+        return []
+
+
+def _fetch_detail_rows_fast(cursor, outer_filters, outer_params):
+    """
+    Fetch granular idle records from #TempIdle enriched with operator from #TempOp.
+    Returns list of dicts formatted with _row_to_dict.
+    """
+    sql = f"""
+    SELECT
+        T.EntryDate,
+        T.Shift,
+        T.MacNo,
+        T.Reason,
+        CONVERT(VARCHAR(8), DATEADD(SECOND, T.IdleSeconds, 0), 108) AS TotalIdleHours,
+        CAST(T.IdleSeconds / 3600.0 AS DECIMAL(18, 4)) AS TotalIdleHours_Decimal,
+        T.RatePerHr,
+        T.IsAccepted,
+        ISNULL(OP.Operator, N'—') AS Operator,
+        T.IdleSeconds AS IdleSeconds
+    FROM #TempIdle T
+    LEFT JOIN #TempOp OP
+        ON T.EntryDate = OP.EntryDate
+       AND T.Shift = OP.Shift
+       AND T.MacNo = OP.MacNo
+    WHERE 1 = 1
+      {outer_filters}
+    ORDER BY T.EntryDate, T.Shift, T.MacNo, T.Reason;
+    """
+    try:
+        cursor.execute(sql, outer_params)
+        raw_rows = cursor.fetchall() or []
+        data_rows = []
+        for r in raw_rows:
+            d = _row_to_dict(r)
+            d["date"] = d["entry_date"][:10] if d.get("entry_date") else ""
+            d["machine"] = d["mac_no"]
+            data_rows.append(d)
+        return data_rows
+    except Exception:
+        import traceback
+        traceback.print_exc()
         return []
 
 
@@ -4160,9 +4235,9 @@ def idle_time_report(request):
         elif mac_type_raw.upper() in ("CONV", "CONVENTIONAL"):
             mac_type = "CONV"
 
-    machine = _parse_machine(request.GET.get("machine", ""))
+    machine = _parse_machine(request.GET.get("machine", "") or request.GET.get("machineNo", ""))
     shift_parsed = _parse_shift(request.GET.get("shift", ""))
-    reason = _parse_reason(request.GET.get("reason", ""))
+    reason = _parse_reason(request.GET.get("reason", "") or request.GET.get("idleReason", ""))
     date_params = _union_date_params(start_date, end_date)
 
     cursor = None
@@ -4172,6 +4247,9 @@ def idle_time_report(request):
 
         # 1. Materialize date range records into #TempIdle once
         _materialize_temp_idle(cursor, start_date, end_date, date_params)
+
+        # 1b. Materialize operator mapping into #TempOp once
+        _materialize_temp_op(cursor, start_date, end_date)
 
         # 2. Fast filter options directly from #TempIdle in 1ms
         mac_set, shift_set, reason_set = _fetch_filter_options_fast(cursor)
@@ -4240,10 +4318,15 @@ def idle_time_report(request):
 
         # 15. Operator Wise Idle Hours (in 15ms)
         op_filters, op_filter_params = _build_temp_idle_filters(machine, shift, reason, mac_type=mac_type, prefix="T.")
-        operator_wise_idle = _fetch_operator_wise_idle_fast(cursor, start_date, end_date, op_filters, op_filter_params)
+        operator_wise_idle = _fetch_operator_wise_idle_fast(cursor, op_filters, op_filter_params)
         operators_list = [r["name"] for r in operator_wise_idle]
 
-        # 16. Utilization Totals & % Ranking (using #TempIdle for idle side)
+        # 16. Detailed Data Rows for Plant Performance Dashboard & Detail Views
+        data_rows = _fetch_detail_rows_fast(cursor, op_filters, op_filter_params)
+        if not operators_list and data_rows:
+            operators_list = sorted(list({r.get("operator") for r in data_rows if r.get("operator") and r.get("operator") != "—"}))
+
+        # 17. Utilization Totals & % Ranking (using #TempIdle for idle side)
         utilization_totals = {
             "total_machine_hours_available": "0:00",
             "total_idle_hours": "0:00",
@@ -4267,9 +4350,10 @@ def idle_time_report(request):
         except Exception:
             pass
 
-        # Cleanup #TempIdle
+        # Cleanup #TempIdle and #TempOp
         try:
             cursor.execute("IF OBJECT_ID('tempdb..#TempIdle') IS NOT NULL DROP TABLE #TempIdle;")
+            cursor.execute("IF OBJECT_ID('tempdb..#TempOp') IS NOT NULL DROP TABLE #TempOp;")
         except Exception:
             pass
 
@@ -4281,6 +4365,7 @@ def idle_time_report(request):
         if cursor:
             try:
                 cursor.execute("IF OBJECT_ID('tempdb..#TempIdle') IS NOT NULL DROP TABLE #TempIdle;")
+                cursor.execute("IF OBJECT_ID('tempdb..#TempOp') IS NOT NULL DROP TABLE #TempOp;")
                 cursor.close()
             except Exception:
                 pass
@@ -4310,8 +4395,8 @@ def idle_time_report(request):
             "reasons": _reason_options(reason_set),
             "operators": operators_list,
         },
-        "row_count": kpis.get("total_idle_seconds", 0),
-        "rows": [],
+        "row_count": len(data_rows),
+        "rows": data_rows,
         "kpis": kpis,
         "top_idle_reasons": top_idle_reasons,
         "accepted_idle": accepted_idle,

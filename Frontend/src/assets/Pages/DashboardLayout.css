@@ -972,18 +972,22 @@
     transform: translate(-50%, -50%);
     margin: 0;
     text-align: center;
-    font-size: clamp(17px, 1.7vw, 26px);
+    font-size: clamp(14px, 1.35vw, 21px);
     font-weight: 800;
     color: #1a2a5e;
     letter-spacing: -.3px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    white-space: normal;
+    text-wrap: balance;
+    word-break: keep-all;
+    overflow-wrap: break-word;
+    line-height: 1.15;
     background: linear-gradient(135deg, #1a2a5e 0%, #2d6de8 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
-    max-width: calc(100% - 460px);
+    max-width: calc(100% - 680px);
+    z-index: 1;
+    pointer-events: auto;
 }
 
 /* ── Hamburger ────────────────────────────────────────────── */
@@ -1026,10 +1030,10 @@
 .dl-clock {
     background: #f0f4ff;
     border: 1.5px solid #d0daf5;
-    border-radius: 12px;
-    padding: 10px 18px;
+    border-radius: 10px;
+    padding: 6px 14px;
     text-align: center;
-    min-width: 162px;
+    min-width: 135px;
     flex-shrink: 0;
     transition: box-shadow .2s ease;
 }
@@ -1116,7 +1120,7 @@
 .dl-header__right {
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 10px;
     flex-shrink: 0;
     position: relative;
     z-index: 100;
@@ -1127,11 +1131,11 @@
 .dl-header__profile {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     background: rgba(255, 255, 255, 0.75);
     border: 1.5px solid #d0daf5;
-    border-radius: 12px;
-    padding: 7px 14px;
+    border-radius: 10px;
+    padding: 5px 12px;
     cursor: pointer;
     transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     backdrop-filter: blur(8px);
@@ -1325,10 +1329,10 @@
 }
 
 .dl-clock__time {
-    font-size: 18px;
+    font-size: 14px;
     font-weight: 700;
     color: #1a2a6c;
-    letter-spacing: .5px;
+    letter-spacing: .4px;
     font-family: "Courier New", monospace;
     display: flex;
     align-items: baseline;
@@ -1371,10 +1375,11 @@
 }
 
 .dl-clock__date {
-    font-size: 12px;
+    font-size: 11px;
     color: #5a6a9a;
     font-weight: 500;
-    margin-top: 2px;
+    margin-top: 1px;
+    white-space: nowrap;
 }
 
 /* ── ERP unavailable banner ─────────────────────────────────── */
@@ -1615,8 +1620,8 @@
    ══════════════════════════════════════════════════════════ */
 @media (max-width: 1023px) and (min-width: 768px) {
     .dl-header__title {
-        font-size: 20px;
-        max-width: calc(100% - 400px);
+        font-size: 17px;
+        max-width: calc(100% - 240px);
     }
 
     .dl-clock {
@@ -1805,7 +1810,8 @@
     }
 
     .dl-header__title {
-        font-size: 28px;
+        font-size: 22px;
+        max-width: calc(100% - 720px);
     }
 
     .dl-header {
@@ -1835,7 +1841,8 @@
     }
 
     .dl-header__title {
-        font-size: 30px;
+        font-size: 26px;
+        max-width: calc(100% - 760px);
     }
 
     .dl-topbar__heading {

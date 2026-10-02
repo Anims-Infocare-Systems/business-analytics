@@ -444,9 +444,9 @@ function YearMonthPicker({ value, onChange, disabled }) {
         if (disabled) return;
         if (!open && chipRef.current) {
             const rect = chipRef.current.getBoundingClientRect();
-            const spaceRight = window.innerWidth - rect.left;
             const panelWidth = 272;
-            setPanelAlign(spaceRight < panelWidth + 16 ? "right" : "left");
+            const spaceLeft = rect.right;
+            setPanelAlign(spaceLeft < panelWidth + 16 ? "left" : "right");
         }
         setOpen(o => !o);
     };
